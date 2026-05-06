@@ -1,0 +1,116 @@
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: #0d0d0d;
+  overflow: hidden;
+}
+
+.app__content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.app__pane {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Terminal pane */
+.terminal-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-cwd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  height: 24px;
+  font-size: 11px;
+  color: #444;
+  background: #141414;
+  border-bottom: 1px solid #1e1e1e;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.terminal-cwd:hover {
+  background: #1a1a1a;
+  color: #888;
+}
+
+.terminal-cwd span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-container {
+  flex: 1;
+  padding: 6px 8px;
+  background: #0d0d0d;
+  overflow: hidden;
+}
+
+/* xterm overrides */
+.xterm {
+  height: 100%;
+}
+
+.xterm-viewport {
+  background: #0d0d0d !important;
+  /* Hide the native scrollbar — xterm handles scrollback internally */
+  scrollbar-width: none !important;
+  overflow-y: hidden !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  display: none !important;
+}
+
+.xterm-scroll-area {
+  visibility: hidden;
+}
+
+/* Editor pane */
+.editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+
+.editor-filepath {
+  padding: 4px 14px;
+  font-size: 11px;
+  color: #555;
+  background: #141414;
+  border-bottom: 1px solid #1e1e1e;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  height: 24px;
+  line-height: 16px;
+}

@@ -1,0 +1,9 @@
+- Custom commands for creating files/directories, quicker. Not as big of a problem for directories, but a problem for files for sure.
+- Add in notes, and notes
+    * notes would list current notes saved by date and title.
+    * notes --clear would clear all notes saved.
+    * note --create 
+- Add in Control+click a file, opens the file. So, if a file is printed in a console, say via the command 'ls', I can click control, and left click the file, and it opens in a tab.
+- Add preview command, which opens a live-preview of HTML instances as a tab, viewable inside of this application. This command can also preview MD (markdown) files, as they'd appear say on GitHub.
+- Add in right-click context, with features such as split-screen, and file related options such as Save File, Delete File, etc.
+- Add config-setting for 'clear' & 'cls', to configure if it hides the previous command-history, which can be accessed by scrolling up (as it is right now), or whether it actually deletes the command-line history, and can not be re-accessed.

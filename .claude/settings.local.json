@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wails version *)",
+      "Bash(go version *)",
+      "Bash(npm --version)",
+      "Read(//c/tmp/**)",
+      "Bash(wails init *)",
+      "Bash(cp -r /tmp/tideproj/build .)",
+      "Bash(cp /tmp/tideproj/.gitignore .)",
+      "Bash(cp /tmp/tideproj/go.sum .)",
+      "Bash(cp /tmp/tideproj/frontend/wailsjs/runtime/runtime.js frontend/wailsjs/runtime/)",
+      "Bash(cp /tmp/tideproj/frontend/wailsjs/runtime/runtime.d.ts frontend/wailsjs/runtime/)",
+      "Bash(go get *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(wails build *)"
+    ]
+  }
+}
