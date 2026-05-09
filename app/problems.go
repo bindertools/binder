@@ -278,7 +278,10 @@ func probScanTSFiles(root string) (items []probItem, found bool) {
 
 // probCheckBrackets does a fast bracket-balance pass over source text.
 func probCheckBrackets(file, src string) []probItem {
-	type frame struct{ ch rune; line, col int }
+	type frame struct {
+		ch        rune
+		line, col int
+	}
 	stack := make([]frame, 0, 32)
 
 	var (
@@ -399,7 +402,7 @@ func probCheckBrackets(file, src string) []probItem {
 	for _, f := range stack {
 		out = append(out, probItem{
 			File: file, Line: f.line, Col: f.col, Sev: sevError,
-			Msg:  fmt.Sprintf("'%c' is never closed", f.ch),
+			Msg: fmt.Sprintf("'%c' is never closed", f.ch),
 		})
 	}
 	return out

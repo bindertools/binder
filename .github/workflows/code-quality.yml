@@ -1,0 +1,119 @@
+name: Code Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GOCACHE: ${{ github.workspace }}\.cache\go-build
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            app/frontend/package-lock.json
+            installer/frontend/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: |
+            app/go.sum
+            installer/go.sum
+
+      - name: Install app frontend dependencies
+        run: npm.cmd ci
+        working-directory: app/frontend
+
+      - name: Install installer frontend dependencies
+        run: npm.cmd ci
+        working-directory: installer/frontend
+
+      - name: Build app frontend
+        run: npm.cmd run build
+        working-directory: app/frontend
+
+      - name: Build installer frontend
+        run: npm.cmd run build
+        working-directory: installer/frontend
+
+      - name: Check Go formatting
+        run: |
+          $goFiles = git ls-files '*.go'
+          if (-not $goFiles) {
+            exit 0
+          }
+
+          $unformatted = @(
+            $goFiles |
+              ForEach-Object { gofmt -l $_ } |
+              Where-Object { $_ }
+          )
+
+          if ($unformatted.Count -gt 0) {
+            Write-Host 'These Go files need gofmt:'
+            $unformatted | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+
+      - name: Test app Go module
+        run: go test ./...
+        working-directory: app
+
+      - name: Vet app Go module
+        run: go vet ./...
+        working-directory: app
+
+      - name: Test installer Go module
+        run: go test ./...
+        working-directory: installer
+
+      - name: Vet installer Go module
+        run: go vet ./...
+        working-directory: installer
+
+      - name: Install Wails CLI
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+          $goBin = Join-Path (go env GOPATH) 'bin'
+          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Run full Windows package build
+        run: ./build.ps1
+
+      - name: Verify build outputs
+        run: |
+          $expected = @(
+            'app\build\bin\cmdIDE.exe',
+            'installer\build\bin\cmdIDE-installer.exe'
+          )
+
+          foreach ($path in $expected) {
+            if (-not (Test-Path $path)) {
+              throw "Missing expected build output: $path"
+            }
+          }

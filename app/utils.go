@@ -26,7 +26,7 @@ func detectLanguage(path string) string {
 		".lua": "lua", ".r": "r",
 		".tf": "hcl", ".hcl": "hcl",
 		".proto": "protobuf",
-		".dart": "dart", ".ex": "elixir", ".exs": "elixir",
+		".dart":  "dart", ".ex": "elixir", ".exs": "elixir",
 	}
 	if lang, ok := m[ext]; ok {
 		return lang

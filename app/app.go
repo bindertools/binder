@@ -13,10 +13,10 @@ import (
 
 // SessionTab is a minimal description of one open tab, persisted for soft-close.
 type SessionTab struct {
-	Type     string `json:"type"`               // "terminal" or "editor"
+	Type     string `json:"type"`                // "terminal" or "editor"
 	FilePath string `json:"file_path,omitempty"` // editor tabs only
 	Language string `json:"language,omitempty"`  // editor tabs only
-	Cwd      string `json:"cwd,omitempty"`        // terminal tabs only
+	Cwd      string `json:"cwd,omitempty"`       // terminal tabs only
 }
 
 func sessionFilePath() string {

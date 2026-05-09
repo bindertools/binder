@@ -26,7 +26,6 @@ type Terminal struct {
 	once       sync.Once
 }
 
-
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
 	dir := getDefaultDir()
 	if initialCwd != "" {
@@ -353,22 +352,22 @@ func (t *Terminal) builtinHelp() {
 	type entry struct{ name, desc string }
 
 	appCmds := []entry{
-		{"/config",              "open settings & theme UI"},
-		{"/config --raw",        "open config.json in the editor"},
-		{"/config --reload",     "reload config from disk"},
-		{"/config --reset",      "reset config to default settings"},
-		{"/themes",              "list available preset theme names"},
-		{"/preview <file|url>",  "preview .md/.html or a URL/port"},
-		{"/problems",            "scan project for errors, opens a tab"},
-		{"/version",             "show app and runtime version info"},
-		{"/help",                "show this help"},
+		{"/config", "open settings & theme UI"},
+		{"/config --raw", "open config.json in the editor"},
+		{"/config --reload", "reload config from disk"},
+		{"/config --reset", "reset config to default settings"},
+		{"/themes", "list available preset theme names"},
+		{"/preview <file|url>", "preview .md/.html or a URL/port"},
+		{"/problems", "scan project for errors, opens a tab"},
+		{"/version", "show app and runtime version info"},
+		{"/help", "show this help"},
 	}
 	stdCmds := []entry{
-		{"cd <dir>",          "change the working directory"},
-		{"ls [dir] [-a]",     "list directory contents"},
-		{"pwd",               "print working directory"},
-		{"clear / cls",       "clear the terminal screen"},
-		{"open <file>",       "open a file in the editor"},
+		{"cd <dir>", "change the working directory"},
+		{"ls [dir] [-a]", "list directory contents"},
+		{"pwd", "print working directory"},
+		{"clear / cls", "clear the terminal screen"},
+		{"open <file>", "open a file in the editor"},
 	}
 
 	var sb strings.Builder

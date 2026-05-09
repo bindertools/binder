@@ -17,3 +17,5 @@ terminal-ide.exe
 
 # Dependency directories (any sub-project)
 node_modules
+/app/.cache
+/installer/.cache
