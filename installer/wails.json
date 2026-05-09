@@ -2,7 +2,7 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "cmdIDE-installer",
   "outputfilename": "cmdIDE-installer",
-  "frontend:install": "npm install",
+  "frontend:install": "npm ci",
   "frontend:build": "npm run build",
   "author": {
     "name": "Kris Powers",

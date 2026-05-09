@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: code-quality-${{ github.ref }}
   cancel-in-progress: true
@@ -42,11 +45,11 @@ jobs:
             installer/go.sum
 
       - name: Install app frontend dependencies
-        run: npm.cmd install
+        run: npm.cmd ci
         working-directory: app/frontend
 
       - name: Install installer frontend dependencies
-        run: npm.cmd install
+        run: npm.cmd ci
         working-directory: installer/frontend
 
       - name: Build app frontend
