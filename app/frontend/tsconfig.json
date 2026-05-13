@@ -19,12 +19,8 @@
     "paths": {
       "react":              ["node_modules/@types/react/index.d.ts"],
       "react/jsx-runtime":  ["node_modules/@types/react/jsx-runtime.d.ts"],
-      "@cmdide/plugin-sdk":       ["../../packages/plugin-sdk/index.ts"],
-      "@cmdide/plugin-sdk/*":     ["../../packages/plugin-sdk/*"],
-      "@cmdide/plugin-notepad":   ["../../packages/plugin-notepad/index.tsx"],
-      "@cmdide/plugin-notepad/*": ["../../packages/plugin-notepad/*"],
-      "@cmdide/plugin-git":       ["../../packages/plugin-git/index.tsx"],
-      "@cmdide/plugin-git/*":     ["../../packages/plugin-git/*"]
+      "@cmdide/plugin-sdk":   ["../../packages/plugin-sdk/index.ts"],
+      "@cmdide/plugin-sdk/*": ["../../packages/plugin-sdk/*"]
     }
   },
   "include": [

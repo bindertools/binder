@@ -17,7 +17,11 @@
       "Bash(wails build *)",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__computer",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "PowerShell(Rename-Item \"C:\\\\Users\\\\krisp\\\\OneDrive\\\\Documents\\\\GitHub\\\\terminal-IDE\\\\app\\\\PowerShell\" \"C:\\\\Users\\\\krisp\\\\OneDrive\\\\Documents\\\\GitHub\\\\terminal-IDE\\\\app\\\\ps_temp\")",
+      "PowerShell(Rename-Item \"C:\\\\Users\\\\krisp\\\\OneDrive\\\\Documents\\\\GitHub\\\\terminal-IDE\\\\app\\\\ps_temp\" \"C:\\\\Users\\\\krisp\\\\OneDrive\\\\Documents\\\\GitHub\\\\terminal-IDE\\\\app\\\\powershell\")",
+      "Bash(go build *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\krisp\\\\OneDrive\\\\Documents\\\\GitHub\\\\terminal-IDE\\\\packages\\\\notepad\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName, Length)"
     ]
   }
 }

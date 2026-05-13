@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	term "terminal-ide/terminal"
 )
 
 func init() {
@@ -16,7 +18,7 @@ func init() {
 		var msgs []string
 		for _, pid := range pids {
 			cmd := exec.Command("taskkill", "/PID", fmt.Sprintf("%d", pid), "/F")
-			noWindow(cmd)
+			term.NoWindow(cmd)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				msgs = append(msgs, fmt.Sprintf("PID %d: %s", pid, strings.TrimSpace(string(out))))

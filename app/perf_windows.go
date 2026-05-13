@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"unsafe"
+
+	term "terminal-ide/terminal"
 )
 
 var (
@@ -100,7 +102,7 @@ func winDiskStats() (used, total uint64, percent float64) {
 
 func winNetStats() (sent, recv uint64) {
 	cmd := exec.Command("netstat", "-e")
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return
@@ -122,7 +124,7 @@ func winNetStats() (sent, recv uint64) {
 
 func winGPUStats() (percent float64, name string, available bool) {
 	cmd := exec.Command("nvidia-smi", "--query-gpu=utilization.gpu,name", "--format=csv,noheader")
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	out, err := cmd.Output()
 	if err == nil {
 		line := strings.TrimSpace(string(out))
@@ -138,7 +140,7 @@ func winGPUStats() (percent float64, name string, available bool) {
 		}
 	}
 	cmd2 := exec.Command("wmic", "path", "Win32_VideoController", "get", "Name", "/value")
-	noWindow(cmd2)
+	term.NoWindow(cmd2)
 	if out2, err2 := cmd2.Output(); err2 == nil {
 		for _, l := range strings.Split(string(out2), "\n") {
 			l = strings.TrimSpace(l)

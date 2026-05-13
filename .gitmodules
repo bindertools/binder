@@ -1,0 +1,9 @@
+[submodule "packages/plugin-sdk"]
+	path = packages/plugin-sdk
+	url = https://github.com/Command-IDE/plugin-sdk
+[submodule "app/terminal"]
+	path = app/terminal
+	url = https://github.com/Command-IDE/terminal
+[submodule "app/powershell"]
+	path = app/powershell
+	url = https://github.com/Command-IDE/powershell

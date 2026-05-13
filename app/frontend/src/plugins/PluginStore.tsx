@@ -28,6 +28,14 @@ function IconDownload() {
   )
 }
 
+function IconSpinner() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="ps-spin">
+      <path d="M7.5 1.5A6 6 0 1 1 1.5 7.5" />
+    </svg>
+  )
+}
+
 function IconTrash() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -47,6 +55,8 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
   const [category,      setCategory]      = useState<PluginCategory | 'all'>('all')
   const [showInstalled, setShowInstalled] = useState(false)
   const [installed,     setInstalled]     = useState<Set<string>>(new Set(getInstalledIds()))
+  const [fetching,      setFetching]      = useState<Set<string>>(new Set())
+  const [fetchError,    setFetchError]    = useState<string | null>(null)
 
   const filtered = PLUGIN_DIRECTORY.filter(p => {
     if (showInstalled && !installed.has(p.id)) return false
@@ -62,15 +72,36 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
     return true
   })
 
-  const toggle = (entry: DirectoryEntry) => {
+  const toggle = async (entry: DirectoryEntry) => {
     if (installed.has(entry.id)) {
       uninstallPlugin(entry.id)
+      removeExternalPlugin(entry.id)
       setInstalled(prev => { const s = new Set(prev); s.delete(entry.id); return s })
+      onPluginChange()
     } else {
-      installPlugin(entry.id)
-      setInstalled(prev => new Set([...prev, entry.id]))
+      setFetchError(null)
+      setFetching(prev => new Set([...prev, entry.id]))
+      try {
+        const result = await FetchExternalPlugin(entry.githubUrl)
+        const record: ExternalPluginRecord = {
+          id:          result.id || entry.id,
+          name:        result.name || entry.name,
+          description: result.description || entry.description,
+          author:      result.author || entry.author,
+          version:     result.version || entry.version,
+          githubUrl:   entry.githubUrl,
+          code:        result.code,
+        }
+        saveExternalPlugin(record)
+        installPlugin(entry.id)
+        setInstalled(prev => new Set([...prev, entry.id]))
+        onPluginChange()
+      } catch (err: any) {
+        setFetchError(`Failed to install ${entry.name}: ${err?.message ?? String(err)}`)
+      } finally {
+        setFetching(prev => { const s = new Set(prev); s.delete(entry.id); return s })
+      }
     }
-    onPluginChange()
   }
 
   const CATEGORIES: { value: PluginCategory | 'all'; label: string }[] = [
@@ -117,12 +148,17 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
         </div>
       </div>
 
+      {fetchError && (
+        <div className="ps-ext__error" style={{ marginBottom: 12 }}>{fetchError}</div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="ps-empty">No plugins match your filters.</div>
       ) : (
         <div className="ps-grid">
           {filtered.map(entry => {
-            const isInst = installed.has(entry.id)
+            const isInst  = installed.has(entry.id)
+            const isFetch = fetching.has(entry.id)
             return (
               <div key={entry.id} className={`ps-card${isInst ? ' ps-card--installed' : ''}`}>
                 <div className="ps-card__top">
@@ -138,11 +174,12 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
                     </div>
                   </div>
                   <button
-                    className={`ps-card__gear${isInst ? ' ps-card__gear--installed' : ''}`}
-                    onClick={() => toggle(entry)}
-                    title={isInst ? 'Uninstall' : 'Install'}
+                    className={`ps-card__gear${isInst ? ' ps-card__gear--installed' : ''}${isFetch ? ' ps-card__gear--loading' : ''}`}
+                    onClick={() => !isFetch && toggle(entry)}
+                    title={isFetch ? 'Installing…' : isInst ? 'Uninstall' : 'Install'}
+                    disabled={isFetch}
                   >
-                    {isInst ? <IconTrash /> : <IconDownload />}
+                    {isFetch ? <IconSpinner /> : isInst ? <IconTrash /> : <IconDownload />}
                   </button>
                 </div>
                 <p className="ps-card__desc">{entry.description}</p>

@@ -13,6 +13,9 @@ import (
 	"sync"
 	"time"
 
+	ps   "terminal-ide/powershell"
+	term "terminal-ide/terminal"
+
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -27,7 +30,7 @@ type Terminal struct {
 }
 
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
-	dir := getDefaultDir()
+	dir := term.DefaultDir(getGlobalConfig().DefaultDirectory)
 	if initialCwd != "" {
 		if info, err := os.Stat(initialCwd); err == nil && info.IsDir() {
 			dir = initialCwd
@@ -72,7 +75,7 @@ func (t *Terminal) write(s string) {
 func (t *Terminal) getGitBranch() string {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = t.cwd
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -556,7 +559,7 @@ func (t *Terminal) builtinExplorer() {
 	default:
 		cmd = exec.Command("xdg-open", t.cwd)
 	}
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	if err := cmd.Start(); err != nil {
 		t.write("\r\n\x1b[31mexplorer: " + err.Error() + "\x1b[0m")
 	} else {
@@ -733,17 +736,7 @@ func isPreviewURL(s string) bool {
 // ─── external command execution ───────────────────────────────────────────────
 
 func (t *Terminal) execExternal(parts []string) {
-	var cmd *exec.Cmd
-	if goruntime.GOOS == "windows" {
-		// Use PowerShell as the shell so that .ps1 scripts, cmdlets, and all
-		// standard PowerShell syntax work.  ExecutionPolicy Bypass lets users
-		// run local scripts (.\build.ps1) without a profile change.
-		cmd = exec.Command("powershell.exe",
-			"-NoProfile", "-ExecutionPolicy", "Bypass",
-			"-Command", strings.Join(parts, " "))
-	} else {
-		cmd = exec.Command("sh", "-c", strings.Join(parts, " "))
-	}
+	cmd := ps.BuildShellCmd(parts)
 	cmd.Dir = t.cwd
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
@@ -761,7 +754,7 @@ func (t *Terminal) execExternal(parts []string) {
 	t.runningIn = stdin
 	t.mu.Unlock()
 
-	noWindow(cmd)
+	term.NoWindow(cmd)
 
 	if err := cmd.Start(); err != nil {
 		t.write("\r\n\x1b[31m" + err.Error() + "\x1b[0m")

@@ -6,9 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@cmdide/plugin-sdk':      path.resolve(__dirname, '../../packages/plugin-sdk'),
-      '@cmdide/plugin-notepad':  path.resolve(__dirname, '../../packages/plugin-notepad'),
-      '@cmdide/plugin-git':      path.resolve(__dirname, '../../packages/plugin-git'),
+      '@cmdide/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
     },
   },
   server: {

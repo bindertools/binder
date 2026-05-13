@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	term "terminal-ide/terminal"
+
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -314,7 +316,7 @@ func (a *App) OpenNewWindow() {
 		return
 	}
 	cmd := exec.Command(exe)
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	cmd.Start() //nolint:errcheck
 }
 

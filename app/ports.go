@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	term "terminal-ide/terminal"
 )
 
 // PortInfo describes a single active network port.
@@ -28,7 +30,7 @@ func getActivePorts() []PortInfo {
 		return nil
 	}
 	cmd := netstatCmd()
-	noWindow(cmd)
+	term.NoWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
