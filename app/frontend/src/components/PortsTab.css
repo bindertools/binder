@@ -1,0 +1,100 @@
+.ports {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--app-bg);
+  color: #ccc;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 13px;
+}
+
+.ports__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ports__filter {
+  flex: 1;
+  max-width: 280px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #ccc;
+  padding: 5px 10px;
+  font-size: 12px;
+  outline: none;
+}
+.ports__filter:focus { border-color: rgba(79,195,247,0.5); }
+
+.ports__refresh {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #aaa;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ports__refresh:hover { background: rgba(255,255,255,0.1); color: #ddd; }
+
+.ports__msg { color: #81c995; font-size: 12px; }
+
+.ports__table-wrap { flex: 1; overflow: auto; }
+
+.ports__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ports__th {
+  text-align: left;
+  padding: 7px 12px;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--border-color);
+  color: #888;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.ports__th:hover { color: #bbb; }
+.ports__th--active { color: #4fc3f7; }
+
+.ports__row:nth-child(even) { background: rgba(255,255,255,0.02); }
+.ports__row:hover { background: rgba(255,255,255,0.05); }
+
+.ports__row td { padding: 6px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+
+.ports__port  { color: #4fc3f7; font-weight: 600; }
+.ports__proto { color: #aaa; }
+.ports__pid   { color: #888; }
+.ports__addr  { color: #666; font-size: 11px; }
+.ports__process { color: #b0bec5; }
+
+.ports__state { font-size: 11px; border-radius: 3px; padding: 1px 6px; display: inline-block; }
+.ports__state--listen      { color: #81c995; }
+.ports__state--established { color: #4fc3f7; }
+.ports__state--time_wait   { color: #ffb74d; }
+.ports__state--close_wait  { color: #f48fb1; }
+
+.ports__kill {
+  background: rgba(244,143,177,0.12);
+  border: 1px solid rgba(244,143,177,0.25);
+  border-radius: 4px;
+  color: #f48fb1;
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ports__kill:hover { background: rgba(244,143,177,0.22); }
+.ports__kill:disabled { opacity: 0.4; cursor: default; }
+
+.ports__empty {
+  text-align: center;
+  color: #555;
+  padding: 40px;
+}

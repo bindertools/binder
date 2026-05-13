@@ -27,7 +27,10 @@ type Config struct {
 	DefaultZoom      float64              `json:"default_zoom"`
 	// CustomTheme holds per-color overrides used when Theme == "custom".
 	// Keys match the flat color-key scheme defined in frontend/src/themes.ts.
-	CustomTheme map[string]string `json:"custom_theme,omitempty"`
+	CustomTheme      map[string]string `json:"custom_theme,omitempty"`
+	TerminalWordWrap bool              `json:"terminal_word_wrap"`
+	FileWordWrap     bool              `json:"file_word_wrap"`
+	ScrollSpeed      int               `json:"scroll_speed"`
 }
 
 var (
@@ -62,6 +65,7 @@ func ensureConfig() error {
 		SoftClose:        false,
 		ZoomInsights:     true,
 		DefaultZoom:      1.0,
+		ScrollSpeed:      3,
 	}
 	data, _ := json.MarshalIndent(defaults, "", "  ")
 	return os.WriteFile(path, data, 0644)
@@ -91,6 +95,9 @@ func loadConfig() (Config, error) {
 		}
 		if _, exists := rawMap["default_zoom"]; !exists {
 			c.DefaultZoom = 1.0
+		}
+		if _, exists := rawMap["scroll_speed"]; !exists {
+			c.ScrollSpeed = 3
 		}
 	}
 	// Always write back so the file always reflects all current fields,

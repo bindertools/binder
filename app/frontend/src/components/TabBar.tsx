@@ -1,35 +1,32 @@
-import React from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import ReactDOM from 'react-dom'
 import { Tab } from '../types'
-import { WindowMinimise, WindowToggleMaximise } from '../../wailsjs/runtime/runtime'
 import './TabBar.css'
 
 interface Props {
-  tabs:         Tab[]
-  activeId:     string
-  secondaryId:  string
-  splitEnabled: boolean
-  focusedPane:  'primary' | 'secondary'
-  onSelect:              (id: string) => void
-  onClose:               (id: string) => void
-  onNewTerminal:         () => void
-  onSplitToggle:         () => void
-  onAddSiblingTerminal:  (parentId: string) => void
-  onQuit:                () => void
+  panel:    'left' | 'right'
+  tabs:     Tab[]
+  activeId: string
+  focused:  boolean
+  onSelect:             (id: string) => void
+  onClose:              (id: string) => void
+  onCloseOthers:        (id: string) => void
+  onMoveRight:          (id: string) => void
+  onMoveLeft:           (id: string) => void
+  onNewTerminal:        () => void
+  onAddSiblingTerminal: (parentId: string) => void
+  onDrop:               (tabId: string) => void
 }
 
-// ── Palette ────────────────────────────────────────────────────────────────────
-
 const GROUP_COLORS = [
-  '#4fc3f7', // sky blue
-  '#81c995', // green
-  '#ffb74d', // amber
-  '#f48fb1', // pink
-  '#ce93d8', // purple
-  '#80cbc4', // teal
-  '#bcaaa4', // warm grey
+  '#4fc3f7',
+  '#81c995',
+  '#ffb74d',
+  '#f48fb1',
+  '#ce93d8',
+  '#80cbc4',
+  '#bcaaa4',
 ]
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 interface Group {
   terminals: Tab[]
@@ -45,8 +42,8 @@ function rgba(hex: string, a: number): string {
 }
 
 function buildGroups(tabs: Tab[]): Group[] {
-  const groups: Group[]          = []
-  const termToGroup              = new Map<string, Group>()
+  const groups: Group[]     = []
+  const termToGroup         = new Map<string, Group>()
   let colorIdx = 0
 
   for (const tab of tabs) {
@@ -76,86 +73,57 @@ function buildGroups(tabs: Tab[]): Group[] {
   return groups
 }
 
-// ── SVG icons ──────────────────────────────────────────────────────────────────
-
 const TerminalIcon = ({ color }: { color: string }) => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
-    style={{ color, flexShrink: 0 }}>
-    <path d="M2.5 5.5l3.5 2.5-3.5 2.5"
-      stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M8 10.5h5.5"
-      stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color, flexShrink: 0 }}>
+    <path d="M2.5 5.5l3.5 2.5-3.5 2.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 10.5h5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
   </svg>
 )
 
 const FileIcon = ({ color }: { color: string }) => (
-  <svg width="11" height="12" viewBox="0 0 14 16" fill="none"
-    style={{ color, flexShrink: 0 }}>
-    <path d="M2 1.5h7.5L12 4v10H2V1.5z"
-      stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-    <path d="M9.5 1.5V4H12"
-      stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+  <svg width="11" height="12" viewBox="0 0 14 16" fill="none" style={{ color, flexShrink: 0 }}>
+    <path d="M2 1.5h7.5L12 4v10H2V1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M9.5 1.5V4H12" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
   </svg>
 )
 
 const DatabaseIcon = ({ color }: { color: string }) => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
-    style={{ color, flexShrink: 0 }}>
-    <ellipse cx="8" cy="4" rx="5" ry="1.8"
-      stroke="currentColor" strokeWidth="1.3"/>
-    <path d="M3 4v8c0 1 2.24 1.8 5 1.8s5-.8 5-1.8V4"
-      stroke="currentColor" strokeWidth="1.3"/>
-    <path d="M3 8c0 1 2.24 1.8 5 1.8s5-.8 5-1.8"
-      stroke="currentColor" strokeWidth="1.3"/>
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color, flexShrink: 0 }}>
+    <ellipse cx="8" cy="4" rx="5" ry="1.8" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M3 4v8c0 1 2.24 1.8 5 1.8s5-.8 5-1.8V4" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M3 8c0 1 2.24 1.8 5 1.8s5-.8 5-1.8" stroke="currentColor" strokeWidth="1.3"/>
   </svg>
 )
 
 const PreviewIcon = ({ color }: { color: string }) => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
-    style={{ color, flexShrink: 0 }}>
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color, flexShrink: 0 }}>
     <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
     <path d="M2.5 8h11" stroke="currentColor" strokeWidth="1.3"/>
-    <path d="M8 2.5c-1.5 1.5-2 3.3-2 5.5s.5 4 2 5.5M8 2.5c1.5 1.5 2 3.3 2 5.5s-.5 4-2 5.5"
-      stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M8 2.5c-1.5 1.5-2 3.3-2 5.5s.5 4 2 5.5M8 2.5c1.5 1.5 2 3.3 2 5.5s-.5 4-2 5.5" stroke="currentColor" strokeWidth="1.3"/>
   </svg>
 )
 
-// Palette / theme editor icon
 const PaletteIcon = ({ color }: { color: string }) => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
-    style={{ color, flexShrink: 0 }}>
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color, flexShrink: 0 }}>
     <path d="M8 2C4.69 2 2 4.69 2 8s2.69 6 6 6c.55 0 1-.45 1-1 0-.26-.1-.49-.26-.67-.14-.18-.24-.4-.24-.63 0-.55.45-1 1-1H11c2.21 0 4-1.79 4-4 0-3.31-3.13-5-7-5z"
       stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-    <circle cx="5.5"  cy="7.5"  r="0.9" fill="currentColor"/>
-    <circle cx="8"    cy="5.5"  r="0.9" fill="currentColor"/>
-    <circle cx="10.5" cy="7.5"  r="0.9" fill="currentColor"/>
+    <circle cx="5.5" cy="7.5" r="0.9" fill="currentColor"/>
+    <circle cx="8" cy="5.5" r="0.9" fill="currentColor"/>
+    <circle cx="10.5" cy="7.5" r="0.9" fill="currentColor"/>
   </svg>
 )
 
-// Problems always uses warning-amber (theme-independent)
 const ProblemsIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
-    style={{ color: '#dda055', flexShrink: 0 }}>
-    <path d="M8 2.5L14.5 13H1.5L8 2.5z"
-      stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-    <path d="M8 6.5v3.5"
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color: '#dda055', flexShrink: 0 }}>
+    <path d="M8 2.5L14.5 13H1.5L8 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M8 6.5v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     <circle cx="8" cy="11.5" r="0.65" fill="currentColor"/>
-  </svg>
-)
-
-const SplitIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-    <rect x="1" y="1" width="14" height="14" rx="2.5"
-      stroke="currentColor" strokeWidth="1.3"/>
-    <path d="M8 1v14" stroke="currentColor" strokeWidth="1.3"/>
   </svg>
 )
 
 const CloseIcon = () => (
   <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
-    <path d="M1 1l8 8M9 1L1 9"
-      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+    <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
   </svg>
 )
 
@@ -170,21 +138,63 @@ function tabIcon(tab: Tab, color: string): React.ReactNode {
   }
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+interface CtxMenuState {
+  tabId: string
+  tab:   Tab
+  x:     number
+  y:     number
+}
 
 export default function TabBar({
-  tabs, activeId, secondaryId, splitEnabled,
-  onSelect, onClose, onNewTerminal, onSplitToggle, onAddSiblingTerminal, onQuit,
+  panel, tabs, activeId, focused,
+  onSelect, onClose, onCloseOthers, onMoveRight, onMoveLeft,
+  onNewTerminal, onAddSiblingTerminal, onDrop,
 }: Props) {
   const groups = buildGroups(tabs)
 
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
+  const ctxRef   = useRef<HTMLDivElement>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const dragCounter = useRef(0)
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const h = (e: MouseEvent) => {
+      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setCtxMenu(null)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [ctxMenu])
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtxMenu(null) }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [ctxMenu])
+
+  function openCtx(e: React.MouseEvent, tab: Tab) {
+    e.preventDefault()
+    e.stopPropagation()
+    const x = Math.min(e.clientX, window.innerWidth  - 180)
+    const y = Math.min(e.clientY, window.innerHeight - 200)
+    setCtxMenu({ tabId: tab.id, tab, x, y })
+  }
+
   return (
     <div
-      className="tabbar"
-      style={{ ['--wails-draggable' as any]: 'drag' }}
-      onDoubleClick={WindowToggleMaximise}
+      className={`tabbar${focused ? ' tabbar--focused' : ''}${dragOver ? ' tabbar--dragover' : ''}`}
+      onDragEnter={e => { e.preventDefault(); dragCounter.current++; setDragOver(true) }}
+      onDragLeave={() => { dragCounter.current--; if (dragCounter.current <= 0) { dragCounter.current = 0; setDragOver(false) } }}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => {
+        e.preventDefault()
+        dragCounter.current = 0
+        setDragOver(false)
+        const id = e.dataTransfer.getData('tabId')
+        if (id) onDrop(id)
+      }}
     >
-      {/* ── Scrollable flat tab strip ──────────────────────────────────────── */}
       <div className="tabbar__strip" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
 
         {groups.map((group, gi) => {
@@ -192,31 +202,25 @@ export default function TabBar({
           return (
             <React.Fragment key={firstTermId ?? `g${gi}`}>
 
-              {/* Group divider — not before the first group */}
               {gi > 0 && <div className="tabbar__sep" />}
 
-              {/* Grouped wrapper: lets CSS :hover show sibling-add button */}
               <div className="tabbar__group">
 
-                {/* Terminal tabs */}
                 {group.terminals.map(term => {
-                  const isActive    = term.id === activeId
-                  const isSecondary = !isActive && term.id === secondaryId
+                  const isActive = term.id === activeId
                   return (
                     <div
                       key={term.id}
-                      className={`tabbar__tab${isActive ? ' is-active' : ''}${isSecondary ? ' is-secondary' : ''}`}
-                      style={
-                        isActive    ? { '--tab-accent': group.color, background: rgba(group.color, 0.1) } as React.CSSProperties :
-                        isSecondary ? { '--tab-accent': 'rgba(180,150,250,0.7)' } as React.CSSProperties :
-                        undefined
-                      }
+                      className={`tabbar__tab${isActive ? ' is-active' : ''}`}
+                      style={isActive ? { '--tab-accent': group.color, background: rgba(group.color, 0.1) } as React.CSSProperties : undefined}
+                      draggable
+                      onDragStart={e => { e.dataTransfer.setData('tabId', term.id); e.dataTransfer.effectAllowed = 'move' }}
                       onClick={() => onSelect(term.id)}
+                      onContextMenu={e => openCtx(e, term)}
                       title={term.title}
                     >
-                      <TerminalIcon color={isActive || isSecondary ? group.color : rgba(group.color, 0.45)} />
+                      <TerminalIcon color={isActive ? group.color : rgba(group.color, 0.45)} />
                       <span className="tabbar__tab-title">{term.title}</span>
-                      {isSecondary && <span className="tabbar__badge-2">2</span>}
                       <button
                         className="tabbar__close"
                         onClick={e => { e.stopPropagation(); onClose(term.id) }}
@@ -228,7 +232,6 @@ export default function TabBar({
                   )
                 })}
 
-                {/* Sibling terminal "+" — appears on group hover */}
                 {firstTermId && (
                   <button
                     className="tabbar__sib-add"
@@ -237,32 +240,27 @@ export default function TabBar({
                     title="New terminal in this group"
                   >
                     <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
-                      <path d="M5 1v8M1 5h8"
-                        stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                      <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
                     </svg>
                   </button>
                 )}
 
-                {/* File / DB / preview / problems tabs */}
                 {group.files.map(tab => {
-                  const isActive    = tab.id === activeId
-                  const isSecondary = !isActive && tab.id === secondaryId
-                  const iconColor   = isActive ? group.color : rgba(group.color, 0.5)
+                  const isActive  = tab.id === activeId
+                  const iconColor = isActive ? group.color : rgba(group.color, 0.5)
                   return (
                     <div
                       key={tab.id}
-                      className={`tabbar__tab tabbar__tab--file${isActive ? ' is-active' : ''}${isSecondary ? ' is-secondary' : ''}`}
-                      style={
-                        isActive    ? { '--tab-accent': group.color, background: rgba(group.color, 0.08) } as React.CSSProperties :
-                        isSecondary ? { '--tab-accent': 'rgba(180,150,250,0.7)' } as React.CSSProperties :
-                        undefined
-                      }
+                      className={`tabbar__tab tabbar__tab--file${isActive ? ' is-active' : ''}`}
+                      style={isActive ? { '--tab-accent': group.color, background: rgba(group.color, 0.08) } as React.CSSProperties : undefined}
+                      draggable
+                      onDragStart={e => { e.dataTransfer.setData('tabId', tab.id); e.dataTransfer.effectAllowed = 'move' }}
                       onClick={() => onSelect(tab.id)}
+                      onContextMenu={e => openCtx(e, tab)}
                       title={tab.filePath ?? tab.title}
                     >
                       {tabIcon(tab, iconColor)}
                       <span className="tabbar__tab-title">{tab.title}</span>
-                      {isSecondary && <span className="tabbar__badge-2">2</span>}
                       <button
                         className="tabbar__close"
                         onClick={e => { e.stopPropagation(); onClose(tab.id) }}
@@ -274,60 +272,42 @@ export default function TabBar({
                   )
                 })}
 
-              </div>{/* end .tabbar__group */}
+              </div>
 
             </React.Fragment>
           )
         })}
 
-        {/* New top-level terminal */}
-        <button
-          className="tabbar__new-term"
-          onClick={onNewTerminal}
-          title="New terminal"
-        >
+        <button className="tabbar__new-term" onClick={onNewTerminal} title="New terminal">
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-            <path d="M6 1v10M1 6h10"
-              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </button>
 
-      </div>{/* end .tabbar__strip */}
-
-      {/* Draggable spacer */}
-      <div className="tabbar__spacer" />
-
-      {/* Split-view toggle */}
-      <button
-        className={`tabbar__split${splitEnabled ? ' is-active' : ''}`}
-        onClick={onSplitToggle}
-        title={splitEnabled ? 'Close split' : 'Split view'}
-        style={{ ['--wails-draggable' as any]: 'no-drag' }}
-      >
-        <SplitIcon />
-      </button>
-
-      {/* Window controls */}
-      <div className="tabbar__wincontrols" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-        <button className="wc-btn wc-min" onClick={WindowMinimise} aria-label="Minimise">
-          <svg width="10" height="2" viewBox="0 0 10 2">
-            <path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </button>
-        <button className="wc-btn wc-max" onClick={WindowToggleMaximise} aria-label="Maximise">
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            <rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5"
-              stroke="currentColor" strokeWidth="1.5" fill="none"/>
-          </svg>
-        </button>
-        <button className="wc-btn wc-close" onClick={onQuit} aria-label="Close">
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            <path d="M1 1l8 8M9 1L1 9"
-              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </button>
       </div>
 
+      {ctxMenu && ReactDOM.createPortal(
+        <div
+          ref={ctxRef}
+          className="tab-ctx-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          <button className="tab-ctx-item" onClick={() => { onMoveLeft(ctxMenu.tabId); setCtxMenu(null) }}>
+            Move Left
+          </button>
+          <button className="tab-ctx-item" onClick={() => { onMoveRight(ctxMenu.tabId); setCtxMenu(null) }}>
+            Move Right
+          </button>
+          <div className="tab-ctx-sep" />
+          <button className="tab-ctx-item" onClick={() => { onClose(ctxMenu.tabId); setCtxMenu(null) }}>
+            Close Tab
+          </button>
+          <button className="tab-ctx-item" onClick={() => { onCloseOthers(ctxMenu.tabId); setCtxMenu(null) }}>
+            Close Others
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

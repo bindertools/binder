@@ -199,6 +199,32 @@ func (t *Terminal) ExecuteCommand(line string) {
 			t.builtinProblems()
 		case "version":
 			t.builtinVersion()
+		case "debug":
+			t.builtinDebug()
+		case "kill":
+			t.builtinKill(parts[1:])
+		case "explorer":
+			t.builtinExplorer()
+		case "pack":
+			t.builtinPack(parts[1:])
+		case "ports":
+			wailsruntime.EventsEmit(t.ctx, "app:open-tab", map[string]interface{}{
+				"type": "ports", "title": "ports", "terminalId": t.id,
+			})
+			t.write("\r\n\x1b[38;5;246mopening ports monitor\x1b[0m")
+			t.write(t.prompt())
+		case "performance", "perf":
+			wailsruntime.EventsEmit(t.ctx, "app:open-tab", map[string]interface{}{
+				"type": "perf", "title": "performance", "terminalId": t.id,
+			})
+			t.write("\r\n\x1b[38;5;246mopening performance monitor\x1b[0m")
+			t.write(t.prompt())
+		case "plugins":
+			wailsruntime.EventsEmit(t.ctx, "app:open-tab", map[string]interface{}{
+				"type": "plugins", "title": "plugins", "terminalId": t.id,
+			})
+			t.write("\r\n\x1b[38;5;246mopening plugin store\x1b[0m")
+			t.write(t.prompt())
 		default:
 			t.execExternal(parts)
 		}
@@ -359,6 +385,13 @@ func (t *Terminal) builtinHelp() {
 		{"/themes", "list available preset theme names"},
 		{"/preview <file|url>", "preview .md/.html or a URL/port"},
 		{"/problems", "scan project for errors, opens a tab"},
+		{"/debug", "show OS, shell, config, git info"},
+		{"/kill <port>", "kill process(es) on a port"},
+		{"/explorer", "open native file explorer here"},
+		{"/pack [--dryrun]", "zip current directory"},
+		{"/ports", "open active ports monitor tab"},
+		{"/performance", "open performance monitor tab"},
+		{"/plugins", "open plugin store"},
 		{"/version", "show app and runtime version info"},
 		{"/help", "show this help"},
 	}
@@ -459,6 +492,121 @@ func colorFile(name string) string {
 	default:
 		return name
 	}
+}
+
+func (t *Terminal) builtinDebug() {
+	cfg := getGlobalConfig()
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		if goruntime.GOOS == "windows" {
+			shell = "powershell.exe"
+		} else {
+			shell = "/bin/sh"
+		}
+	}
+	branch := t.getGitBranch()
+	if branch == "" {
+		branch = "(not a git repo)"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\r\n\x1b[38;5;75mDebug Info\x1b[0m\r\n\r\n")
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s/%s\x1b[0m\r\n", "OS", goruntime.GOOS, goruntime.GOARCH))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "Shell", shell))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "Go", goruntime.Version()))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "CWD", filepath.ToSlash(t.cwd)))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "Git branch", branch))
+	sb.WriteString("\r\n\x1b[38;5;75mConfig\x1b[0m\r\n\r\n")
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "theme", cfg.Theme))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "indent_guides", cfg.IndentGuides))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "minimap", cfg.Minimap))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "show_timestamps", cfg.ShowTimestamps))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "git_branch", cfg.GitRecognition.ShowGitBranch))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "terminal_word_wrap", cfg.TerminalWordWrap))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "file_word_wrap", cfg.FileWordWrap))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%d\x1b[0m\r\n", "scroll_speed", cfg.ScrollSpeed))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%.1f\x1b[0m\r\n", "default_zoom", cfg.DefaultZoom))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "config_path", configFilePath()))
+	t.write(sb.String())
+	t.write(t.prompt())
+}
+
+func (t *Terminal) builtinKill(args []string) {
+	if len(args) == 0 {
+		t.write("\r\n\x1b[31mkill: usage: /kill <port>\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+	msg, err := killPortProcess(args[0])
+	if err != nil {
+		t.write("\r\n\x1b[31mkill: " + err.Error() + "\x1b[0m")
+	} else {
+		t.write("\r\n\x1b[38;5;75m" + msg + "\x1b[0m")
+	}
+	t.write(t.prompt())
+}
+
+func (t *Terminal) builtinExplorer() {
+	var cmd *exec.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer.exe", t.cwd)
+	case "darwin":
+		cmd = exec.Command("open", t.cwd)
+	default:
+		cmd = exec.Command("xdg-open", t.cwd)
+	}
+	noWindow(cmd)
+	if err := cmd.Start(); err != nil {
+		t.write("\r\n\x1b[31mexplorer: " + err.Error() + "\x1b[0m")
+	} else {
+		t.write("\r\n\x1b[38;5;246mopening " + filepath.ToSlash(t.cwd) + "\x1b[0m")
+	}
+	t.write(t.prompt())
+}
+
+func (t *Terminal) builtinPack(args []string) {
+	dryrun := len(args) > 0 && args[0] == "--dryrun"
+
+	entries, err := collectPackEntries(t.cwd)
+	if err != nil {
+		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+
+	if dryrun || len(entries) == 0 {
+		var total int64
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview — %d files\x1b[0m\r\n\r\n", len(entries)))
+		for _, e := range entries {
+			total += e.Size
+			sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%s\x1b[0m  %s\r\n", formatBytes(e.Size), e.RelPath))
+		}
+		sb.WriteString(fmt.Sprintf("\r\n  \x1b[38;5;75mTotal: %s\x1b[0m\r\n", formatBytes(total)))
+		if !dryrun {
+			sb.WriteString("\r\n\x1b[38;5;246mno files to pack\x1b[0m")
+		}
+		t.write(sb.String())
+		t.write(t.prompt())
+		return
+	}
+
+	dirName := filepath.Base(t.cwd)
+	zipName := dirName + ".zip"
+	zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
+
+	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %s…\x1b[0m", len(entries), zipName))
+	if err := createZip(t.cwd, zipPath, entries); err != nil {
+		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
+	} else {
+		if info, err2 := os.Stat(zipPath); err2 == nil {
+			t.write(fmt.Sprintf("\r\n\x1b[38;5;75mcreated %s (%s)\x1b[0m", zipPath, formatBytes(info.Size())))
+		} else {
+			t.write(fmt.Sprintf("\r\n\x1b[38;5;75mcreated %s\x1b[0m", zipPath))
+		}
+	}
+	t.write(t.prompt())
 }
 
 func (t *Terminal) builtinOpen(args []string) {

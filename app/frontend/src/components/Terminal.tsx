@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
+import { getInstalledIds, isInstalled } from '../plugins/index'
 import { Terminal as XTerm } from '@xterm/xterm'
 import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -11,6 +12,7 @@ import {
   InterruptCommand,
   CloseTerminal,
   GetClipboardText,
+  SetClipboardText,
   GetTerminalCwd,
   SetTerminalCwd,
   SelectDirectory,
@@ -40,9 +42,8 @@ interface MenuState {
   left: number
 }
 
-// App-specific slash commands shown in the autocomplete dropdown.
-// Standard terminal commands (cd, ls, clear, etc.) do not need a slash.
-const SLASH_COMMANDS: { cmd: string; desc: string }[] = [
+// Built-in slash commands always available — no plugin required.
+const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/config',          desc: 'open settings & theme UI' },
   { cmd: '/config --raw',    desc: 'edit config.json directly' },
   { cmd: '/config --reload', desc: 'reload config from disk' },
@@ -50,9 +51,42 @@ const SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/themes',          desc: 'list available theme names' },
   { cmd: '/preview',         desc: 'preview .md/.html or a URL/port' },
   { cmd: '/problems',        desc: 'show project diagnostics' },
+  { cmd: '/debug',           desc: 'show OS, shell, config, git info' },
+  { cmd: '/kill',            desc: 'kill process on a port' },
+  { cmd: '/explorer',        desc: 'open native file explorer' },
+  { cmd: '/pack',            desc: 'zip current directory' },
+  { cmd: '/pack --dryrun',   desc: 'preview what would be zipped' },
+  { cmd: '/ports',           desc: 'open ports monitor tab' },
+  { cmd: '/performance',     desc: 'open performance monitor tab' },
+  { cmd: '/plugins',         desc: 'open plugin store' },
   { cmd: '/version',         desc: 'show app version info' },
   { cmd: '/help',            desc: 'show all commands' },
 ]
+
+// Plugin slash commands — only shown and executable when the plugin is installed.
+// Keys are all alias names for the command; value is the plugin ID + tab metadata.
+const PLUGIN_COMMANDS: Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> = {
+  'git':        { pluginId: 'git',     tabType: 'git',     title: 'git',     displayName: 'Git Insights' },
+  'note':       { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
+  'notepad':    { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
+  'claude':     { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
+  'ai':         { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
+}
+
+// Build the full slash command list for autocomplete, filtered by installed plugins.
+function buildSlashCommands(): { cmd: string; desc: string }[] {
+  const installed = new Set(getInstalledIds())
+  const pluginEntries: { cmd: string; desc: string }[] = [
+    { cmd: '/git',    desc: 'open git insights tab'  },
+    { cmd: '/note',   desc: 'open notepad tab'        },
+    { cmd: '/claude', desc: 'open claude ai tab'      },
+  ].filter(e => {
+    const key = e.cmd.slice(1)
+    const entry = PLUGIN_COMMANDS[key]
+    return entry && installed.has(entry.pluginId)
+  })
+  return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
+}
 
 function abbreviatePath(path: string): string {
   return path.replace(/\\/g, '/')
@@ -114,7 +148,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       theme: xtermThemeRef.current,
       fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
       fontSize,
-      lineHeight: 1.45,
+      lineHeight: 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
       allowTransparency: false,
@@ -256,7 +290,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     // Get xterm cell dimensions (internal API, with fallback).
     const cellDims = () => {
       const core = (term as any)._core
-      const h = core?._renderService?.dimensions?.css?.cell?.height ?? (fontSize * 1.45)
+      const h = core?._renderService?.dimensions?.css?.cell?.height ?? (fontSize * 1.2)
       const w = core?._renderService?.dimensions?.css?.cell?.width ?? (fontSize * 0.62)
       return { h, w }
     }
@@ -270,7 +304,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       const line = lineRef.current
       if (!line.startsWith('/') || line.includes(' ')) return false
 
-      const filtered = SLASH_COMMANDS.filter(c => c.cmd.startsWith(line))
+      const filtered = buildSlashCommands().filter(c => c.cmd.startsWith(line))
       if (filtered.length === 0) { setMenu(null); return true }
 
       const { h, w } = cellDims()
@@ -414,13 +448,40 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
     // ── input ─────────────────────────────────────────────────────────────────
 
+    const undoStack: string[] = []
+    let lastCtrlC = 0
+
     term.onData((data: string) => {
       // Enter
       if (data === '\r' || data === '\n') {
         setMenu(null)
+        undoStack.length = 0
         const line = lineRef.current
         lineRef.current = ''
         term.write('\r\n')
+
+        // Intercept plugin slash commands on the frontend so install state
+        // is enforced before anything reaches Go.
+        if (line.startsWith('/')) {
+          const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
+          const pluginCmd = PLUGIN_COMMANDS[cmdName]
+          if (pluginCmd) {
+            if (isInstalled(pluginCmd.pluginId)) {
+              window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
+                detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId },
+              }))
+            } else {
+              term.write(
+                `\x1b[38;5;203m"/${cmdName}" requires the ${pluginCmd.displayName} plugin.\x1b[0m\r\n` +
+                `\x1b[38;5;246mRun /plugins to open the Plugin Store and install it.\x1b[0m`
+              )
+            }
+            // Ask Go to re-draw the prompt so the terminal stays usable.
+            ExecuteCommand(tabId, '')
+            return
+          }
+        }
+
         ExecuteCommand(tabId, line)
         return
       }
@@ -428,6 +489,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       // Backspace
       if (data === '\x7f' || data === '\b') {
         if (lineRef.current.length > 0) {
+          undoStack.push(lineRef.current)
           lineRef.current = lineRef.current.slice(0, -1)
           term.write('\b \b')
           updateMenu()
@@ -437,12 +499,53 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
         return
       }
 
-      // Ctrl+C
+      // Ctrl+C — smart: copy selection first, kill on second press or no selection
       if (data === '\x03') {
         setMenu(null)
+        const selection = term.getSelection()
+        const now = Date.now()
+        if (selection && (now - lastCtrlC) > 800) {
+          // First Ctrl+C with selection: copy
+          SetClipboardText(selection).catch(() => {})
+          term.clearSelection()
+          lastCtrlC = now
+          return
+        }
+        // No selection or second press: kill
+        lastCtrlC = 0
+        undoStack.length = 0
         term.write('^C\r\n')
         lineRef.current = ''
         InterruptCommand(tabId)
+        return
+      }
+
+      // Ctrl+A — select current input line (visually move to start)
+      if (data === '\x01') {
+        if (lineRef.current.length > 0) {
+          // Move cursor back to beginning of line
+          term.write('\x1b[' + lineRef.current.length + 'D')
+          // Select all by re-writing (can't easily use xterm selection API here)
+          // Re-draw so cursor is at start, content is still there
+          term.write(lineRef.current)
+          term.write('\x1b[' + lineRef.current.length + 'D')
+        }
+        return
+      }
+
+      // Ctrl+Z — undo last typed characters
+      if (data === '\x1a') {
+        if (undoStack.length > 0) {
+          const prev = undoStack.pop()!
+          const cur = lineRef.current
+          // Erase current, write previous
+          if (cur.length > 0) {
+            term.write('\b \b'.repeat(cur.length))
+          }
+          term.write(prev)
+          lineRef.current = prev
+          updateMenu()
+        }
         return
       }
 
@@ -459,6 +562,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       if (data === '\x15') {
         setMenu(null)
         if (lineRef.current.length > 0) {
+          undoStack.push(lineRef.current)
           term.write('\x1b[' + lineRef.current.length + 'D' +
             ' '.repeat(lineRef.current.length) +
             '\x1b[' + lineRef.current.length + 'D')
@@ -483,11 +587,20 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       if (data.length > 1) {
         processPaste(data)
       } else {
+        undoStack.push(lineRef.current)
+        if (undoStack.length > 100) undoStack.shift()
         lineRef.current += data
         term.write(data)
         updateMenu()
       }
     })
+
+    // Allow plugins to execute commands in this terminal
+    const handlePluginExec = (e: Event) => {
+      const { terminalId, cmd } = (e as CustomEvent).detail
+      if (terminalId === tabId) ExecuteCommand(tabId, cmd)
+    }
+    window.addEventListener('plugin:execute', handlePluginExec)
 
     const ro = new ResizeObserver(() => fitAddon.fit())
     ro.observe(containerRef.current!)
@@ -501,6 +614,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       window.removeEventListener('keydown', handleCtrlKeyDown)
       window.removeEventListener('keyup',   handleCtrlKeyUp)
       window.removeEventListener('paste', onWindowPaste)
+      window.removeEventListener('plugin:execute', handlePluginExec)
       EventsOff(outEvent)
       CloseTerminal(tabId)
       term.dispose()

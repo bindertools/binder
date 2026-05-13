@@ -1,0 +1,80 @@
+.perf {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 24px;
+  height: 100%;
+  overflow: auto;
+  background: var(--app-bg);
+  color: #ccc;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 13px;
+}
+
+.perf--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+}
+
+.perf__gauges {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.perf-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.perf-gauge__label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.perf__charts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.perf__chart {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.perf__chart-label {
+  font-size: 11px;
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.perf-spark {
+  display: block;
+  opacity: 0.8;
+}
+
+.perf__stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.perf__stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.perf__stat-label { color: #666; }
+.perf__stat-value { color: #b0bec5; }

@@ -25,6 +25,9 @@ export namespace main {
 	    minimal_pwd: boolean;
 	    default_zoom: number;
 	    custom_theme?: Record<string, string>;
+	    terminal_word_wrap: boolean;
+	    file_word_wrap: boolean;
+	    scroll_speed: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -44,6 +47,9 @@ export namespace main {
 	        this.minimal_pwd = source["minimal_pwd"];
 	        this.default_zoom = source["default_zoom"];
 	        this.custom_theme = source["custom_theme"];
+	        this.terminal_word_wrap = source["terminal_word_wrap"];
+	        this.file_word_wrap = source["file_word_wrap"];
+	        this.scroll_speed = source["scroll_speed"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -145,7 +151,85 @@ export namespace main {
 		}
 	}
 	
+	export class ExternalPluginInfo {
+	    id: string;
+	    name: string;
+	    description: string;
+	    author: string;
+	    version: string;
+	    code: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new ExternalPluginInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.author = source["author"];
+	        this.version = source["version"];
+	        this.code = source["code"];
+	    }
+	}
+	
+	export class PerfData {
+	    cpu_percent: number;
+	    mem_used: number;
+	    mem_total: number;
+	    mem_percent: number;
+	    disk_used: number;
+	    disk_total: number;
+	    disk_percent: number;
+	    net_bytes_sent: number;
+	    net_bytes_recv: number;
+	    gpu_percent: number;
+	    gpu_name: string;
+	    gpu_available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PerfData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cpu_percent = source["cpu_percent"];
+	        this.mem_used = source["mem_used"];
+	        this.mem_total = source["mem_total"];
+	        this.mem_percent = source["mem_percent"];
+	        this.disk_used = source["disk_used"];
+	        this.disk_total = source["disk_total"];
+	        this.disk_percent = source["disk_percent"];
+	        this.net_bytes_sent = source["net_bytes_sent"];
+	        this.net_bytes_recv = source["net_bytes_recv"];
+	        this.gpu_percent = source["gpu_percent"];
+	        this.gpu_name = source["gpu_name"];
+	        this.gpu_available = source["gpu_available"];
+	    }
+	}
+	export class PortInfo {
+	    protocol: string;
+	    port: number;
+	    pid: number;
+	    process: string;
+	    address: string;
+	    state: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.protocol = source["protocol"];
+	        this.port = source["port"];
+	        this.pid = source["pid"];
+	        this.process = source["process"];
+	        this.address = source["address"];
+	        this.state = source["state"];
+	    }
+	}
 	export class ProbData {
 	    file: string;
 	    line: number;
@@ -201,6 +285,24 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class SearchResult {
+	    path: string;
+	    line: number;
+	    content: string;
+	    is_name: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.line = source["line"];
+	        this.content = source["content"];
+	        this.is_name = source["is_name"];
+	    }
 	}
 	export class SessionTab {
 	    type: string;

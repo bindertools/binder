@@ -14,8 +14,16 @@ export function CtrlClickPath(arg1, arg2) {
   return window['go']['main']['App']['CtrlClickPath'](arg1, arg2);
 }
 
+export function DeleteFile(arg1) {
+  return window['go']['main']['App']['DeleteFile'](arg1);
+}
+
 export function ExecuteCommand(arg1, arg2) {
   return window['go']['main']['App']['ExecuteCommand'](arg1, arg2);
+}
+
+export function FetchExternalPlugin(arg1) {
+  return window['go']['main']['App']['FetchExternalPlugin'](arg1);
 }
 
 export function GetAppConfig() {
@@ -34,6 +42,14 @@ export function GetFileLanguage(arg1) {
   return window['go']['main']['App']['GetFileLanguage'](arg1);
 }
 
+export function GetSystemPerf() {
+  return window['go']['main']['App']['GetSystemPerf']();
+}
+
+export function GetSystemPorts() {
+  return window['go']['main']['App']['GetSystemPorts']();
+}
+
 export function GetTerminalCwd(arg1) {
   return window['go']['main']['App']['GetTerminalCwd'](arg1);
 }
@@ -42,8 +58,16 @@ export function InterruptCommand(arg1) {
   return window['go']['main']['App']['InterruptCommand'](arg1);
 }
 
+export function KillPort(arg1) {
+  return window['go']['main']['App']['KillPort'](arg1);
+}
+
 export function LoadSession() {
   return window['go']['main']['App']['LoadSession']();
+}
+
+export function OpenNewWindow() {
+  return window['go']['main']['App']['OpenNewWindow']();
 }
 
 export function ReadDatabase(arg1) {
@@ -70,12 +94,28 @@ export function ScanProblems(arg1) {
   return window['go']['main']['App']['ScanProblems'](arg1);
 }
 
+export function SearchFiles(arg1, arg2) {
+  return window['go']['main']['App']['SearchFiles'](arg1, arg2);
+}
+
 export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SetClipboardText(arg1) {
+  return window['go']['main']['App']['SetClipboardText'](arg1);
+}
+
 export function SetTerminalCwd(arg1, arg2) {
   return window['go']['main']['App']['SetTerminalCwd'](arg1, arg2);
+}
+
+export function StartPerfMonitor(arg1) {
+  return window['go']['main']['App']['StartPerfMonitor'](arg1);
+}
+
+export function StopPerfMonitor(arg1) {
+  return window['go']['main']['App']['StopPerfMonitor'](arg1);
 }
 
 export function WriteFile(arg1, arg2) {

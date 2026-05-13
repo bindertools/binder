@@ -27,14 +27,94 @@
   overflow: hidden;
 }
 
+/* ── App header (title bar + tab bars) ──────────────────────────────────────── */
+.app__header {
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--app-bg);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Each panel's tab bar container — flex-shrink/grow set inline by App.tsx */
+.app__header-panel {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Thin vertical divider between left and right panel tab bars */
+.app__header-sep {
+  width: 1px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+/* Search icon + window controls — always pinned to the right */
+.app__header-controls {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-color);
+}
+
+/* ── Search icon button ──────────────────────────────────────────────────────── */
+.app__search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 100%;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  color: var(--tab-color);
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.app__search-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #d0d0d0;
+}
+
+/* ── Window controls ─────────────────────────────────────────────────────────── */
+.app__wincontrols {
+  display: flex;
+  align-items: stretch;
+}
+
+.wc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--tab-color);
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+}
+.wc-btn:hover    { color: #d0d0d0; background: rgba(255,255,255,0.07); }
+.wc-close:hover  { background: #c0392b; color: #fff; }
+
+/* ── Content area ────────────────────────────────────────────────────────────── */
 .app__content {
   flex: 1;
   overflow: hidden;
   position: relative;
 }
 
-/* All panes are absolutely positioned so they can be repositioned for
-   split-screen without unmounting (terminals/editors stay alive). */
+/* All panes are absolutely positioned so terminals/editors stay mounted when
+   switching tabs or moving between panels. */
 .app__pane {
   position: absolute;
   top: 0;
@@ -44,7 +124,7 @@
   overflow: hidden;
 }
 
-/* Focused-pane indicator in split mode */
+/* Focused-pane highlight in split mode */
 .app__pane--focused::after {
   content: '';
   position: absolute;
@@ -65,13 +145,12 @@
   z-index: 20;
   transition: background 0.15s;
 }
-
 .app__divider:hover,
 .app__divider:active {
   background: rgba(106, 180, 250, 0.45);
 }
 
-/* Terminal pane */
+/* ── Terminal pane ───────────────────────────────────────────────────────────── */
 .terminal-pane {
   flex: 1;
   display: flex;
@@ -97,12 +176,10 @@
   white-space: nowrap;
   overflow: hidden;
 }
-
 .terminal-cwd:hover {
   background: var(--info-bar-hover-bg);
   color: var(--info-bar-hover-color);
 }
-
 .terminal-cwd span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -110,7 +187,7 @@
 
 .terminal-container {
   flex: 1;
-  padding: 6px 8px;
+  padding: 4px 6px;
   background: var(--app-bg);
   overflow: hidden;
 }
@@ -122,20 +199,13 @@
 
 .xterm-viewport {
   background: var(--app-bg) !important;
-  /* Hide the native scrollbar — xterm handles scrollback internally */
   scrollbar-width: none !important;
   overflow-y: hidden !important;
 }
+.xterm-viewport::-webkit-scrollbar { display: none !important; }
+.xterm-scroll-area { visibility: hidden; }
 
-.xterm-viewport::-webkit-scrollbar {
-  display: none !important;
-}
-
-.xterm-scroll-area {
-  visibility: hidden;
-}
-
-/* Completion dropdown (portaled to body) */
+/* ── Completion dropdown (portaled to body) ─────────────────────────────────── */
 .completion-menu {
   position: fixed;
   z-index: 9999;
@@ -163,32 +233,13 @@
   line-height: 1.4;
   transition: background 0.05s;
 }
+.completion-item:hover           { background: rgba(255, 255, 255, 0.06); }
+.completion-item.selected        { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.completion-item.applied         { background: #264f78; color: #fff; }
+.completion-item__name           { flex-shrink: 0; }
+.completion-item__desc           { color: var(--info-bar-color, #555); font-size: 11px; flex-shrink: 0; }
 
-.completion-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.completion-item.selected {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.completion-item.applied {
-  background: #264f78;
-  color: #fff;
-}
-
-.completion-item__name {
-  flex-shrink: 0;
-}
-
-.completion-item__desc {
-  color: var(--info-bar-color, #555);
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-/* Editor pane */
+/* ── Editor pane ─────────────────────────────────────────────────────────────── */
 .editor-container {
   flex: 1;
   display: flex;

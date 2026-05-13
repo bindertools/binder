@@ -12,6 +12,8 @@ import (
 var assets embed.FS
 
 func main() {
+	initJumpList()
+
 	app := NewApp()
 
 	err := wails.Run(&options.App{

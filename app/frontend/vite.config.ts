@@ -1,18 +1,30 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@cmdide/plugin-sdk':      path.resolve(__dirname, '../../packages/plugin-sdk'),
+      '@cmdide/plugin-notepad':  path.resolve(__dirname, '../../packages/plugin-notepad'),
+      '@cmdide/plugin-git':      path.resolve(__dirname, '../../packages/plugin-git'),
+    },
+  },
+  server: {
+    fs: {
+      // Allow Vite's dev server to serve files from outside the frontend root
+      allow: ['..', '../..', '../../packages'],
+    },
+  },
   build: {
     rollupOptions: {
       output: {
-        // Split Monaco into its own chunk to keep the main bundle small
         manualChunks: {
           'monaco-editor': ['monaco-editor'],
         },
       },
     },
-    // Monaco workers are large; raise the warning threshold
     chunkSizeWarningLimit: 5000,
   },
 })

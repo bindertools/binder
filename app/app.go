@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -52,13 +59,17 @@ func (a *App) LoadSession() []SessionTab {
 }
 
 type App struct {
-	ctx       context.Context
-	terminals map[string]*Terminal
-	mu        sync.Mutex
+	ctx         context.Context
+	terminals   map[string]*Terminal
+	mu          sync.Mutex
+	perfCancels map[string]context.CancelFunc
 }
 
 func NewApp() *App {
-	return &App{terminals: make(map[string]*Terminal)}
+	return &App{
+		terminals:   make(map[string]*Terminal),
+		perfCancels: make(map[string]context.CancelFunc),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -85,6 +96,9 @@ func (a *App) shutdown(_ context.Context) {
 	for id, t := range a.terminals {
 		t.Close()
 		delete(a.terminals, id)
+	}
+	for _, cancel := range a.perfCancels {
+		cancel()
 	}
 }
 
@@ -283,6 +297,176 @@ func (a *App) SaveAppConfig(incoming Config) error {
 	return nil
 }
 
+// SetClipboardText writes text to the system clipboard.
+func (a *App) SetClipboardText(text string) {
+	wailsruntime.ClipboardSetText(a.ctx, text)
+}
+
+// DeleteFile removes a file from the filesystem.
+func (a *App) DeleteFile(path string) error {
+	return os.Remove(path)
+}
+
+// OpenNewWindow launches a new independent instance of the app.
+func (a *App) OpenNewWindow() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe)
+	noWindow(cmd)
+	cmd.Start() //nolint:errcheck
+}
+
+// ─── Ports ────────────────────────────────────────────────────────────────────
+
+// GetSystemPorts returns the list of currently active network ports.
+func (a *App) GetSystemPorts() []PortInfo {
+	return getActivePorts()
+}
+
+// KillPort kills the process(es) listening on the given port number string.
+func (a *App) KillPort(port string) (string, error) {
+	return killPortProcess(port)
+}
+
+// ─── Performance ──────────────────────────────────────────────────────────────
+
+// GetSystemPerf returns a single snapshot of host performance metrics.
+func (a *App) GetSystemPerf() PerfData {
+	return collectPerfData()
+}
+
+// StartPerfMonitor begins streaming perf:data:{tabId} events every second.
+func (a *App) StartPerfMonitor(tabId string) {
+	a.mu.Lock()
+	if cancel, ok := a.perfCancels[tabId]; ok {
+		cancel()
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.perfCancels[tabId] = cancel
+	a.mu.Unlock()
+	startPerfMonitor(ctx, tabId)
+}
+
+// StopPerfMonitor stops streaming perf events for the given tab.
+func (a *App) StopPerfMonitor(tabId string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if cancel, ok := a.perfCancels[tabId]; ok {
+		cancel()
+		delete(a.perfCancels, tabId)
+	}
+}
+
+// ─── File Search ──────────────────────────────────────────────────────────────
+
+// SearchResult represents a single file search hit.
+type SearchResult struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Content string `json:"content"`
+	IsName  bool   `json:"is_name"`
+}
+
+// SearchFiles searches files in the terminal's cwd for the given query.
+func (a *App) SearchFiles(id string, query string) []SearchResult {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if !ok || query == "" {
+		return nil
+	}
+
+	queryLower := strings.ToLower(query)
+	var results []SearchResult
+	limit := 100
+
+	filepath.Walk(t.cwd, func(path string, info os.FileInfo, err error) error { //nolint:errcheck
+		if err != nil || len(results) >= limit {
+			return nil
+		}
+		base := filepath.Base(path)
+		if strings.HasPrefix(base, ".") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.IsDir() {
+			for _, skip := range []string{"node_modules", "vendor", ".git", "dist", "build", "__pycache__"} {
+				if base == skip {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+
+		rel, _ := filepath.Rel(t.cwd, path)
+		rel = filepath.ToSlash(rel)
+
+		if strings.Contains(strings.ToLower(base), queryLower) {
+			results = append(results, SearchResult{Path: rel, IsName: true})
+			return nil
+		}
+
+		if info.Size() > 1<<20 {
+			return nil
+		}
+		if isBinaryPath(path) {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+
+		lineNum := 0
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			lineNum++
+			if len(results) >= limit {
+				break
+			}
+			line := scanner.Text()
+			if strings.Contains(strings.ToLower(line), queryLower) {
+				content := strings.TrimSpace(line)
+				if len(content) > 120 {
+					content = content[:120] + "…"
+				}
+				results = append(results, SearchResult{
+					Path:    rel,
+					Line:    lineNum,
+					Content: content,
+					IsName:  false,
+				})
+			}
+		}
+		return nil
+	})
+	return results
+}
+
+// isBinaryPath returns true for known binary file extensions.
+func isBinaryPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, b := range []string{
+		".exe", ".dll", ".so", ".dylib", ".bin", ".obj", ".o", ".a",
+		".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".bmp",
+		".zip", ".tar", ".gz", ".rar", ".7z",
+		".pdf", ".doc", ".docx", ".xls", ".xlsx",
+		".mp3", ".mp4", ".wav", ".avi", ".mov",
+		".wasm", ".node",
+	} {
+		if ext == b {
+			return true
+		}
+	}
+	return false
+}
+
 // ScanProblems runs the code problem scanners against cwd and returns
 // structured results — used by the frontend Problems tab rescan button.
 func (a *App) ScanProblems(cwd string) ProbResult {
@@ -332,4 +516,116 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 		}
 	}
 	return matches
+}
+
+// ── External plugin fetcher ───────────────────────────────────────────────────
+
+// ExternalPluginInfo holds metadata and the bundled JS for an external plugin.
+type ExternalPluginInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	Version     string `json:"version"`
+	Code        string `json:"code"`
+}
+
+// FetchExternalPlugin downloads a plugin from a public GitHub repository.
+// It expects the repo to have a package.json at root and a compiled
+// dist/index.js (or index.js) ESM bundle that exports a Plugin as default.
+func (a *App) FetchExternalPlugin(githubURL string) (ExternalPluginInfo, error) {
+	u, err := url.Parse(strings.TrimSpace(githubURL))
+	if err != nil || u.Host != "github.com" {
+		return ExternalPluginInfo{}, fmt.Errorf("not a valid GitHub URL")
+	}
+
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return ExternalPluginInfo{}, fmt.Errorf("URL must point to a repository: github.com/owner/repo")
+	}
+	owner, repo := parts[0], parts[1]
+
+	// Try main branch first, then master
+	var rawBase string
+	for _, branch := range []string{"main", "master"} {
+		base := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s", owner, repo, branch)
+		if _, testErr := httpFetch(base + "/package.json"); testErr == nil {
+			rawBase = base
+			break
+		}
+	}
+	if rawBase == "" {
+		return ExternalPluginInfo{}, fmt.Errorf("could not reach repository (tried main and master branches)")
+	}
+
+	// Parse package.json for metadata
+	pkgBody, err := httpFetch(rawBase + "/package.json")
+	if err != nil {
+		return ExternalPluginInfo{}, fmt.Errorf("could not fetch package.json: %w", err)
+	}
+	var pkg struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Author      interface{} `json:"author"` // string or {"name":"..."}
+		Version     string `json:"version"`
+		PluginID    string `json:"pluginId"`
+	}
+	if err := json.Unmarshal([]byte(pkgBody), &pkg); err != nil {
+		return ExternalPluginInfo{}, fmt.Errorf("invalid package.json: %w", err)
+	}
+
+	// Resolve author field (can be a string or an object with "name")
+	authorStr := ""
+	switch v := pkg.Author.(type) {
+	case string:
+		authorStr = v
+	case map[string]interface{}:
+		if n, ok := v["name"].(string); ok {
+			authorStr = n
+		}
+	}
+
+	// Fetch the plugin bundle — try dist/index.js then index.js
+	var code string
+	for _, path := range []string{"/dist/index.js", "/index.js"} {
+		code, err = httpFetch(rawBase + path)
+		if err == nil {
+			break
+		}
+	}
+	if code == "" {
+		return ExternalPluginInfo{}, fmt.Errorf("no plugin bundle found (tried dist/index.js and index.js)")
+	}
+
+	id := pkg.PluginID
+	if id == "" {
+		id = repo
+	}
+	name := pkg.Name
+	if name == "" {
+		name = repo
+	}
+
+	return ExternalPluginInfo{
+		ID:          id,
+		Name:        name,
+		Description: pkg.Description,
+		Author:      authorStr,
+		Version:     pkg.Version,
+		Code:        code,
+	}, nil
+}
+
+func httpFetch(fetchURL string) (string, error) {
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Get(fetchURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, fetchURL)
+	}
+	body, err := io.ReadAll(resp.Body)
+	return string(body), err
 }

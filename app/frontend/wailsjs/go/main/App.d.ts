@@ -8,7 +8,11 @@ export function CreateTerminal(arg1:string,arg2:string):Promise<void>;
 
 export function CtrlClickPath(arg1:string,arg2:string):Promise<void>;
 
+export function DeleteFile(arg1:string):Promise<void>;
+
 export function ExecuteCommand(arg1:string,arg2:string):Promise<void>;
+
+export function FetchExternalPlugin(arg1:string):Promise<main.ExternalPluginInfo>;
 
 export function GetAppConfig():Promise<main.Config>;
 
@@ -18,11 +22,19 @@ export function GetCompletions(arg1:string,arg2:string,arg3:string):Promise<Arra
 
 export function GetFileLanguage(arg1:string):Promise<string>;
 
+export function GetSystemPerf():Promise<main.PerfData>;
+
+export function GetSystemPorts():Promise<Array<main.PortInfo>>;
+
 export function GetTerminalCwd(arg1:string):Promise<string>;
 
 export function InterruptCommand(arg1:string):Promise<void>;
 
+export function KillPort(arg1:string):Promise<string>;
+
 export function LoadSession():Promise<Array<main.SessionTab>>;
+
+export function OpenNewWindow():Promise<void>;
 
 export function ReadDatabase(arg1:string):Promise<main.DBSchema>;
 
@@ -36,8 +48,16 @@ export function SaveSession(arg1:Array<main.SessionTab>):Promise<void>;
 
 export function ScanProblems(arg1:string):Promise<main.ProbResult>;
 
+export function SearchFiles(arg1:string,arg2:string):Promise<Array<main.SearchResult>>;
+
 export function SelectDirectory():Promise<string>;
 
+export function SetClipboardText(arg1:string):Promise<void>;
+
 export function SetTerminalCwd(arg1:string,arg2:string):Promise<void>;
+
+export function StartPerfMonitor(arg1:string):Promise<void>;
+
+export function StopPerfMonitor(arg1:string):Promise<void>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

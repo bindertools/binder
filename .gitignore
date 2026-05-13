@@ -19,3 +19,4 @@ installer/assets/terminal-IDE.exe
 node_modules
 /app/.cache
 /installer/.cache
+/docs/dist
