@@ -75,7 +75,20 @@ function ClaudeTab({ context }: PluginTabProps) {
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
         }),
       })
-      if (!res.ok) throw new Error(`API error ${res.status}`)
+      if (!res.ok) {
+        let errorDetail = ''
+        try {
+          const errorBody = await res.json()
+          errorDetail = errorBody?.error?.message ?? errorBody?.message ?? ''
+        } catch {
+          try {
+            errorDetail = await res.text()
+          } catch {
+            errorDetail = ''
+          }
+        }
+        throw new Error(`API error ${res.status}${errorDetail ? `: ${errorDetail}` : ''}`)
+      }
       const data = await res.json()
       const reply = data.content?.[0]?.text ?? ''
       setMessages([...newMessages, { role: 'assistant', content: reply }])
