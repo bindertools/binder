@@ -10,14 +10,15 @@ interface Message {
 function renderMessage(text: string, onRun?: (code: string) => void): React.ReactNode {
   const parts: React.ReactNode[] = []
   let last = 0
+  let partKey = 0
   const matches = [...text.matchAll(/```(\w*)\n?([\s\S]*?)```/g)]
   if (matches.length === 0) return text
 
   for (const m of matches) {
-    if (m.index! > last) parts.push(<span key={last}>{text.slice(last, m.index)}</span>)
+    if (m.index! > last) parts.push(<span key={`text-${partKey++}`}>{text.slice(last, m.index)}</span>)
     const code = m[2].trim()
     parts.push(
-      <div key={m.index} className="claude-code">
+      <div key={`code-${partKey++}`} className="claude-code">
         <pre className="claude-code__pre">{code}</pre>
         {onRun && (
           <button className="claude-code__run" onClick={() => onRun(code)}>
@@ -28,7 +29,7 @@ function renderMessage(text: string, onRun?: (code: string) => void): React.Reac
     )
     last = m.index! + m[0].length
   }
-  if (last < text.length) parts.push(<span key={last}>{text.slice(last)}</span>)
+  if (last < text.length) parts.push(<span key={`text-${partKey++}`}>{text.slice(last)}</span>)
   return parts
 }
 
@@ -75,7 +76,20 @@ function ClaudeTab({ context }: PluginTabProps) {
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
         }),
       })
-      if (!res.ok) throw new Error(`API error ${res.status}`)
+      if (!res.ok) {
+        let errorDetail = ''
+        try {
+          const errorBody = await res.json()
+          errorDetail = errorBody?.error?.message ?? errorBody?.message ?? ''
+        } catch {
+          try {
+            errorDetail = await res.text()
+          } catch {
+            errorDetail = ''
+          }
+        }
+        throw new Error(`API error ${res.status}${errorDetail ? `: ${errorDetail}` : ''}`)
+      }
       const data = await res.json()
       const reply = data.content?.[0]?.text ?? ''
       setMessages([...newMessages, { role: 'assistant', content: reply }])
