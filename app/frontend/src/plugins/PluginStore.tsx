@@ -199,9 +199,24 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
   const [msg,    setMsg]    = useState('')
   const [exts,   setExts]   = useState<ExternalPluginRecord[]>(getExternalPlugins())
 
+  const toSafeGithubUrl = (value: string): string | null => {
+    try {
+      const parsed = new URL(value.trim())
+      const host = parsed.hostname.toLowerCase()
+      if (parsed.protocol !== 'https:') return null
+      if (host !== 'github.com' && host !== 'www.github.com') return null
+      const parts = parsed.pathname.split('/').filter(Boolean)
+      if (parts.length < 2) return null
+      parsed.hash = ''
+      return parsed.toString()
+    } catch {
+      return null
+    }
+  }
+
   const fetchAndInstall = useCallback(async () => {
-    const trimmed = url.trim()
-    if (!trimmed || !trimmed.includes('github.com')) {
+    const safeGithubUrl = toSafeGithubUrl(url)
+    if (!safeGithubUrl) {
       setMsg('Enter a valid GitHub repository URL (https://github.com/owner/repo).')
       setStatus('error')
       return
@@ -209,14 +224,14 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
     setStatus('loading')
     setMsg('')
     try {
-      const result = await FetchExternalPlugin(trimmed)
+      const result = await FetchExternalPlugin(safeGithubUrl)
       const record: ExternalPluginRecord = {
         id:          result.id,
         name:        result.name,
         description: result.description,
         author:      result.author,
         version:     result.version,
-        githubUrl:   trimmed,
+        githubUrl:   safeGithubUrl,
         code:        result.code,
       }
       saveExternalPlugin(record)
@@ -295,9 +310,13 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
                     <Chip label="external" variant="external" />
                   </div>
                   <div className="ps-row__meta">
-                    <a className="ps-link" href={ext.githubUrl} target="_blank" rel="noreferrer">
-                      {ext.githubUrl.replace('https://github.com/', '')} ↗
-                    </a>
+                    {toSafeGithubUrl(ext.githubUrl) ? (
+                      <a className="ps-link" href={toSafeGithubUrl(ext.githubUrl)!} target="_blank" rel="noreferrer">
+                        {toSafeGithubUrl(ext.githubUrl)!.replace('https://github.com/', '')} ↗
+                      </a>
+                    ) : (
+                      <span className="ps-muted">{ext.githubUrl}</span>
+                    )}
                     <span className="ps-muted">v{ext.version}</span>
                   </div>
                 </div>
