@@ -30,7 +30,7 @@ export default function App() {
     setProgress(0)
     setStatusMsg('Starting…')
     try {
-      await Install(createShortcut, installPlugins)
+      await Install(createShortcut)
     } catch (e: unknown) {
       setError(String(e))
       setPhase('error')
