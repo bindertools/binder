@@ -10,7 +10,7 @@ import './PluginStore.css'
 
 type StoreTab = 'browse' | 'external'
 
-interface Props { tabId: string; active: boolean; onPluginChange: () => void }
+interface Props { onPluginChange: () => void }
 
 const CATEGORY_ICONS: Record<PluginCategory | string, string> = {
   development:  '⌨',
