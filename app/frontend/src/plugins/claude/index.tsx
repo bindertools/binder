@@ -7,8 +7,6 @@ interface Message {
   content: string
 }
 
-const CODE_RE = /```[\s\S]*?```|`[^`]+`/g
-
 function renderMessage(text: string, onRun?: (code: string) => void): React.ReactNode {
   const parts: React.ReactNode[] = []
   let last = 0
