@@ -30,7 +30,7 @@ export default function App() {
     setProgress(0)
     setStatusMsg('Starting…')
     try {
-      await Install(createShortcut)
+      await Install(createShortcut, installPlugins)
     } catch (e: unknown) {
       setError(String(e))
       setPhase('error')
@@ -86,7 +86,10 @@ export default function App() {
         )}
 
         {phase === 'installing' && (
-          <p className="status-msg">{statusMsg}</p>
+          <div className="installing" style={noDrag}>
+            <p className="status-msg">{statusMsg}</p>
+            <p className="status-msg">{Math.max(0, Math.min(100, Math.round(progress)))}%</p>
+          </div>
         )}
 
         {phase === 'done' && (
