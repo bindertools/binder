@@ -234,12 +234,12 @@ func (t *Terminal) ExecuteCommand(line string) {
 			t.write("\r\n\x1b[38;5;246mopening plugin store\x1b[0m")
 			t.write(t.prompt())
 		default:
-			t.execExternal(parts)
+			t.execExternal(line)
 		}
 		return
 	}
 
-	t.execExternal(parts)
+	t.execExternal(line)
 }
 
 // Interrupt kills any currently-running external command (user pressed Ctrl+C).
@@ -774,8 +774,8 @@ func isPreviewURL(s string) bool {
 
 // ─── external command execution ───────────────────────────────────────────────
 
-func (t *Terminal) execExternal(parts []string) {
-	cmd := ps.BuildShellCmdWithPref(parts, getGlobalConfig().PreferredShell)
+func (t *Terminal) execExternal(line string) {
+	cmd := ps.BuildShellCmdWithPref(line, getGlobalConfig().PreferredShell)
 	cmd.Dir = t.cwd
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
