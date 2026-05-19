@@ -11,50 +11,59 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Three jobs run in parallel — each native runner builds for its own OS.
+# build.ps1 handles obfuscation, symbol stripping, and archive creation.
+
 jobs:
+
+  # ── Windows ──────────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 60
     env:
       GOCACHE: ${{ github.workspace }}\.cache\go-build
-
     defaults:
       run:
         shell: pwsh
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - name: Install Wails CLI
+      - name: Install Wails
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          $goBin = Join-Path (go env GOPATH) 'bin'
-          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build release binaries
+      - name: Install garble (obfuscation)
+        run: go install mvdan.cc/garble@latest
+
+      - name: Install UPX (compression)
+        run: choco install upx -y --no-progress
+
+      - name: Build
         run: ./build.ps1
 
-      - name: Verify build outputs
+      - name: Verify outputs
         run: |
-          $expected = @(
+          @(
             'app/build/bin/cmdIDE-windows-amd64.exe',
             'app/build/bin/cmdIDE-plugins-windows-amd64.exe',
-            'app/build/bin/cmdIDE-installer-windows.exe'
-          )
-          foreach ($path in $expected) {
-            if (-not (Test-Path $path)) { throw "Missing expected build output: $path" }
+            'app/build/bin/cmdIDE-installer-windows.exe',
+            'app/build/bin/cmdIDE-windows-amd64.zip',
+            'app/build/bin/cmdIDE-plugins-windows-amd64.zip',
+            'app/build/bin/cmdIDE-installer-windows.zip'
+          ) | ForEach-Object {
+            if (-not (Test-Path $_)) { throw "Missing: $_" }
+            Write-Host "  found: $_" -ForegroundColor Green
           }
 
       - name: Upload workflow artifacts
@@ -63,11 +72,11 @@ jobs:
           name: cmdIDE-${{ github.event.release.tag_name }}-windows
           if-no-files-found: error
           path: |
-            app/build/bin/cmdIDE-windows-amd64.exe
-            app/build/bin/cmdIDE-plugins-windows-amd64.exe
-            app/build/bin/cmdIDE-installer-windows.exe
+            app/build/bin/cmdIDE-windows-amd64.zip
+            app/build/bin/cmdIDE-plugins-windows-amd64.zip
+            app/build/bin/cmdIDE-installer-windows.zip
 
-      - name: Upload binaries to GitHub release
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -75,49 +84,54 @@ jobs:
             "app/build/bin/cmdIDE-windows-amd64.exe#cmdIDE-windows-amd64.exe" `
             "app/build/bin/cmdIDE-plugins-windows-amd64.exe#cmdIDE-plugins-windows-amd64.exe" `
             "app/build/bin/cmdIDE-installer-windows.exe#cmdIDE-installer-windows.exe" `
+            "app/build/bin/cmdIDE-windows-amd64.zip#cmdIDE-windows-amd64.zip" `
+            "app/build/bin/cmdIDE-plugins-windows-amd64.zip#cmdIDE-plugins-windows-amd64.zip" `
+            "app/build/bin/cmdIDE-installer-windows.zip#cmdIDE-installer-windows.zip" `
             --clobber
 
+  # ── macOS ────────────────────────────────────────────────────────────────────
   build-macos:
     runs-on: macos-latest
     timeout-minutes: 60
-
     defaults:
       run:
         shell: pwsh
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - name: Install Wails CLI
+      - name: Install Wails
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          $goBin = Join-Path (go env GOPATH) 'bin'
-          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build release binaries
+      - name: Install garble (obfuscation)
+        run: go install mvdan.cc/garble@latest
+
+      # Note: UPX is intentionally skipped on macOS — it breaks codesign/Gatekeeper.
+      # build.ps1 auto-detects this and omits -upx on macOS even if upx is present.
+
+      - name: Build
         run: pwsh ./build.ps1
 
-      - name: Verify build outputs
+      - name: Verify outputs
         run: |
-          $expected = @(
+          @(
             'app/build/bin/cmdIDE-darwin-arm64.zip',
             'app/build/bin/cmdIDE-plugins-darwin-arm64.zip',
-            'app/build/bin/cmdIDE-installer-darwin'
-          )
-          foreach ($path in $expected) {
-            if (-not (Test-Path $path)) { throw "Missing expected build output: $path" }
+            'app/build/bin/cmdIDE-installer-darwin.zip'
+          ) | ForEach-Object {
+            if (-not (Test-Path $_)) { throw "Missing: $_" }
+            Write-Host "  found: $_" -ForegroundColor Green
           }
 
       - name: Upload workflow artifacts
@@ -128,9 +142,9 @@ jobs:
           path: |
             app/build/bin/cmdIDE-darwin-arm64.zip
             app/build/bin/cmdIDE-plugins-darwin-arm64.zip
-            app/build/bin/cmdIDE-installer-darwin
+            app/build/bin/cmdIDE-installer-darwin.zip
 
-      - name: Upload binaries to GitHub release
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -138,56 +152,58 @@ jobs:
           gh release upload "${{ github.event.release.tag_name }}" \
             "app/build/bin/cmdIDE-darwin-arm64.zip#cmdIDE-darwin-arm64.zip" \
             "app/build/bin/cmdIDE-plugins-darwin-arm64.zip#cmdIDE-plugins-darwin-arm64.zip" \
-            "app/build/bin/cmdIDE-installer-darwin#cmdIDE-installer-darwin" \
+            "app/build/bin/cmdIDE-installer-darwin.zip#cmdIDE-installer-darwin.zip" \
             --clobber
 
+  # ── Linux ────────────────────────────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-
     defaults:
       run:
         shell: pwsh
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install system dependencies
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev upx-ucl
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
-      - name: Install Wails CLI
+      - name: Install Wails
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          $goBin = Join-Path (go env GOPATH) 'bin'
-          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build release binaries
+      - name: Install garble (obfuscation)
+        run: go install mvdan.cc/garble@latest
+
+      - name: Build
         run: pwsh ./build.ps1
 
-      - name: Verify build outputs
+      - name: Verify outputs
         run: |
-          $expected = @(
+          @(
             'app/build/bin/cmdIDE-linux-amd64',
             'app/build/bin/cmdIDE-plugins-linux-amd64',
-            'app/build/bin/cmdIDE-installer-linux'
-          )
-          foreach ($path in $expected) {
-            if (-not (Test-Path $path)) { throw "Missing expected build output: $path" }
+            'app/build/bin/cmdIDE-installer-linux',
+            'app/build/bin/cmdIDE-linux-amd64.tar.gz',
+            'app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz',
+            'app/build/bin/cmdIDE-installer-linux.tar.gz'
+          ) | ForEach-Object {
+            if (-not (Test-Path $_)) { throw "Missing: $_" }
+            Write-Host "  found: $_" -ForegroundColor Green
           }
 
       - name: Upload workflow artifacts
@@ -196,11 +212,11 @@ jobs:
           name: cmdIDE-${{ github.event.release.tag_name }}-linux
           if-no-files-found: error
           path: |
-            app/build/bin/cmdIDE-linux-amd64
-            app/build/bin/cmdIDE-plugins-linux-amd64
-            app/build/bin/cmdIDE-installer-linux
+            app/build/bin/cmdIDE-linux-amd64.tar.gz
+            app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz
+            app/build/bin/cmdIDE-installer-linux.tar.gz
 
-      - name: Upload binaries to GitHub release
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -209,4 +225,7 @@ jobs:
             "app/build/bin/cmdIDE-linux-amd64#cmdIDE-linux-amd64" \
             "app/build/bin/cmdIDE-plugins-linux-amd64#cmdIDE-plugins-linux-amd64" \
             "app/build/bin/cmdIDE-installer-linux#cmdIDE-installer-linux" \
+            "app/build/bin/cmdIDE-linux-amd64.tar.gz#cmdIDE-linux-amd64.tar.gz" \
+            "app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz#cmdIDE-plugins-linux-amd64.tar.gz" \
+            "app/build/bin/cmdIDE-installer-linux.tar.gz#cmdIDE-installer-linux.tar.gz" \
             --clobber

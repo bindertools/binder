@@ -21,6 +21,66 @@ export interface AppTheme {
 }
 
 export const THEMES: Record<string, AppTheme> = {
+  minimal: {
+    appBg: '#1c1c1e',
+    borderColor: '#2d2d2f',
+    infoBarBg: '#252527',
+    infoBarColor: '#636366',
+    infoBarHoverBg: '#2d2d2f',
+    infoBarHoverColor: '#aeaeb2',
+    tabColor: '#636366',
+    tabColorHover: '#c7c7cc',
+    tabAddBorder: '#3a3a3c',
+    monacoThemeId: 'minimal',
+    monacoThemeDef: {
+      base: 'vs-dark',
+      inherit: false,
+      rules: [
+        { token: '',         foreground: 'e2e2e7', background: '1c1c1e' },
+        { token: 'comment',  foreground: '636366', fontStyle: 'italic' },
+        { token: 'keyword',  foreground: '0A84FF', fontStyle: 'bold' },
+        { token: 'string',   foreground: '30D158' },
+        { token: 'number',   foreground: 'FF9F0A' },
+        { token: 'type',     foreground: '64D2FF' },
+        { token: 'function', foreground: 'E5C07B' },
+        { token: 'variable', foreground: 'c7c7cc' },
+        { token: 'operator', foreground: 'aeaeb2' },
+      ],
+      colors: {
+        'editor.background':                '#1c1c1e',
+        'editor.foreground':                '#e2e2e7',
+        'editor.lineHighlightBackground':   '#252527',
+        'editor.selectionBackground':       '#264f7866',
+        'editorCursor.foreground':          '#0A84FF',
+        'editorLineNumber.foreground':      '#3a3a3c',
+        'editorLineNumber.activeForeground':'#636366',
+        'editor.inactiveSelectionBackground':'#2d2d2f',
+        'editorGutter.background':          '#1c1c1e',
+        'editorWidget.background':          '#252527',
+        'editorSuggestWidget.background':   '#252527',
+        'editorSuggestWidget.border':       '#3a3a3c',
+        'editorSuggestWidget.selectedBackground': '#3a3a3c',
+        'input.background':                 '#252527',
+        'input.border':                     '#3a3a3c',
+        'scrollbarSlider.background':       '#3a3a3c',
+        'scrollbarSlider.hoverBackground':  '#48484a',
+        'scrollbarSlider.activeBackground': '#636366',
+      },
+    },
+    xtermTheme: {
+      background: '#1c1c1e',
+      foreground: '#e2e2e7',
+      cursor: '#0A84FF',
+      cursorAccent: '#1c1c1e',
+      selectionBackground: '#264f7855',
+      black: '#1c1c1e', red: '#FF453A', green: '#30D158', yellow: '#FFD60A',
+      blue: '#0A84FF', magenta: '#BF5AF2', cyan: '#5AC8FA', white: '#e2e2e7',
+      brightBlack: '#636366', brightRed: '#FF6961', brightGreen: '#34C759',
+      brightYellow: '#FFD60A', brightBlue: '#409CFF', brightMagenta: '#DA8FFF',
+      brightCyan: '#70D7FF', brightWhite: '#ffffff',
+    },
+  },
+
   dark: {
     appBg: '#0d0d0d',
     borderColor: '#1e1e1e',
@@ -228,7 +288,7 @@ export const THEMES: Record<string, AppTheme> = {
 }
 
 export function getTheme(key: string): AppTheme {
-  return THEMES[key] ?? THEMES['dark']
+  return THEMES[key] ?? THEMES['minimal']
 }
 
 // ── Color-section definitions (used by ThemeEditor) ───────────────────────────

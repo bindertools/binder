@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { PerfData } from '../types'
 import { StartPerfMonitor, StopPerfMonitor } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
+import { Skeleton } from './Skeleton'
 import './PerfTab.css'
 
 interface Props { tabId: string; active: boolean }
@@ -15,44 +16,114 @@ function fmt(bytes: number): string {
   return bytes + ' B'
 }
 
-function Gauge({ value, label, color }: { value: number; label: string; color: string }) {
-  const r = 38
+function GaugeCard({ value, label, color, sublabel }: { value: number; label: string; color: string; sublabel?: string }) {
+  const r = 34
   const circ = 2 * Math.PI * r
   const pct = Math.min(100, Math.max(0, value))
   const dash = circ * pct / 100
   return (
-    <div className="perf-gauge">
-      <svg width="96" height="96" viewBox="0 0 96 96">
-        <circle cx="48" cy="48" r={r} stroke="rgba(255,255,255,0.07)" strokeWidth="7" fill="none"/>
-        <circle cx="48" cy="48" r={r} stroke={color} strokeWidth="7" fill="none"
+    <div className="perf-card perf-card--gauge">
+      <svg width="88" height="88" viewBox="0 0 88 88">
+        <circle cx="44" cy="44" r={r} stroke="var(--sep)" strokeWidth="6" fill="none"/>
+        <circle cx="44" cy="44" r={r} stroke={color} strokeWidth="6" fill="none"
           strokeDasharray={`${dash} ${circ - dash}`}
           strokeLinecap="round"
-          transform="rotate(-90 48 48)"
+          transform="rotate(-90 44 44)"
           style={{ transition: 'stroke-dasharray 0.4s ease' }}
         />
-        <text x="48" y="53" textAnchor="middle" fill="#ddd" fontSize="15" fontWeight="600">
+        <text x="44" y="49" textAnchor="middle" fill="var(--info-bar-hover-color)" fontSize="14" fontWeight="600" fontFamily="var(--font-ui)">
           {pct.toFixed(0)}%
         </text>
       </svg>
-      <div className="perf-gauge__label">{label}</div>
+      <div className="perf-card__label">{label}</div>
+      {sublabel && <div className="perf-card__sublabel">{sublabel}</div>}
     </div>
   )
 }
 
-function Sparkline({ points, color }: { points: number[]; color: string }) {
-  const W = 240, H = 48
+function SparkCard({ label, color, points, current }: { label: string; color: string; points: number[]; current: number }) {
+  const W = 180, H = 40
   const max = Math.max(...points, 1)
   const pts = points.map((v, i) => {
     const x = (i / (MAX_POINTS - 1)) * W
-    const y = H - (v / max) * H
+    const y = H - (v / max) * (H - 4) - 2
     return `${x},${y}`
   }).join(' ')
+
   return (
-    <svg width={W} height={H} className="perf-spark">
-      {points.length > 1 && (
-        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
-      )}
-    </svg>
+    <div className="perf-card perf-card--spark">
+      <div className="perf-spark__header">
+        <span className="perf-spark__name" style={{ color }}>{label}</span>
+        <span className="perf-spark__value">{current.toFixed(1)}%</span>
+      </div>
+      <svg width={W} height={H} className="perf-spark__svg">
+        <defs>
+          <linearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {points.length > 1 && (
+          <>
+            <polygon
+              points={`0,${H} ${pts} ${W},${H}`}
+              fill={`url(#grad-${label})`}
+            />
+            <polyline
+              points={pts}
+              fill="none"
+              stroke={color}
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </>
+        )}
+      </svg>
+    </div>
+  )
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="perf-stat">
+      <span className="perf-stat__label">{label}</span>
+      <span className="perf-stat__value">{value}</span>
+    </div>
+  )
+}
+
+function PerfSkeleton() {
+  return (
+    <div className="perf perf--skeleton">
+      <div className="perf__gauges">
+        {[1,2,3].map(i => (
+          <div key={i} className="perf-card perf-card--gauge">
+            <Skeleton width={88} height={88} radius="50%" />
+            <Skeleton width={48} height={11} style={{ marginTop: 8 }} />
+          </div>
+        ))}
+      </div>
+      <div className="perf__sparks">
+        {[1,2].map(i => (
+          <div key={i} className="perf-card perf-card--spark">
+            <div className="perf-spark__header">
+              <Skeleton width={32} height={11} />
+              <Skeleton width={40} height={11} />
+            </div>
+            <Skeleton width="100%" height={40} radius="var(--r-sm)" style={{ marginTop: 8 }} />
+          </div>
+        ))}
+      </div>
+      <div className="perf__stats-card">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="perf-stat">
+            <Skeleton width={64} height={11} />
+            <Skeleton width={88} height={11} />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -86,52 +157,29 @@ export default function PerfTab({ tabId, active }: Props) {
     }
   }, [tabId, active])
 
-  if (!data) {
-    return <div className="perf perf--loading">collecting metrics…</div>
-  }
+  if (!data) return <PerfSkeleton />
 
   return (
     <div className="perf">
       <div className="perf__gauges">
-        <Gauge value={data.cpu_percent}  label="CPU"  color="#4fc3f7" />
-        <Gauge value={data.mem_percent}  label="RAM"  color="#81c995" />
-        <Gauge value={data.disk_percent} label="Disk" color="#ffb74d" />
-        {data.gpu_available && <Gauge value={data.gpu_percent} label="GPU" color="#ce93d8" />}
+        <GaugeCard value={data.cpu_percent}  label="CPU"  color="var(--accent)" />
+        <GaugeCard value={data.mem_percent}  label="RAM"  color="var(--color-success)" />
+        <GaugeCard value={data.disk_percent} label="Disk" color="var(--color-warning)" />
+        {data.gpu_available && <GaugeCard value={data.gpu_percent} label="GPU" color="#BF5AF2" sublabel={data.gpu_name} />}
       </div>
 
-      <div className="perf__charts">
-        <div className="perf__chart">
-          <span className="perf__chart-label" style={{ color: '#4fc3f7' }}>CPU</span>
-          <Sparkline points={cpuHist.current} color="#4fc3f7" />
-        </div>
-        <div className="perf__chart">
-          <span className="perf__chart-label" style={{ color: '#81c995' }}>RAM</span>
-          <Sparkline points={memHist.current} color="#81c995" />
-        </div>
+      <div className="perf__sparks">
+        <SparkCard label="CPU" color="var(--accent)"         points={cpuHist.current}  current={data.cpu_percent} />
+        <SparkCard label="RAM" color="var(--color-success)"  points={memHist.current}  current={data.mem_percent} />
       </div>
 
-      <div className="perf__stats">
-        <div className="perf__stat">
-          <span className="perf__stat-label">Memory</span>
-          <span className="perf__stat-value">{fmt(data.mem_used)} / {fmt(data.mem_total)}</span>
-        </div>
-        <div className="perf__stat">
-          <span className="perf__stat-label">Disk</span>
-          <span className="perf__stat-value">{fmt(data.disk_used)} / {fmt(data.disk_total)}</span>
-        </div>
-        <div className="perf__stat">
-          <span className="perf__stat-label">Net ↑</span>
-          <span className="perf__stat-value">{fmt(data.net_bytes_sent)}</span>
-        </div>
-        <div className="perf__stat">
-          <span className="perf__stat-label">Net ↓</span>
-          <span className="perf__stat-value">{fmt(data.net_bytes_recv)}</span>
-        </div>
+      <div className="perf__stats-card">
+        <StatRow label="Memory"  value={`${fmt(data.mem_used)} / ${fmt(data.mem_total)}`} />
+        <StatRow label="Disk"    value={`${fmt(data.disk_used)} / ${fmt(data.disk_total)}`} />
+        <StatRow label="Net ↑"   value={fmt(data.net_bytes_sent)} />
+        <StatRow label="Net ↓"   value={fmt(data.net_bytes_recv)} />
         {data.gpu_available && (
-          <div className="perf__stat">
-            <span className="perf__stat-label">GPU</span>
-            <span className="perf__stat-value">{data.gpu_name} — {data.gpu_percent.toFixed(0)}%</span>
-          </div>
+          <StatRow label="GPU" value={`${data.gpu_name} — ${data.gpu_percent.toFixed(0)}%`} />
         )}
       </div>
     </div>

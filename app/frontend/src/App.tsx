@@ -216,7 +216,7 @@ function insertNearParent(state: TabState, tab: Tab, terminalId?: string): TabSt
 // ── default config ────────────────────────────────────────────────────────────
 const defaultConfig: AppConfig = {
   default_directory: '', indent_guides: false, order_directory: false,
-  minimap: false, theme: 'dark', show_timestamps: false,
+  minimap: false, theme: 'minimal', show_timestamps: false,
   git_recognition: { show_git_branch: false }, soft_close: false,
   zoom_insights: true, minimal_pwd: false, default_zoom: 1,
   terminal_word_wrap: false, file_word_wrap: false, scroll_speed: 1,
@@ -240,6 +240,7 @@ export default function App() {
   const [splitEnabled,  setSplitEnabled]  = useState(false)
   const [splitRatio,    setSplitRatio]    = useState(0.5)
   const [searchOpen,    setSearchOpen]    = useState(false)
+  const [terminalCwds,  setTerminalCwds]  = useState<Record<string, string>>({})
   // tabType → Plugin; rebuilt whenever a plugin is installed/uninstalled
   const [plugins, setPlugins] = useState<Record<string, Plugin>>({})
 
@@ -622,6 +623,7 @@ export default function App() {
           xtermTheme={resolvedTheme.xtermTheme}
           initialCwd={tab.initialCwd}
           defaultZoom={currentZoom}
+          onCwdChange={cwd => setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))}
         />
       )
     }
@@ -685,8 +687,6 @@ export default function App() {
       if (!__PLUGINS__) return null
       return (
         <PluginStore
-          tabId={tab.id}
-          active={isActive}
           onPluginChange={reloadPlugins}
         />
       )
@@ -775,17 +775,19 @@ export default function App() {
           </>
         )}
 
-        {/* Search icon + window controls */}
+        {/* Search bar + window controls */}
         <div className="app__header-controls" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           <button
-            className="app__search-btn"
+            className="app__search-bar"
             onClick={() => setSearchOpen(true)}
             title="Search files and tabs (Ctrl+K)"
           >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
+            <span className="app__search-bar-label">Search...</span>
+            <span className="app__search-bar-kbd">Ctrl K</span>
           </button>
           <div className="app__wincontrols">
             <button className="wc-btn wc-min" onClick={WindowMinimise} aria-label="Minimise">
@@ -873,6 +875,29 @@ export default function App() {
             onMouseDown={handleDividerMouseDown}
           />
         )}
+      </div>
+
+      {/* ── Status bar ────────────────────────────────────────────────────────── */}
+      <div className="app__statusbar">
+        {activeTerminalId && terminalCwds[activeTerminalId] && (
+          <>
+            <button
+              className="app__statusbar-cwd"
+              onClick={() => window.dispatchEvent(new CustomEvent('terminal:select-dir', { detail: { terminalId: activeTerminalId } }))}
+              title="Click to change directory"
+            >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+                <path d="M1 4.5A1.5 1.5 0 012.5 3h3.086a1.5 1.5 0 011.06.44l.915.914A1.5 1.5 0 008.62 4.5H13.5A1.5 1.5 0 0115 6v6a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12V4.5z"
+                  stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+              </svg>
+              <span>{terminalCwds[activeTerminalId].replace(/\\/g, '/')}</span>
+            </button>
+            <div className="app__statusbar-sep" />
+          </>
+        )}
+        <div className="app__statusbar-right">
+          <span>cmdIDE</span>
+        </div>
       </div>
     </div>
   )

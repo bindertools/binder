@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="720" height="240">
+  <rect width="720" height="240" fill="#f6f7f8"></rect>
+  <g>
+    <path d="M 60 62 L 76 30 L 90 64 Z" fill="#0b0d0e"></path>
+    <path d="M 180 62 L 164 30 L 150 64 Z" fill="#0b0d0e"></path>
+    <path d="M 50 88 Q 50 50 90 50 Q 120 36 150 50 Q 190 50 190 88 L 190 130 Q 190 200 120 210 Q 50 200 50 130 Z" fill="#0b0d0e"></path>
+    <path d="M 70 90 Q 70 70 90 68 Q 120 78 150 68 Q 170 70 170 90 L 170 124 Q 170 144 120 150 Q 70 144 70 124 Z" fill="#1c1f22"></path>
+    <circle cx="92" cy="106" r="22" fill="#e8eaed"></circle>
+    <circle cx="148" cy="106" r="22" fill="#e8eaed"></circle>
+    <circle cx="92" cy="106" r="18" fill="#c8ccd1"></circle>
+    <circle cx="148" cy="106" r="18" fill="#c8ccd1"></circle>
+    <rect x="84" y="98" width="16" height="16" fill="#3d8b18"></rect>
+    <rect x="140" y="98" width="16" height="16" fill="#3d8b18"></rect>
+    <path d="M 112 132 L 120 144 L 128 132 Z" fill="#a8aeb4"></path>
+    <rect x="110" y="170" width="20" height="6" fill="#3d8b18"></rect>
+  </g>
+  <text x="280" y="142" font-family="JetBrains Mono, ui-monospace, Menlo, monospace" font-weight="700" font-size="100" letter-spacing="-5" fill="#0b0d0e">cmd<tspan fill="#6b7177" font-weight="400">ide</tspan></text>
+</svg>

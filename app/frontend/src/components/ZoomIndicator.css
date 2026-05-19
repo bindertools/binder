@@ -1,25 +1,23 @@
 .zoom-indicator {
   position: fixed;
-  bottom: 16px;
-  right: 16px;
+  bottom: 20px;
+  right: 20px;
   z-index: 9999;
   pointer-events: none;
-
-  /* Minimal: background + text only, no border, no shadow */
-  background: rgba(30, 30, 32, 0.80);
-  border-radius: 5px;
-  padding: 5px 10px;
-
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  background: var(--info-bar-bg);
+  border: 1px solid var(--sep-strong);
+  border-radius: var(--r-md);
+  padding: 5px 12px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+  font-family: var(--font-ui);
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(210, 210, 210, 0.9);
-
-  animation: zoom-indicator-in 0.1s ease both;
+  font-weight: 500;
+  color: var(--info-bar-hover-color);
+  animation: zoom-indicator-in 0.12s ease both;
 }
 
 @keyframes zoom-indicator-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
 }

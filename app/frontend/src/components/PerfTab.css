@@ -1,80 +1,138 @@
 .perf {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px 24px;
+  gap: 12px;
+  padding: 20px;
   height: 100%;
   overflow: auto;
   background: var(--app-bg);
-  color: #ccc;
-  font-family: 'Cascadia Code', monospace;
-  font-size: 13px;
+  font-family: var(--font-ui);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
 }
+.perf::-webkit-scrollbar       { width: 5px; }
+.perf::-webkit-scrollbar-track { background: transparent; }
+.perf::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
 
-.perf--loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
+/* ── Shared card ─────────────────────────────────────────────────────────────── */
+.perf-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--sep);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  transition: border-color var(--t-base);
 }
+.perf-card:hover { border-color: var(--sep-strong); }
 
+/* ── Gauge row ───────────────────────────────────────────────────────────────── */
 .perf__gauges {
   display: flex;
-  gap: 24px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.perf-gauge {
+.perf-card--gauge {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 16px 20px;
+  flex: 1;
+  min-width: 110px;
 }
 
-.perf-gauge__label {
+.perf-card__label {
   font-size: 11px;
-  color: #888;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--info-bar-color);
+  margin-top: 2px;
 }
 
-.perf__charts {
+.perf-card__sublabel {
+  font-size: 10px;
+  color: var(--info-bar-color);
+  opacity: 0.7;
+  text-align: center;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Spark charts ────────────────────────────────────────────────────────────── */
+.perf__sparks {
   display: flex;
-  flex-direction: column;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
-.perf__chart {
+.perf-card--spark {
+  flex: 1;
+  min-width: 160px;
+  padding: 14px 16px;
+}
+
+.perf-spark__header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
-.perf__chart-label {
+.perf-spark__name {
   font-size: 11px;
-  width: 30px;
-  text-align: right;
-  flex-shrink: 0;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.perf-spark {
+.perf-spark__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--info-bar-hover-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.perf-spark__svg {
   display: block;
-  opacity: 0.8;
+  width: 100%;
+  height: 40px;
 }
 
-.perf__stats {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 16px;
+/* ── Stats table ─────────────────────────────────────────────────────────────── */
+.perf__stats-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--sep);
+  border-radius: var(--r-lg);
+  padding: 4px 0;
 }
 
-.perf__stat {
+.perf-stat {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--sep);
+  transition: background var(--t-fast);
+}
+.perf-stat:last-child { border-bottom: none; }
+.perf-stat:hover { background: var(--surface-raised); }
+
+.perf-stat__label {
   font-size: 12px;
+  color: var(--info-bar-color);
 }
 
-.perf__stat-label { color: #666; }
-.perf__stat-value { color: #b0bec5; }
+.perf-stat__value {
+  font-size: 12px;
+  color: var(--info-bar-hover-color);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Skeleton state ──────────────────────────────────────────────────────────── */
+.perf--skeleton {
+  pointer-events: none;
+}

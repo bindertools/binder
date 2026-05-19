@@ -27,6 +27,7 @@ interface Props {
   xtermTheme: ITheme
   initialCwd?: string
   defaultZoom?: number
+  onCwdChange?: (cwd: string) => void
 }
 
 // Completion dropdown state (React state for rendering)
@@ -88,11 +89,8 @@ function buildSlashCommands(): { cmd: string; desc: string }[] {
   return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
 }
 
-function abbreviatePath(path: string): string {
-  return path.replace(/\\/g, '/')
-}
 
-export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaultZoom = 1 }: Props) {
+export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaultZoom = 1, onCwdChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -114,14 +112,29 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
   // Refs so JSX handlers can call functions defined inside the main useEffect
   const applyMatchRef = useRef<((match: string) => void) | null>(null)
 
+  // Command history (persists for the lifetime of this terminal tab)
+  const historyRef    = useRef<string[]>([])
+  const historyIdxRef = useRef(-1)   // -1 = not navigating history
+  const savedInputRef = useRef('')   // current input saved when entering history
+
   useEffect(() => {
-    GetTerminalCwd(tabId).then(p => { if (p) setCwd(p) }).catch(() => {})
+    GetTerminalCwd(tabId).then(p => { if (p) { setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
     const event = `terminal:cwd:${tabId}`
-    EventsOn(event, (path: string) => setCwd(path))
+    EventsOn(event, (path: string) => { setCwd(path); onCwdChange?.(path) })
     return () => EventsOff(event)
+  }, [tabId])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { terminalId } = (e as CustomEvent).detail
+      if (terminalId !== tabId) return
+      SelectDirectory().then(path => { if (path) SetTerminalCwd(tabId, path) }).catch(() => {})
+    }
+    window.addEventListener('terminal:select-dir', handler)
+    return () => window.removeEventListener('terminal:select-dir', handler)
   }, [tabId])
 
   // When defaultZoom changes (config reload), update xterm font size and refit.
@@ -134,11 +147,6 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       return () => clearTimeout(id)
     }
   }, [defaultZoom])
-
-  const handleCwdClick = async () => {
-    const path = await SelectDirectory().catch(() => '')
-    if (path) SetTerminalCwd(tabId, path)
-  }
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -439,6 +447,14 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
     // ── keyboard ──────────────────────────────────────────────────────────────
 
+    // Replace whatever is currently typed on the line with `text`.
+    const replaceInput = (text: string) => {
+      const cur = lineRef.current
+      if (cur.length > 0) term.write('\b \b'.repeat(cur.length))
+      term.write(text)
+      lineRef.current = text
+    }
+
     const onContainerKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         e.preventDefault()
@@ -456,6 +472,44 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
             lineRef.current = m.prefix + m.originalPartial
           }
           setMenu(null)
+        }
+        return
+      }
+
+      // ── Up/Down arrows: command history navigation ───────────────────────
+      // Runs in capture phase so stopImmediatePropagation prevents xterm from
+      // generating the \x1b[A / \x1b[B escape sequences entirely.
+      if (e.key === 'ArrowUp' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        const hist = historyRef.current
+        if (hist.length === 0) return
+        if (historyIdxRef.current === -1) {
+          savedInputRef.current = lineRef.current
+          historyIdxRef.current = hist.length - 1
+        } else if (historyIdxRef.current > 0) {
+          historyIdxRef.current--
+        } else {
+          return // already at oldest entry
+        }
+        setMenu(null)
+        replaceInput(hist[historyIdxRef.current])
+        return
+      }
+
+      if (e.key === 'ArrowDown' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        if (historyIdxRef.current === -1) return
+        const hist = historyRef.current
+        if (historyIdxRef.current === hist.length - 1) {
+          historyIdxRef.current = -1
+          setMenu(null)
+          replaceInput(savedInputRef.current)
+        } else {
+          historyIdxRef.current++
+          setMenu(null)
+          replaceInput(hist[historyIdxRef.current])
         }
         return
       }
@@ -483,6 +537,16 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
         undoStack.length = 0
         const line = lineRef.current
         lineRef.current = ''
+        // Push non-empty commands to history, avoid consecutive duplicates
+        if (line.trim()) {
+          const hist = historyRef.current
+          if (hist.length === 0 || hist[hist.length - 1] !== line) {
+            hist.push(line)
+            if (hist.length > 500) hist.shift()
+          }
+        }
+        historyIdxRef.current = -1
+        savedInputRef.current = ''
         term.write('\r\n')
 
         // Intercept plugin slash commands on the frontend so install state
@@ -528,6 +592,8 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       if (data === '\x03') {
         setMenu(null)
         undoStack.length = 0
+        historyIdxRef.current = -1
+        savedInputRef.current = ''
         term.write('^C\r\n')
         lineRef.current = ''
         InterruptCommand(tabId)
@@ -647,17 +713,6 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
   return (
     <div className="terminal-pane">
-      <div
-        className="terminal-cwd"
-        onClick={handleCwdClick}
-        title="Click to change directory"
-      >
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-          <path d="M1 4.5A1.5 1.5 0 012.5 3h3.086a1.5 1.5 0 011.06.44l.915.914A1.5 1.5 0 008.62 4.5H13.5A1.5 1.5 0 0115 6v6a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12V4.5z"
-            stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-        </svg>
-        <span>{abbreviatePath(cwd)}</span>
-      </div>
       <div ref={containerRef} className="terminal-container" />
 
       {menu && ReactDOM.createPortal(

@@ -1,100 +1,94 @@
-/* ── Shell ─────────────────────────────────────────────────────────────────── */
+/* ── Shell ──────────────────────────────────────────────────────────────────── */
 .tabbar {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   background: var(--app-bg);
   height: 100%;
   flex-shrink: 0;
   user-select: none;
   overflow: hidden;
-  transition: background 0.1s;
 }
 
 .tabbar--dragover {
-  background: rgba(79, 195, 247, 0.06);
-  outline: 1px dashed rgba(79, 195, 247, 0.35);
+  background: rgba(10,132,255,0.05);
+  outline: 1px dashed rgba(10,132,255,0.3);
   outline-offset: -1px;
 }
 
-/* ── Scrollable flat tab strip ─────────────────────────────────────────────── */
+/* ── Scrollable strip ───────────────────────────────────────────────────────── */
 .tabbar__strip {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   flex: 1;
   min-width: 0;
-  padding-left: 4px;
+  padding: 4px 4px;
+  gap: 1px;
 }
 .tabbar__strip::-webkit-scrollbar { display: none; }
 
 /* ── Group wrapper ──────────────────────────────────────────────────────────── */
 .tabbar__group {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   flex-shrink: 0;
+  gap: 1px;
 }
 
-/* ── Group divider ─────────────────────────────────────────────────────────── */
+/* ── Group divider ──────────────────────────────────────────────────────────── */
 .tabbar__sep {
   width: 1px;
-  margin: 9px 4px;
-  background: var(--border-color);
+  height: 16px;
+  margin: 0 4px;
+  background: var(--sep);
   flex-shrink: 0;
-  opacity: 0.6;
 }
 
-/* ── Individual tab ────────────────────────────────────────────────────────── */
+/* ── Individual tab ─────────────────────────────────────────────────────────── */
 .tabbar__tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  height: 100%;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
   cursor: pointer;
   font-size: 12px;
-  font-family: inherit;
+  font-family: var(--font-ui);
   white-space: nowrap;
   flex-shrink: 0;
   color: var(--tab-color);
-  transition: background 0.1s, color 0.1s;
-  box-shadow: inset 0 -2px 0 transparent;
+  transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
   user-select: none;
-}
-
-.tabbar__tab.is-active {
-  color: #e2e2e2;
-  box-shadow: inset 0 -2px 0 var(--tab-accent, #4fc3f7);
+  letter-spacing: 0.01em;
+  position: relative;
 }
 
 .tabbar__tab:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-raised);
   color: var(--tab-color-hover);
 }
 
+.tabbar__tab.is-active {
+  color: var(--tab-color-hover);
+  background: var(--tab-active-bg, var(--surface-overlay));
+  box-shadow: 0 0 0 1px var(--tab-active-ring, var(--sep-strong));
+}
+
 .tabbar__tab[draggable]:active {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
-/* File tabs */
-.tabbar__tab--file {
-  border-left: 1px solid rgba(255,255,255,0.05);
-}
-.tabbar__tab--file:first-child {
-  border-left: none;
-}
-
-/* Tab label */
 .tabbar__tab-title {
-  max-width: 140px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 1;
 }
 
-/* ── Close × button ─────────────────────────────────────────────────────────── */
+/* ── Close button ───────────────────────────────────────────────────────────── */
 .tabbar__close {
   display: flex;
   align-items: center;
@@ -103,17 +97,18 @@
   height: 14px;
   background: none;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
   cursor: pointer;
   color: inherit;
   padding: 0;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.1s, background 0.1s;
+  transition: opacity var(--t-fast), background var(--t-fast);
+  margin-left: 1px;
 }
-.tabbar__tab:hover     .tabbar__close { opacity: 0.5; }
-.tabbar__tab.is-active .tabbar__close { opacity: 0.5; }
-.tabbar__close:hover { opacity: 1 !important; background: rgba(255,255,255,0.1); }
+.tabbar__tab:hover     .tabbar__close { opacity: 0.4; }
+.tabbar__tab.is-active .tabbar__close { opacity: 0.4; }
+.tabbar__close:hover { opacity: 1 !important; background: var(--surface-overlay); }
 
 /* ── Sibling terminal "+" ───────────────────────────────────────────────────── */
 .tabbar__sib-add {
@@ -121,73 +116,80 @@
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 100%;
+  height: 20px;
+  border-radius: var(--r-xs);
   background: none;
   border: none;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.12s, background 0.12s;
+  transition: opacity var(--t-fast), background var(--t-fast);
+  color: var(--tab-color);
 }
 .tabbar__group:hover .tabbar__sib-add { opacity: 0.35; }
-.tabbar__sib-add:hover { opacity: 1 !important; background: rgba(255,255,255,0.06); }
+.tabbar__sib-add:hover { opacity: 1 !important; background: var(--surface-raised); }
 
 /* ── New top-level terminal "+" ─────────────────────────────────────────────── */
 .tabbar__new-term {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 100%;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-xs);
   background: none;
   border: none;
   cursor: pointer;
   color: var(--tab-color);
   flex-shrink: 0;
   opacity: 0.4;
-  transition: opacity 0.1s, background 0.1s;
+  margin-left: 2px;
+  transition: opacity var(--t-fast), background var(--t-fast);
 }
 .tabbar__new-term:hover {
   opacity: 1;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-raised);
   color: var(--tab-color-hover);
 }
 
-/* ── Tab context menu (portaled) ────────────────────────────────────────────── */
+/* ── Tab context menu ───────────────────────────────────────────────────────── */
 .tab-ctx-menu {
   position: fixed;
   z-index: 9999;
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
+  background: var(--info-bar-bg);
+  border: 1px solid var(--sep-strong);
+  border-radius: var(--r-md);
   padding: 4px 0;
-  min-width: 160px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-  font-family: inherit;
-  font-size: 12px;
+  min-width: 170px;
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  backdrop-filter: blur(16px);
 }
 
 .tab-ctx-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 6px 14px;
+  padding: 7px 14px;
   background: none;
   border: none;
   cursor: pointer;
-  color: #c8c8c8;
+  color: var(--info-bar-hover-color);
   text-align: left;
-  transition: background 0.06s, color 0.06s;
+  transition: background var(--t-fast);
   white-space: nowrap;
+  font-family: inherit;
+  font-size: inherit;
 }
 .tab-ctx-item:hover {
-  background: rgba(255,255,255,0.07);
+  background: var(--surface-raised);
   color: #fff;
 }
 
 .tab-ctx-sep {
   height: 1px;
-  background: rgba(255,255,255,0.08);
+  background: var(--sep);
   margin: 3px 0;
 }

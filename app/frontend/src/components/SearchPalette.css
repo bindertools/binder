@@ -1,47 +1,48 @@
-/* ── Backdrop ───────────────────────────────────────────────────────────────── */
+/* ── Backdrop ─────────────────────────────────────────────────────────────────── */
 .palette-backdrop {
   position: fixed;
   inset: 0;
   z-index: 9998;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 80px;
 }
 
-/* ── Modal ─────────────────────────────────────────────────────────────────── */
+/* ── Modal ───────────────────────────────────────────────────────────────────── */
 .palette {
   width: 100%;
   max-width: 620px;
-  background: #141414;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.75);
+  background: var(--info-bar-bg);
+  border: 1px solid var(--sep-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-overlay);
   overflow: hidden;
-  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
-  animation: palette-in 0.12s ease;
+  font-family: var(--font-ui);
+  animation: palette-in 0.14s ease;
 }
 
 @keyframes palette-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
   to   { opacity: 1; transform: none; }
 }
 
-/* ── Input bar ─────────────────────────────────────────────────────────────── */
+/* ── Input bar ───────────────────────────────────────────────────────────────── */
 .palette__bar {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  height: 48px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  height: 50px;
+  border-bottom: 1px solid var(--sep);
 }
 
 .palette__search-icon {
   flex-shrink: 0;
-  color: rgba(255,255,255,0.35);
+  color: var(--info-bar-color);
 }
 
 .palette__input {
@@ -49,95 +50,83 @@
   background: none;
   border: none;
   outline: none;
-  color: #e8e8e8;
-  font-family: inherit;
+  color: var(--info-bar-hover-color);
+  font-family: var(--font-ui);
   font-size: 14px;
-  caret-color: #4fc3f7;
+  caret-color: var(--accent);
   padding: 0;
   margin: 0;
 }
-
-.palette__input::placeholder {
-  color: rgba(255,255,255,0.25);
-}
+.palette__input::placeholder { color: var(--info-bar-color); opacity: 0.6; }
 
 .palette__esc {
   flex-shrink: 0;
-  font-family: inherit;
+  font-family: var(--font-ui);
   font-size: 10px;
-  color: rgba(255,255,255,0.3);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 4px;
-  padding: 2px 6px;
+  color: var(--info-bar-color);
+  background: var(--surface-raised);
+  border: 1px solid var(--sep);
+  border-radius: var(--r-xs);
+  padding: 2px 7px;
   cursor: pointer;
-  transition: color 0.1s, background 0.1s;
+  transition: color var(--t-fast), background var(--t-fast);
   user-select: none;
 }
-.palette__esc:hover {
-  color: rgba(255,255,255,0.6);
-  background: rgba(255,255,255,0.1);
-}
+.palette__esc:hover { color: var(--info-bar-hover-color); background: var(--surface-overlay); }
 
-/* ── Results list ─────────────────────────────────────────────────────────── */
+/* ── Results list ────────────────────────────────────────────────────────────── */
 .palette__list {
   max-height: 360px;
   overflow-y: auto;
   padding: 4px 0;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.1) transparent;
+  scrollbar-color: var(--sep-strong) transparent;
 }
+.palette__list::-webkit-scrollbar       { width: 5px; }
+.palette__list::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
 
-.palette__list::-webkit-scrollbar {
-  width: 6px;
-}
-.palette__list::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
-  border-radius: 3px;
-}
-
-/* ── Section header ─────────────────────────────────────────────────────────── */
+/* ── Section header ──────────────────────────────────────────────────────────── */
 .palette__section {
-  padding: 6px 16px 3px;
+  padding: 7px 16px 3px;
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.25);
+  color: var(--info-bar-color);
   user-select: none;
+  opacity: 0.7;
 }
 
-/* ── Result row ─────────────────────────────────────────────────────────────── */
+/* ── Result row ──────────────────────────────────────────────────────────────── */
 .palette__item {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
-  padding: 7px 16px;
+  padding: 8px 16px;
   cursor: pointer;
-  transition: background 0.05s;
+  transition: background var(--t-fast);
 }
 
 .palette__item:hover,
 .palette__item.is-selected {
-  background: rgba(79, 195, 247, 0.08);
+  background: var(--accent-dim);
 }
 
 .palette__item-name {
   font-size: 13px;
-  color: #d8d8d8;
+  color: var(--info-bar-hover-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
 
-.palette__item.is-selected .palette__item-name {
-  color: #fff;
-}
+.palette__item.is-selected .palette__item-name { color: #fff; }
 
 .palette__item-path {
   font-size: 11px;
-  color: rgba(255,255,255,0.3);
+  font-family: var(--font-mono);
+  color: var(--info-bar-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -146,10 +135,10 @@
 
 .palette__item-badge {
   font-size: 10px;
-  color: rgba(255,255,255,0.25);
-  background: rgba(255,255,255,0.05);
-  border-radius: 3px;
-  padding: 1px 5px;
+  color: var(--info-bar-color);
+  background: var(--surface-raised);
+  border-radius: var(--r-xs);
+  padding: 1px 6px;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -157,17 +146,18 @@
 .palette__item-content {
   grid-column: 1 / -1;
   font-size: 11px;
-  color: rgba(255,255,255,0.25);
+  font-family: var(--font-mono);
+  color: var(--info-bar-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   padding-top: 1px;
 }
 
-/* ── Empty state ────────────────────────────────────────────────────────────── */
+/* ── Empty ───────────────────────────────────────────────────────────────────── */
 .palette__empty {
   padding: 20px 16px;
   font-size: 13px;
-  color: rgba(255,255,255,0.25);
+  color: var(--info-bar-color);
   text-align: center;
 }

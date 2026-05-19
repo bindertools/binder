@@ -73,13 +73,16 @@ function buildGroups(tabs: Tab[]): Group[] {
   return groups
 }
 
+// ── Terminal icon (window frame + >_ prompt) ──────────────────────────────────
 const TerminalIcon = ({ color }: { color: string }) => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color, flexShrink: 0 }}>
-    <path d="M2.5 5.5l3.5 2.5-3.5 2.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M8 10.5h5.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+    <rect x="1.5" y="2" width="13" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.25"/>
+    <path d="M4.5 7.5l2 1.5-2 1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8.5 10.5h3" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round"/>
   </svg>
 )
 
+// ── Generic file fallback ─────────────────────────────────────────────────────
 const FileIcon = ({ color }: { color: string }) => (
   <svg width="11" height="12" viewBox="0 0 14 16" fill="none" style={{ color, flexShrink: 0 }}>
     <path d="M2 1.5h7.5L12 4v10H2V1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
@@ -127,14 +130,132 @@ const CloseIcon = () => (
   </svg>
 )
 
-function tabIcon(tab: Tab, color: string): React.ReactNode {
+// ── Language icon system ──────────────────────────────────────────────────────
+
+// Span-based badge — CSS text rendering is far crisper than SVG <text> at small sizes
+const LangBadge = ({ letters, bg, active }: { letters: string; bg: string; active: boolean }) => (
+  <span style={{
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    padding: '0 3.5px',
+    minWidth: letters.length > 2 ? 24 : 19,
+    height: 15,
+    borderRadius: 3,
+    background: bg,
+    color: '#fff',
+    fontSize: letters.length > 2 ? 8 : 9,
+    fontWeight: 800,
+    fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
+    letterSpacing: letters.length > 2 ? '-0.5px' : '0.1px',
+    opacity: active ? 1 : 0.5,
+    lineHeight: 1,
+    userSelect: 'none',
+  }}>
+    {letters}
+  </span>
+)
+
+const HtmlIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M5 4L2 8l3 4" stroke="#E34F26" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M11 4l3 4-3 4" stroke="#E34F26" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M9.5 3l-3 10" stroke="#E34F26" strokeWidth="1.25" strokeLinecap="round"/>
+  </svg>
+)
+
+const CssIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h9" stroke="#2965F1" strokeWidth="1.6" strokeLinecap="round"/>
+    <circle cx="13" cy="8" r="1.4" fill="#2965F1"/>
+  </svg>
+)
+
+const JsonIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M6 2.5C4.5 2.5 4 3 4 4.5V6c0 1-.6 1.5-1.5 1.5C3.4 7.5 4 8 4 9v1.5C4 12 4.5 12.5 6 12.5"
+      stroke="#E5B80B" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M10 2.5c1.5 0 2 .5 2 2V6c0 1 .6 1.5 1.5 1.5C12.6 7.5 12 8 12 9v1.5c0 1.5-.5 2-2 2"
+      stroke="#E5B80B" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const MarkdownIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M2 11V5l3 3.5L8 5v6" stroke="#7C3AED" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 5v6" stroke="#7C3AED" strokeWidth="1.45" strokeLinecap="round"/>
+    <path d="M9.5 8.5L12 11l2.5-2.5" stroke="#7C3AED" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const ShellIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M2.5 5.5l4 2.5-4 2.5" stroke="#16A34A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M9 11h5" stroke="#16A34A" strokeWidth="1.6" strokeLinecap="round"/>
+  </svg>
+)
+
+const YamlIcon = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: active ? 1 : 0.5 }}>
+    <path d="M3 5h10M3 8h6M3 11h8" stroke="#CB171E" strokeWidth="1.6" strokeLinecap="round"/>
+    <circle cx="11" cy="8" r="1.4" fill="#CB171E"/>
+  </svg>
+)
+
+function LanguageIcon({ language, active }: { language?: string; active: boolean }): React.ReactElement {
+  switch (language) {
+    case 'typescript':      return <LangBadge letters="TS"  bg="#3178C6" active={active} />
+    case 'typescriptreact': return <LangBadge letters="TSX" bg="#3178C6" active={active} />
+    case 'javascript':      return <LangBadge letters="JS"  bg="#B45309" active={active} />
+    case 'javascriptreact': return <LangBadge letters="JSX" bg="#B45309" active={active} />
+    case 'python':          return <LangBadge letters="PY"  bg="#2F6FBF" active={active} />
+    case 'go':              return <LangBadge letters="GO"  bg="#00909E" active={active} />
+    case 'rust':            return <LangBadge letters="RS"  bg="#B7410E" active={active} />
+    case 'html':
+    case 'xml':             return <HtmlIcon active={active} />
+    case 'css':
+    case 'scss':
+    case 'less':            return <CssIcon active={active} />
+    case 'json':
+    case 'jsonc':           return <JsonIcon active={active} />
+    case 'markdown':        return <MarkdownIcon active={active} />
+    case 'yaml':            return <YamlIcon active={active} />
+    case 'shellscript':
+    case 'shell':
+    case 'bash':
+    case 'zsh':             return <ShellIcon active={active} />
+    case 'c':               return <LangBadge letters="C"   bg="#5C6BC0" active={active} />
+    case 'cpp':             return <LangBadge letters="C++" bg="#00599C" active={active} />
+    case 'csharp':          return <LangBadge letters="C#"  bg="#239120" active={active} />
+    case 'java':            return <LangBadge letters="JV"  bg="#D97706" active={active} />
+    case 'ruby':            return <LangBadge letters="RB"  bg="#CC342D" active={active} />
+    case 'php':             return <LangBadge letters="PHP" bg="#777BB4" active={active} />
+    case 'swift':           return <LangBadge letters="SW"  bg="#F05138" active={active} />
+    case 'kotlin':          return <LangBadge letters="KT"  bg="#7F52FF" active={active} />
+    case 'dart':            return <LangBadge letters="DT"  bg="#0175C2" active={active} />
+    case 'lua':             return <LangBadge letters="LU"  bg="#2C2D72" active={active} />
+    case 'r':               return <LangBadge letters="R"   bg="#276DC3" active={active} />
+    case 'sql':             return <LangBadge letters="SQL" bg="#E67E22" active={active} />
+    case 'dockerfile':      return <LangBadge letters="DK"  bg="#2496ED" active={active} />
+    case 'toml':            return <LangBadge letters="TM"  bg="#9C4121" active={active} />
+    case 'elixir':          return <LangBadge letters="EX"  bg="#6E4A7E" active={active} />
+    case 'haskell':         return <LangBadge letters="HS"  bg="#5D4F85" active={active} />
+    case 'scala':           return <LangBadge letters="SC"  bg="#DC322F" active={active} />
+    case 'powershell':      return <LangBadge letters="PS"  bg="#012456" active={active} />
+    default:
+      return <FileIcon color={active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.28)'} />
+  }
+}
+
+function tabIcon(tab: Tab, color: string, active: boolean): React.ReactNode {
   switch (tab.type) {
-    case 'editor':   return <FileIcon color={color} />
+    case 'editor':   return <LanguageIcon language={tab.language} active={active} />
     case 'database': return <DatabaseIcon color={color} />
     case 'preview':  return <PreviewIcon color={color} />
     case 'problems': return <ProblemsIcon />
     case 'config':   return <PaletteIcon color={color} />
-    default:         return <FileIcon color={color} />
+    default:         return <LanguageIcon language={tab.language} active={active} />
   }
 }
 
@@ -208,11 +329,15 @@ export default function TabBar({
 
                 {group.terminals.map(term => {
                   const isActive = term.id === activeId
+                  const activeStyle = isActive ? {
+                    '--tab-active-bg': rgba(group.color, 0.12),
+                    '--tab-active-ring': rgba(group.color, 0.28),
+                  } as React.CSSProperties : undefined
                   return (
                     <div
                       key={term.id}
                       className={`tabbar__tab${isActive ? ' is-active' : ''}`}
-                      style={isActive ? { '--tab-accent': group.color, background: rgba(group.color, 0.1) } as React.CSSProperties : undefined}
+                      style={activeStyle}
                       draggable
                       onDragStart={e => { e.dataTransfer.setData('tabId', term.id); e.dataTransfer.effectAllowed = 'move' }}
                       onClick={() => onSelect(term.id)}
@@ -248,18 +373,22 @@ export default function TabBar({
                 {group.files.map(tab => {
                   const isActive  = tab.id === activeId
                   const iconColor = isActive ? group.color : rgba(group.color, 0.5)
+                  const activeStyle = isActive ? {
+                    '--tab-active-bg': rgba(group.color, 0.09),
+                    '--tab-active-ring': rgba(group.color, 0.22),
+                  } as React.CSSProperties : undefined
                   return (
                     <div
                       key={tab.id}
                       className={`tabbar__tab tabbar__tab--file${isActive ? ' is-active' : ''}`}
-                      style={isActive ? { '--tab-accent': group.color, background: rgba(group.color, 0.08) } as React.CSSProperties : undefined}
+                      style={activeStyle}
                       draggable
                       onDragStart={e => { e.dataTransfer.setData('tabId', tab.id); e.dataTransfer.effectAllowed = 'move' }}
                       onClick={() => onSelect(tab.id)}
                       onContextMenu={e => openCtx(e, tab)}
                       title={tab.filePath ?? tab.title}
                     >
-                      {tabIcon(tab, iconColor)}
+                      {tabIcon(tab, iconColor, isActive)}
                       <span className="tabbar__tab-title">{tab.title}</span>
                       <button
                         className="tabbar__close"
