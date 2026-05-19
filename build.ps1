@@ -86,14 +86,25 @@ Write-Host "  UPX packing  : $(if ($useUpx) { 'enabled' } elseif ($goOs -eq 'dar
 Write-Host ''
 
 # ── Build flag arrays ─────────────────────────────────────────────────────────
-# Base flags applied to every wails build call
-$appFlags = @('build', '-trimpath', '-ldflags', '-s -w')
-if ($useObfuscate) { $appFlags += '-obfuscated' }
-if ($useUpx)       { $appFlags += '-upx' }
+# Linux (Ubuntu 24.04+) ships webkit2gtk-4.1; Wails needs the webkit2_41 tag.
+$baseTags = if ($goOs -eq 'linux') { @('webkit2_41') } else { @() }
 
-# Installer gets the same stripping/obfuscation but no UPX (it's already small)
+# Core flags shared by all builds (no -tags here; added per-target below)
+$coreFlags = @('build', '-trimpath', '-ldflags', '-s -w')
+if ($useObfuscate) { $coreFlags += '-obfuscated' }
+if ($useUpx)       { $coreFlags += '-upx' }
+
+# Per-target tag sets
+$appTagStr     = $baseTags -join ','
+$pluginTagStr  = ($baseTags + @('plugins')) -join ','
+
+$appFlags  = if ($appTagStr)    { $coreFlags + @('-tags', $appTagStr) }    else { $coreFlags }
+$pluginFlags = if ($pluginTagStr) { $coreFlags + @('-tags', $pluginTagStr) } else { $coreFlags }
+
+# Installer: same core flags, no UPX, with base tags
 $instFlags = @('build', '-trimpath', '-ldflags', '-s -w')
 if ($useObfuscate) { $instFlags += '-obfuscated' }
+if ($appTagStr)    { $instFlags += @('-tags', $appTagStr) }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -181,7 +192,6 @@ if (-not $InstallerOnly) {
 # ─────────────────────────────────────────────────────────────────────────────
     Step "2/3  Plugins app ($goOs/$goArch)"
 
-    $pluginFlags = $appFlags + @('-tags', 'plugins')
     Invoke-Wails $appDir $pluginFlags @{ VITE_PLUGINS = 'true' } 'Plugins app'
 
     Stage-Output $pluginsName
