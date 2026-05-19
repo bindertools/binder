@@ -1,6 +1,9 @@
 [submodule "packages/plugin-sdk"]
 	path = packages/plugin-sdk
 	url = https://github.com/Command-IDE/plugin-sdk
+[submodule "packages/notepad"]
+	path = packages/notepad
+	url = https://github.com/Command-IDE/notepad
 [submodule "app/terminal"]
 	path = app/terminal
 	url = https://github.com/Command-IDE/terminal
