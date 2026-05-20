@@ -93,6 +93,11 @@ func httpFetch(fetchURL string) (string, error) {
 		return "", fmt.Errorf("invalid fetch URL: only absolute https URLs are allowed")
 	}
 
+	parsedURL, err := url.Parse(strings.TrimSpace(fetchURL))
+	resp, err := client.Get(parsedURL.String())
+		return "", fmt.Errorf("invalid fetch URL: only absolute https URLs are allowed")
+	}
+
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Get(parsedURL.String())
 	if err != nil {
