@@ -88,8 +88,18 @@ func (a *App) FetchExternalPlugin(githubURL string) (ExternalPluginInfo, error) 
 }
 
 func httpFetch(fetchURL string) (string, error) {
+	parsedURL, err := url.Parse(strings.TrimSpace(fetchURL))
+	if err != nil || !parsedURL.IsAbs() || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+		return "", fmt.Errorf("invalid fetch URL: only absolute https URLs are allowed")
+	}
+
+	parsedURL, err := url.Parse(strings.TrimSpace(fetchURL))
+	resp, err := client.Get(parsedURL.String())
+		return "", fmt.Errorf("invalid fetch URL: only absolute https URLs are allowed")
+	}
+
 	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Get(fetchURL)
+	resp, err := client.Get(parsedURL.String())
 	if err != nil {
 		return "", err
 	}
