@@ -283,7 +283,7 @@ func (t *Terminal) builtinCD(args []string) {
 
 func (t *Terminal) builtinLS(parts []string) {
 	dir := t.cwd
-	showHidden := false
+	showHidden := true
 	for _, p := range parts[1:] {
 		switch {
 		case strings.HasPrefix(p, "-"):
