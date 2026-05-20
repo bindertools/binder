@@ -103,7 +103,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
-  const [cwd, setCwd] = useState('')
+  const [, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<MenuState | null>(null)
