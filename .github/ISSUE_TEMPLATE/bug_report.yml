@@ -1,0 +1,106 @@
+name: Bug Report
+description: Report something that is broken or behaving unexpectedly.
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Fill out as much as you can — the more detail, the faster it gets fixed.
+
+        **Security issues:** please do not report them here. Use [GitHub Private Advisories](https://github.com/Command-IDE/terminal-IDE/security/advisories/new) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: cmdIDE Version
+      description: Found in the window title bar or the About section of Settings.
+      placeholder: "e.g. 1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: OS Version
+      placeholder: "e.g. Windows 11 23H2, macOS 14.4, Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you see?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Reliable steps to trigger the bug. The more specific the better.
+      placeholder: |
+        1. Open cmdIDE
+        2. Run `/preview index.html`
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproducibility
+    attributes:
+      label: How often does this happen?
+      options:
+        - Every time
+        - Most of the time
+        - Sometimes
+        - Only happened once
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Error Output
+      description: Paste any relevant terminal output, error messages, or stack traces.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop screenshots here if they help explain the issue.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Anything else that might be relevant — active theme, shell type, plugins installed, etc.
+    validations:
+      required: false

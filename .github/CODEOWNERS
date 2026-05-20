@@ -1,0 +1,24 @@
+# CODEOWNERS
+# Each line maps a path pattern to the GitHub users or teams responsible for reviewing changes.
+# The last matching rule takes precedence. Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback — maintainer reviews everything not covered below
+*                           @kris-powers
+
+# Core application
+/app/                       @kris-powers
+/app/frontend/              @kris-powers
+
+# Theme system
+/app/themes/                @kris-powers
+
+# Build infrastructure
+/build.ps1                  @kris-powers
+/.github/workflows/         @kris-powers
+
+# Plugin SDK
+/packages/                  @kris-powers
+
+# Documentation — lighter-touch review
+/docs/                      @kris-powers
+*.md                        @kris-powers

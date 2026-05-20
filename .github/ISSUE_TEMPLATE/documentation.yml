@@ -1,0 +1,47 @@
+name: Documentation Issue
+description: Report missing, incorrect, or unclear documentation.
+title: "docs: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: Found something wrong or missing in the docs? Let us know.
+
+  - type: input
+    id: location
+    attributes:
+      label: Where is the issue?
+      description: File path, URL, or section name.
+      placeholder: "e.g. README.md — Build from Source section"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type of Issue
+      options:
+        - Information is incorrect
+        - Information is missing
+        - Instructions don't work
+        - Unclear or confusing
+        - Outdated
+        - Typo or formatting
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What's wrong?
+      description: Describe the problem clearly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Fix
+      description: Optional — if you know what the correct information should be, share it here.
+    validations:
+      required: false

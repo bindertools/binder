@@ -1,105 +1,212 @@
+<div align="center">
+
 # cmdIDE
 
-A desktop terminal IDE built with Wails, Go, React, and TypeScript. Combines a multi-tab terminal, file editor, live preview, performance monitoring, port management, and a plugin system in a single native window.
+**A terminal-first desktop IDE for developers who live in the command line.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Wails](https://img.shields.io/badge/Wails-v2-red?logo=go)](https://wails.io)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#platform-support)
+[![Build](https://github.com/Command-IDE/terminal-IDE/actions/workflows/code-quality.yml/badge.svg)](https://github.com/Command-IDE/terminal-IDE/actions/workflows/code-quality.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Command-IDE/terminal-IDE?label=release)](https://github.com/Command-IDE/terminal-IDE/releases/latest)
+
+[**Download**](https://github.com/Command-IDE/terminal-IDE/releases/latest) · [**Docs**](docs/) · [**Themes**](app/themes/) · [**Plugin SDK**](packages/) · [**Contributing**](CONTRIBUTING.md)
+
+</div>
+
+---
+
+cmdIDE is a native desktop application built with [Wails](https://wails.io), [Go](https://go.dev), and [React](https://react.dev). It wraps your real shell in a multi-tab, session-restoring terminal, then layers on a Monaco-powered editor, live preview, database inspector, plugin system, and more — all in a single window, with no browser involved.
+
+---
+
+## Screenshots
+
+> *Screenshots and a demo GIF will be added here.*
 
 ---
 
 ## Features
 
 ### Terminal
-- Multi-tab shell sessions with working directory persistence across restarts
-- Supports every shell and CLI tool installed on the host — PowerShell, Command Prompt, Bash, Zsh, custom CLIs, language runtimes, all of it
-- Session restore on reopen
+- Multi-tab shell sessions — PowerShell, Bash, Zsh, CMD, or any shell on the host
+- Working directory persists across tabs and across restarts (full session restore)
+- Ctrl+click file paths and URLs to open them directly in the editor or browser
+- Fullscreen IDE mode: Monaco editor with split-panel view, file tree, and status bar
 
 ### Editor
-- Monaco-based editor with syntax highlighting and language detection
-- Split-screen support
+- Monaco-based editor (the same engine powering VS Code)
+- Syntax highlighting for 50+ languages with automatic detection
+- Split-panel view, word wrap, indent guides, minimap, Ctrl+wheel zoom
+- Line/column counter, encoding display, line-ending indicator
 
 ### Built-in Commands
+
 | Command | Description |
 |---|---|
-| `/problems` | Scans the current directory and opens a structured problems tab |
-| `/preview` | Opens a live preview tab for a file or URL |
-| `/ports` | Shows all ports currently in use on the machine |
-| `/performance` | Opens a performance tab — CPU, memory, disk, GPU, and network |
-| `/pack` | Zips the current directory |
-| `/pack --dryrun` | Previews what would be included in the zip, with raw and compressed size estimates |
-| `/plugins` | Opens the plugin store |
+| `/help` | Show all available commands |
+| `/fullscreen` · `/fs` | Open the fullscreen file editor |
+| `/preview <file\|url>` | Render a file or URL in a live sandboxed panel |
+| `/problems` | Scan the current directory and surface linting and error output |
+| `/ports` | Show all ports currently in use on this machine |
+| `/performance` | Real-time CPU, memory, disk, GPU, and network graphs |
+| `/pack` | Zip the current working directory |
+| `/pack --dryrun` | Preview zip contents and estimated sizes without writing |
+| `/plugins` | Open the plugin store |
 
 ### Plugins
-The plugin store (`/plugins`) lets you install official and community-built plugins.
+Install official and community plugins from the built-in store (`/plugins`), or load any plugin directly from a public GitHub repository built with the [cmdIDE Plugin SDK](packages/).
 
-Community plugins can be installed from any public GitHub repository built with the CMD IDE Plugin SDK.
+### Other Panels
+- **Database** — open and inspect SQLite files inline
+- **Ports** — live view of listening ports with one-click kill
+- **Performance** — real-time system graphs (CPU, memory, disk, GPU, network)
+- **Preview** — sandboxed renderer for files and URLs
 
-### Other Tabs
-- **Preview** — renders files and URLs in a sandboxed panel
-- **Ports** — live view of what's listening on which ports
-- **Performance** — real-time CPU, memory, disk, GPU, and network graphs
-- **Database** — SQLite file inspection
+### Themes
+10 built-in themes with a live custom theme editor. Themes are SCSS-based and live in [their own repository](app/themes/) — community themes are welcome via pull request.
+
+| Key | Style |
+|-----|-------|
+| `minimal` | Apple iOS/macOS dark, muted grays |
+| `dark` | VS Code dark default |
+| `blackout` | Pure black, high contrast |
+| `dim-green` | Retro phosphor green terminal |
+| `dim-blue` | Cool blue monochrome terminal |
+| `neon-night` | Cyberpunk — deep purple with neon accents |
+| `solarized` | Classic Solarized Dark |
+| `nord` | Arctic blue palette |
+| `coffee` | Warm espresso browns and amber |
+| `gruvbox` | Retro groove — warm oranges and greens |
 
 ### Configuration
-- Theme editor with full color customization and persistence
-- Settings for font size, zoom, scroll speed, text wrap, and shell behavior
-- Config stored in the user config directory under `cmdIDE/`
+- Full theme editor — customize every color, save and export as JSON
+- Settings for font size, zoom level, scroll speed, word wrap, indent guides, minimap
+- Git branch display in the terminal prompt
+- Soft-close protection against accidentally discarding unsaved work
+- Config stored in the OS user config directory under `cmdIDE/`
 
 ---
 
 ## Install
 
-Download the latest release from the [Releases](../../releases) page.
+Download the latest release from the [Releases](https://github.com/Command-IDE/terminal-IDE/releases/latest) page.
 
-| Artifact | Use case |
+| Artifact | Description |
 |---|---|
-| `cmdIDE-installer.exe` | Standard install for end users |
-| `cmdIDE.exe` | Portable build, no install step required |
+| `cmdIDE-installer.exe` | Standard Windows installer |
+| `cmdIDE.exe` | Portable Windows build — unzip and run, no install required |
+| `cmdIDE-macos.zip` | macOS universal binary |
+| `cmdIDE-linux` | Linux binary (amd64) |
 
-On first run the app creates its config and session files in your user config directory under `cmdIDE/`.
+On first launch, the app creates its config and session files at:
+
+| Platform | Path |
+|---|---|
+| Windows | `%APPDATA%\cmdIDE\` |
+| macOS | `~/Library/Application Support/cmdIDE/` |
+| Linux | `~/.config/cmdIDE/` |
 
 ---
 
 ## Build from Source
 
-**Requirements:** Go 1.21+, Node.js 18+, Wails v2
+**Requirements:** Go 1.21+, Node.js 18+, [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation)
 
 ```bash
-# Install Wails CLI
+# Install the Wails CLI (one-time setup)
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-# Clone and build
-git clone https://github.com/cmdide/terminal-IDE
+# Clone with all submodules
+git clone --recurse-submodules https://github.com/Command-IDE/terminal-IDE
 cd terminal-IDE/app
+
+# Development server with hot reload
+wails dev
+
+# Production build
 wails build
 ```
 
-For a development server with hot reload:
+To produce all release artifacts (Windows):
+
+```powershell
+# From the repo root
+./build.ps1
+```
+
+### Submodules
+
+This repo uses git submodules for the shell backends and themes. If you cloned without `--recurse-submodules`, initialize them with:
 
 ```bash
-cd app
-wails dev
+git submodule update --init --recursive
 ```
 
 ---
 
 ## Tech Stack
 
-- **Shell:** [Wails v2](https://wails.io) (Go + WebView2)
-- **Backend:** Go
-- **Frontend:** React + TypeScript + Vite
-- **Editor:** Monaco Editor
-- **Styling:** CSS variables with runtime theme switching
+| Layer | Technology |
+|-------|-----------|
+| Desktop shell | [Wails v2](https://wails.io) (Go + WebView2 / WKWebView) |
+| Backend | Go |
+| Frontend | React + TypeScript + Vite |
+| Editor | [Monaco Editor](https://microsoft.github.io/monaco-editor/) |
+| Terminal | xterm.js — [Command-IDE/terminal](app/terminal/) |
+| Themes | SCSS — [Command-IDE/cmdide-themes](app/themes/) |
+| Database | modernc SQLite (pure Go, no CGO) |
+| Styling | CSS custom properties with runtime theme switching |
 
 ---
 
 ## Platform Support
 
-| Platform | Status |
-|---|---|
-| Windows | Supported |
-| macOS | Supported |
-| Linux | Supported |
+| Platform | Architecture | Status |
+|----------|-------------|--------|
+| Windows 10/11 | x64 | ✅ Fully supported |
+| macOS 12+ | Apple Silicon (arm64) | ✅ Fully supported |
+| macOS 12+ | Intel (amd64) | ✅ Fully supported |
+| Linux | x64 | ✅ Supported (requires WebKitGTK) |
+
+---
+
+## Repository Structure
+
+```
+terminal-IDE/
+├── app/                  # Main Wails application (Go + React)
+│   ├── frontend/         # React + TypeScript frontend
+│   ├── themes/           # SCSS theme system (git submodule)
+│   ├── terminal/         # xterm.js terminal backend (git submodule)
+│   ├── powershell/       # PowerShell shell backend (git submodule)
+│   ├── bash/             # Bash shell backend (git submodule)
+│   └── zsh/              # Zsh shell backend (git submodule)
+├── installer/            # Installer application
+├── packages/
+│   └── plugin-sdk/       # Plugin SDK for community plugin authors
+├── docs/                 # Documentation
+├── scripts/              # Build and utility scripts
+└── build.ps1             # Full release build script
+```
+
+---
+
+## Contributing
+
+Contributions are welcome — bug fixes, new features, themes, and documentation improvements.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Key points:
+
+- Open an issue before starting any large feature to align on approach
+- Follow the existing code style (gofmt for Go, project ESLint config for TypeScript)
+- All PRs require a passing CI build
+
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards.
 
 ---
 
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright © 2026 Kris Powers
