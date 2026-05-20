@@ -355,19 +355,33 @@ export default function App() {
   }, [appConfig.soft_close])
 
   // ── theme CSS vars ───────────────────────────────────────────────────────────
+  // Preset themes: set data-theme attribute — SCSS handles the CSS variables.
+  // Custom themes (live preview or saved custom): apply via setProperty.
   useEffect(() => {
-    const t = resolvedTheme
     const root = document.documentElement
-    root.style.setProperty('--app-bg',               t.appBg)
-    root.style.setProperty('--border-color',          t.borderColor)
-    root.style.setProperty('--info-bar-bg',           t.infoBarBg)
-    root.style.setProperty('--info-bar-color',        t.infoBarColor)
-    root.style.setProperty('--info-bar-hover-bg',     t.infoBarHoverBg)
-    root.style.setProperty('--info-bar-hover-color',  t.infoBarHoverColor)
-    root.style.setProperty('--tab-color',             t.tabColor)
-    root.style.setProperty('--tab-color-hover',       t.tabColorHover)
-    root.style.setProperty('--tab-add-border',        t.tabAddBorder)
-  }, [resolvedTheme])
+    const isCustom = appConfig.theme === 'custom' || liveColors !== null
+
+    if (isCustom) {
+      root.setAttribute('data-theme', 'custom')
+      const t = resolvedTheme
+      root.style.setProperty('--app-bg',               t.appBg)
+      root.style.setProperty('--border-color',          t.borderColor)
+      root.style.setProperty('--info-bar-bg',           t.infoBarBg)
+      root.style.setProperty('--info-bar-color',        t.infoBarColor)
+      root.style.setProperty('--info-bar-hover-bg',     t.infoBarHoverBg)
+      root.style.setProperty('--info-bar-hover-color',  t.infoBarHoverColor)
+      root.style.setProperty('--tab-color',             t.tabColor)
+      root.style.setProperty('--tab-color-hover',       t.tabColorHover)
+      root.style.setProperty('--tab-add-border',        t.tabAddBorder)
+    } else {
+      root.setAttribute('data-theme', appConfig.theme)
+      for (const p of [
+        '--app-bg', '--border-color', '--info-bar-bg', '--info-bar-color',
+        '--info-bar-hover-bg', '--info-bar-hover-color', '--tab-color',
+        '--tab-color-hover', '--tab-add-border',
+      ]) root.style.removeProperty(p)
+    }
+  }, [resolvedTheme, appConfig.theme, liveColors])
 
   // ── Go events ────────────────────────────────────────────────────────────────
   useEffect(() => {

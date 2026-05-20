@@ -16,3 +16,6 @@
 [submodule "app/zsh"]
 	path = app/zsh
 	url = https://github.com/Command-IDE/zsh
+[submodule "app/themes"]
+	path = app/themes
+	url = https://github.com/Command-IDE/themes
