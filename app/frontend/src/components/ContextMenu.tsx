@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import './ContextMenu.css'
+import './ContextMenu.scss'
 
 export type ContextMenuEntry =
   | { kind: 'item'; label: string; onClick: () => void; danger?: boolean; disabled?: boolean }

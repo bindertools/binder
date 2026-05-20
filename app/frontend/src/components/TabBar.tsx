@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { Tab } from '../types'
-import './TabBar.css'
+import './TabBar.scss'
 
 interface Props {
   panel:    'left' | 'right'

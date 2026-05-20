@@ -3,7 +3,7 @@ import { PerfData } from '../types'
 import { StartPerfMonitor, StopPerfMonitor } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { Skeleton } from './Skeleton'
-import './PerfTab.css'
+import './PerfTab.scss'
 
 interface Props { tabId: string; active: boolean }
 

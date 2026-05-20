@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { Tab, SearchResult } from '../types'
 import { SearchFiles } from '../../wailsjs/go/main/App'
-import './SearchPalette.css'
+import './SearchPalette.scss'
 
 interface Props {
   tabs:              Tab[]

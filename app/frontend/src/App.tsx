@@ -19,7 +19,7 @@ import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig } from '../wailsjs/go/main/App'
 import { Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 import { getTheme, customColorsToTheme } from './themes'
-import './App.css'
+import './App.scss'
 
 let tabCounter = 0
 const nextId = () => `tab-${++tabCounter}`

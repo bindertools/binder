@@ -8,7 +8,7 @@ import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App'
-import './App.css'
+import './App.scss'
 import '../../themes/index.scss'
 
 // Configure Monaco to use local workers (no CDN — required for offline Wails app)

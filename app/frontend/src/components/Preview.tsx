@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import './Preview.css'
+import './Preview.scss'
 
 type PreviewType = 'markdown' | 'html' | 'url'
 

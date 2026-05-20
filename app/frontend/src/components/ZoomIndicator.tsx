@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import './ZoomIndicator.css'
+import './ZoomIndicator.scss'
 
 interface Props { enabled: boolean; defaultZoom?: number; onZoomChange?: (level: number) => void }
 

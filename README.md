@@ -1,6 +1,6 @@
 <div align="center">
 
-# cmdIDE
+# Command IDE (CMD IDE)
 
 **A terminal-first desktop IDE for developers who live in the command line.**
 
@@ -8,10 +8,10 @@
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Wails](https://img.shields.io/badge/Wails-v2-red?logo=go)](https://wails.io)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#platform-support)
-[![Build](https://github.com/Command-IDE/terminal-IDE/actions/workflows/code-quality.yml/badge.svg)](https://github.com/Command-IDE/terminal-IDE/actions/workflows/code-quality.yml)
-[![Latest Release](https://img.shields.io/github/v/release/Command-IDE/terminal-IDE?label=release)](https://github.com/Command-IDE/terminal-IDE/releases/latest)
+[![Build](https://github.com/Command-IDE/cmd-IDE/actions/workflows/code-quality.yml/badge.svg)](https://github.com/Command-IDE/cmd-ide/actions/workflows/code-quality.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Command-IDE/cmd-IDE?label=release)](https://github.com/Command-IDE/cmd-ide/releases/latest)
 
-[**Download**](https://github.com/Command-IDE/terminal-IDE/releases/latest) · [**Docs**](docs/) · [**Themes**](app/themes/) · [**Plugin SDK**](packages/) · [**Contributing**](CONTRIBUTING.md)
+[**Download**](https://github.com/Command-IDE/cmd-IDE/releases/latest) · [**Docs**](docs/) · [**Themes**](app/themes/) · [**Plugin SDK**](packages/) · [**Contributing**](CONTRIBUTING.md)
 
 </div>
 
@@ -91,7 +91,7 @@ Install official and community plugins from the built-in store (`/plugins`), or 
 
 ## Install
 
-Download the latest release from the [Releases](https://github.com/Command-IDE/terminal-IDE/releases/latest) page.
+Download the latest release from the [Releases](https://github.com/Command-IDE/cmd-ide/releases/latest) page.
 
 | Artifact | Description |
 |---|---|
@@ -119,8 +119,8 @@ On first launch, the app creates its config and session files at:
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
 # Clone with all submodules
-git clone --recurse-submodules https://github.com/Command-IDE/terminal-IDE
-cd terminal-IDE/app
+git clone --recurse-submodules https://github.com/Command-IDE/cmd-ide
+cd cmd-ide/app
 
 # Development server with hot reload
 wails dev
@@ -175,7 +175,7 @@ git submodule update --init --recursive
 ## Repository Structure
 
 ```
-terminal-IDE/
+cmd-ide/
 ├── app/                  # Main Wails application (Go + React)
 │   ├── frontend/         # React + TypeScript frontend
 │   ├── themes/           # SCSS theme system (git submodule)

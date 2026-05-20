@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { ProbItem } from '../types'
-import './Problems.css'
+import './Problems.scss'
 
 type Filter = 'all' | 'errors' | 'warnings'
 

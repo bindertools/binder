@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { SearchResult } from '../types'
 import { SearchFiles } from '../../wailsjs/go/main/App'
-import './SearchBar.css'
+import './SearchBar.scss'
 
 interface Props {
   activeTerminalId: string | null

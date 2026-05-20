@@ -5,7 +5,7 @@ import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile } from '../../wailsjs/g
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
 import type { AppTheme } from '../themes'
-import './fullscreen.css'
+import './fullscreen.scss'
 
 function langFromExt(ext: string): string {
   const map: Record<string, string> = {

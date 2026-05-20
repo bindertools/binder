@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ReadDatabase } from '../../wailsjs/go/main/App'
-import './Database.css'
+import './Database.scss'
 
 interface DBColumn { name: string; type: string }
 interface DBTable  { name: string; columns: DBColumn[]; rows: any[][]; row_count: number }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { PortInfo } from '../types'
 import { GetSystemPorts, KillPort } from '../../wailsjs/go/main/App'
-import './PortsTab.css'
+import './PortsTab.scss'
 
 interface Props {
   tabId: string

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { Plugin, PluginTabProps } from '@cmdide/plugin-sdk'
-import './claude.css'
+import './claude.scss'
 
 interface Message {
   role: 'user' | 'assistant'

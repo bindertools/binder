@@ -5,7 +5,7 @@ import {
   ANSI_PAIRS,
   themeToCustomColors,
 } from '../themes'
-import './ThemeEditor.css'
+import './ThemeEditor.scss'
 
 interface Props {
   /** The active theme key stored in config ('dark', 'custom', etc.) */

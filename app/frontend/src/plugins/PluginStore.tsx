@@ -6,7 +6,7 @@ import {
   ExternalPluginRecord,
 } from './index'
 import { FetchExternalPlugin } from '../../wailsjs/go/main/App'
-import './PluginStore.css'
+import './PluginStore.scss'
 
 type StoreTab = 'browse' | 'external'
 

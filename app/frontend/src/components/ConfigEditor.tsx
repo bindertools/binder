@@ -7,7 +7,7 @@ import {
 } from '../themes'
 import { AppConfig } from '../types'
 import { SelectDirectory } from '../../wailsjs/go/main/App'
-import './ConfigEditor.css'
+import './ConfigEditor.scss'
 
 interface Props {
   appConfig:       AppConfig
