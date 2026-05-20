@@ -250,13 +250,15 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
 
           {/* Boolean toggle rows */}
           {([
-            ['indent_guides',   'Indent Guides'],
-            ['minimap',         'Minimap'],
-            ['show_timestamps', 'Show Timestamps'],
-            ['minimal_pwd',     'Minimal PWD'],
-            ['zoom_insights',   'Zoom Insights'],
-            ['soft_close',      'Soft Close'],
-            ['order_directory', 'Order Directory'],
+            ['indent_guides',      'Indent Guides'],
+            ['minimap',            'Minimap'],
+            ['file_word_wrap',     'File Word Wrap'],
+            ['terminal_word_wrap', 'Terminal Word Wrap'],
+            ['show_timestamps',    'Show Timestamps'],
+            ['minimal_pwd',        'Minimal PWD'],
+            ['zoom_insights',      'Zoom Insights'],
+            ['soft_close',         'Soft Close'],
+            ['order_directory',    'Order Directory'],
           ] as [keyof AppConfig, string][]).map(([key, label]) => (
             <div key={key} className="ce-toggle-row">
               <span className="ce-toggle-label">{label}</span>

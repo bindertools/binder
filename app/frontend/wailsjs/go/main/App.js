@@ -22,6 +22,42 @@ export function ExecuteCommand(arg1, arg2) {
   return window['go']['main']['App']['ExecuteCommand'](arg1, arg2);
 }
 
+export function ExplorerCreateDir(arg1) {
+  return window['go']['main']['App']['ExplorerCreateDir'](arg1);
+}
+
+export function ExplorerCreateFile(arg1) {
+  return window['go']['main']['App']['ExplorerCreateFile'](arg1);
+}
+
+export function ExplorerDelete(arg1) {
+  return window['go']['main']['App']['ExplorerDelete'](arg1);
+}
+
+export function ExplorerGetFile(arg1) {
+  return window['go']['main']['App']['ExplorerGetFile'](arg1);
+}
+
+export function ExplorerGetTree() {
+  return window['go']['main']['App']['ExplorerGetTree']();
+}
+
+export function ExplorerMove(arg1, arg2) {
+  return window['go']['main']['App']['ExplorerMove'](arg1, arg2);
+}
+
+export function ExplorerOpen(arg1) {
+  return window['go']['main']['App']['ExplorerOpen'](arg1);
+}
+
+export function ExplorerRename(arg1, arg2) {
+  return window['go']['main']['App']['ExplorerRename'](arg1, arg2);
+}
+
+export function ExplorerSaveFile(arg1, arg2) {
+  return window['go']['main']['App']['ExplorerSaveFile'](arg1, arg2);
+}
+
 export function FetchExternalPlugin(arg1) {
   return window['go']['main']['App']['FetchExternalPlugin'](arg1);
 }

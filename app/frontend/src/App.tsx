@@ -11,6 +11,7 @@ import SearchPalette from './components/SearchPalette'
 import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
+import FullscreenIDE from './fullscreen/FullscreenIDE'
 import { loadInstalledPlugins } from './plugins'
 import type { Plugin, PluginContext } from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
@@ -682,6 +683,18 @@ export default function App() {
     }
     if (tab.type === 'perf') {
       return <PerfTab tabId={tab.id} active={isActive} />
+    }
+    if (tab.type === 'fullscreen') {
+      return (
+        <FullscreenIDE
+          cwd={tab.meta?.cwd ?? ''}
+          theme={resolvedTheme}
+          indentGuides={appConfig.indent_guides}
+          minimap={appConfig.minimap}
+          wordWrap={appConfig.file_word_wrap}
+          defaultZoom={currentZoom}
+        />
+      )
     }
     if (tab.type === 'plugins') {
       if (!__PLUGINS__) return null

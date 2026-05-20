@@ -233,6 +233,12 @@ func (t *Terminal) ExecuteCommand(line string) {
 			})
 			t.write("\r\n\x1b[38;5;246mopening plugin store\x1b[0m")
 			t.write(t.prompt())
+		case "fullscreen", "fs":
+			wailsruntime.EventsEmit(t.ctx, "app:open-tab", map[string]interface{}{
+				"type": "fullscreen", "title": "explorer", "terminalId": t.id, "cwd": t.cwd,
+			})
+			t.write("\r\n\x1b[38;5;246mopening explorer\x1b[0m")
+			t.write(t.prompt())
 		default:
 			t.execExternal(line)
 		}
@@ -399,6 +405,7 @@ func (t *Terminal) builtinHelp() {
 		{"/pack [--dryrun]", "zip current directory"},
 		{"/ports", "open active ports monitor tab"},
 		{"/performance", "open performance monitor tab"},
+		{"/fullscreen", "open fullscreen IDE explorer for current directory"},
 		{"/plugins", "open plugin store"},
 		{"/version", "show app and runtime version info"},
 		{"/help", "show this help"},

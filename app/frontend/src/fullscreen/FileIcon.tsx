@@ -1,0 +1,113 @@
+import React from 'react'
+
+interface Props { name: string; ext: string; isDir: boolean; isOpen?: boolean }
+
+// Doom-one / VS Code icon theme colors
+const EXT_COLORS: Record<string, string> = {
+  ts: '#3178c6', tsx: '#3178c6',
+  js: '#e8c84a', jsx: '#e8c84a', mjs: '#e8c84a', cjs: '#e8c84a',
+  go: '#00acd7',
+  py: '#3572a5',
+  rs: '#dea584',
+  json: '#cbcb41', jsonc: '#cbcb41',
+  md: '#519aba', mdx: '#519aba',
+  css: '#563d7c', scss: '#c6538c', sass: '#c6538c', less: '#1d365d',
+  html: '#e44d26', htm: '#e44d26',
+  sh: '#4eaa25', bash: '#4eaa25', zsh: '#4eaa25', fish: '#4eaa25',
+  ps1: '#012456', psm1: '#012456',
+  c: '#555599', h: '#a074c4', cpp: '#f34b7d', cc: '#f34b7d',
+  cs: '#178600',
+  java: '#b07219',
+  rb: '#701516',
+  php: '#4f5d95',
+  swift: '#f05138',
+  kt: '#a97bff', kts: '#a97bff',
+  sql: '#dad8d8',
+  graphql: '#e10098',
+  xml: '#f1662a', svg: '#ff9a00',
+  yaml: '#cb171e', yml: '#cb171e', toml: '#9c4121',
+  env: '#ecd53f',
+  lock: '#888888',
+  log: '#aaaaaa',
+  txt: '#cccccc',
+  gitignore: '#f54d27', gitattributes: '#f54d27',
+  dockerfile: '#0db7ed',
+  makefile: '#427819',
+  mod: '#00acd7', sum: '#00acd7',
+}
+
+const NAMED_FILE_COLORS: Record<string, string> = {
+  dockerfile: '#0db7ed',
+  makefile: '#427819', 'makefile.linux': '#427819',
+  '.env': '#ecd53f', '.envrc': '#ecd53f',
+  'package.json': '#e8c84a', 'tsconfig.json': '#3178c6',
+  '.gitignore': '#f54d27', '.gitattributes': '#f54d27',
+  'go.mod': '#00acd7', 'go.sum': '#00acd7',
+  'readme.md': '#519aba',
+  'license': '#aaaaaa',
+}
+
+const FOLDER_COLORS: Record<string, string> = {
+  src: '#4ec9b0', source: '#4ec9b0',
+  app: '#75beff', apps: '#75beff',
+  lib: '#d4aa00', libs: '#d4aa00',
+  test: '#75e05a', tests: '#75e05a', __tests__: '#75e05a', spec: '#75e05a',
+  build: '#e8ae4a', dist: '#e8ae4a', out: '#e8ae4a', bin: '#e8ae4a',
+  public: '#7ac070',
+  assets: '#d4aa00', static: '#d4aa00',
+  components: '#61afef', component: '#61afef',
+  pages: '#c678dd',
+  styles: '#c6538c', css: '#c6538c',
+  config: '#6d8086', configs: '#6d8086', configuration: '#6d8086',
+  scripts: '#4eaa25',
+  docs: '#519aba', doc: '#519aba', documentation: '#519aba',
+  node_modules: '#8c8c8c',
+  '.git': '#f54d27',
+  '.github': '#888888',
+  frontend: '#61afef', backend: '#75beff',
+  installer: '#e8ae4a',
+  windows: '#0078d4', macos: '#aaaaaa', linux: '#dd4814',
+}
+
+function iconColor(name: string, ext: string): string {
+  const lower = name.toLowerCase()
+  if (NAMED_FILE_COLORS[lower]) return NAMED_FILE_COLORS[lower]
+  return EXT_COLORS[ext] ?? '#8b9bba'
+}
+
+function folderColor(name: string): string {
+  return FOLDER_COLORS[name.toLowerCase()] ?? '#51afef'
+}
+
+// File document SVG — clean minimal document with folded corner
+function FileDoc({ color }: { color: string }) {
+  return (
+    <svg width="14" height="16" viewBox="0 0 14 16" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M2 1h7l3 3v11H2V1z" fill={color} fillOpacity="0.15" stroke={color} strokeWidth="1.1" strokeLinejoin="round"/>
+      <path d="M9 1v3h3" fill="none" stroke={color} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+// Folder SVG — classic folder shape
+function FolderShape({ color, open }: { color: string; open: boolean }) {
+  return open ? (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M1 3.5C1 2.67 1.67 2 2.5 2H6l1.5 2H13.5c.83 0 1.5.67 1.5 1.5V4H1V3.5z" fill={color}/>
+      <path d="M1 4h14L13.2 11.6c-.15.5-.6.9-1.1.9H2.9c-.5 0-.95-.4-1.1-.9L1 4z" fill={color} fillOpacity="0.85"/>
+    </svg>
+  ) : (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M1 3.5C1 2.67 1.67 2 2.5 2H6l1.5 2H13.5c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5h-11C1.67 12 1 11.33 1 10.5v-7z" fill={color} fillOpacity="0.85"/>
+    </svg>
+  )
+}
+
+export default function FileIcon({ name, ext, isDir, isOpen = false }: Props) {
+  if (isDir) {
+    const color = folderColor(name)
+    return <FolderShape color={color} open={isOpen} />
+  }
+  const color = iconColor(name, ext)
+  return <FileDoc color={color} />
+}

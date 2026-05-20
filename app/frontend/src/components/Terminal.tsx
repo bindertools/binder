@@ -59,6 +59,8 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/pack --dryrun',   desc: 'preview what would be zipped' },
   { cmd: '/ports',           desc: 'open ports monitor tab' },
   { cmd: '/performance',     desc: 'open performance monitor tab' },
+  { cmd: '/fullscreen',      desc: 'open fullscreen IDE explorer' },
+  { cmd: '/fs',              desc: 'open fullscreen IDE explorer (alias)' },
   ...(__PLUGINS__ ? [{ cmd: '/plugins', desc: 'open plugin store' }] : []),
   { cmd: '/version',         desc: 'show app version info' },
   { cmd: '/help',            desc: 'show all commands' },

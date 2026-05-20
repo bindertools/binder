@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"terminal-ide/database"
+	"terminal-ide/fullscreen"
 	"terminal-ide/perf"
 	"terminal-ide/ports"
 	"terminal-ide/problems"
@@ -22,18 +23,21 @@ type App struct {
 	terminals   map[string]*Terminal
 	mu          sync.Mutex
 	perfCancels map[string]context.CancelFunc
+	explorer    *fullscreen.Manager
 }
 
 func NewApp() *App {
 	return &App{
 		terminals:   make(map[string]*Terminal),
 		perfCancels: make(map[string]context.CancelFunc),
+		explorer:    fullscreen.New(),
 	}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	initConfig()
+	a.explorer.SetContext(ctx)
 }
 
 func (a *App) domReady(ctx context.Context) {
@@ -56,6 +60,45 @@ func (a *App) shutdown(_ context.Context) {
 	for _, cancel := range a.perfCancels {
 		cancel()
 	}
+	a.explorer.Close()
+}
+
+// ─── Fullscreen Explorer ──────────────────────────────────────────────────────
+
+func (a *App) ExplorerOpen(dir string) (fullscreen.FileNode, error) {
+	return a.explorer.OpenDirectory(dir)
+}
+
+func (a *App) ExplorerGetTree() (fullscreen.FileNode, error) {
+	return a.explorer.GetTree()
+}
+
+func (a *App) ExplorerGetFile(path string) (string, error) {
+	return a.explorer.GetFileContent(path)
+}
+
+func (a *App) ExplorerSaveFile(path string, content string) error {
+	return a.explorer.SaveFile(path, content)
+}
+
+func (a *App) ExplorerCreateFile(path string) error {
+	return a.explorer.CreateFile(path)
+}
+
+func (a *App) ExplorerCreateDir(path string) error {
+	return a.explorer.CreateDirectory(path)
+}
+
+func (a *App) ExplorerRename(oldPath string, newPath string) error {
+	return a.explorer.Rename(oldPath, newPath)
+}
+
+func (a *App) ExplorerDelete(path string) error {
+	return a.explorer.Delete(path)
+}
+
+func (a *App) ExplorerMove(src string, dest string) error {
+	return a.explorer.MoveFile(src, dest)
 }
 
 // ─── Terminal management ──────────────────────────────────────────────────────
