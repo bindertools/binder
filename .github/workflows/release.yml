@@ -12,7 +12,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # Three jobs run in parallel — each native runner builds for its own OS.
-# build.ps1 handles obfuscation, symbol stripping, and archive creation.
+# build.ps1 handles obfuscation and symbol stripping.
 
 jobs:
 
@@ -49,17 +49,14 @@ jobs:
         run: go install mvdan.cc/garble@latest
 
       - name: Build
-        run: ./build.ps1 -NoUpx
+        run: ./build.ps1 -NoUpx -NoArchive
 
       - name: Verify outputs
         run: |
           @(
             'app/build/bin/cmdIDE-windows-amd64.exe',
             'app/build/bin/cmdIDE-plugins-windows-amd64.exe',
-            'app/build/bin/cmdIDE-installer-windows.exe',
-            'app/build/bin/cmdIDE-windows-amd64.zip',
-            'app/build/bin/cmdIDE-plugins-windows-amd64.zip',
-            'app/build/bin/cmdIDE-installer-windows.zip'
+            'app/build/bin/cmdIDE-installer-windows.exe'
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -67,13 +64,14 @@ jobs:
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-windows
           if-no-files-found: error
           path: |
-            app/build/bin/cmdIDE-windows-amd64.zip
-            app/build/bin/cmdIDE-plugins-windows-amd64.zip
-            app/build/bin/cmdIDE-installer-windows.zip
+            app/build/bin/cmdIDE-windows-amd64.exe
+            app/build/bin/cmdIDE-plugins-windows-amd64.exe
+            app/build/bin/cmdIDE-installer-windows.exe
 
       - name: Upload to release
         env:
@@ -83,9 +81,6 @@ jobs:
             "app/build/bin/cmdIDE-windows-amd64.exe#cmdIDE-windows-amd64.exe" `
             "app/build/bin/cmdIDE-plugins-windows-amd64.exe#cmdIDE-plugins-windows-amd64.exe" `
             "app/build/bin/cmdIDE-installer-windows.exe#cmdIDE-installer-windows.exe" `
-            "app/build/bin/cmdIDE-windows-amd64.zip#cmdIDE-windows-amd64.zip" `
-            "app/build/bin/cmdIDE-plugins-windows-amd64.zip#cmdIDE-plugins-windows-amd64.zip" `
-            "app/build/bin/cmdIDE-installer-windows.zip#cmdIDE-installer-windows.zip" `
             --clobber
 
   # ── macOS ────────────────────────────────────────────────────────────────────
@@ -118,8 +113,8 @@ jobs:
       - name: Install garble (obfuscation)
         run: go install mvdan.cc/garble@latest
 
-      # Note: UPX is intentionally skipped on macOS — it breaks codesign/Gatekeeper.
-      # build.ps1 auto-detects this and omits -upx on macOS even if upx is present.
+      # macOS produces .app bundles (directories) — zip is required for distribution.
+      # UPX is skipped as it breaks codesign/Gatekeeper.
 
       - name: Build
         run: pwsh ./build.ps1 -NoUpx
@@ -137,6 +132,7 @@ jobs:
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-macos
           if-no-files-found: error
@@ -193,17 +189,14 @@ jobs:
         run: go install mvdan.cc/garble@latest
 
       - name: Build
-        run: pwsh ./build.ps1 -NoUpx
+        run: pwsh ./build.ps1 -NoUpx -NoArchive
 
       - name: Verify outputs
         run: |
           @(
             'app/build/bin/cmdIDE-linux-amd64',
             'app/build/bin/cmdIDE-plugins-linux-amd64',
-            'app/build/bin/cmdIDE-installer-linux',
-            'app/build/bin/cmdIDE-linux-amd64.tar.gz',
-            'app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz',
-            'app/build/bin/cmdIDE-installer-linux.tar.gz'
+            'app/build/bin/cmdIDE-installer-linux'
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -211,13 +204,14 @@ jobs:
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-linux
           if-no-files-found: error
           path: |
-            app/build/bin/cmdIDE-linux-amd64.tar.gz
-            app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz
-            app/build/bin/cmdIDE-installer-linux.tar.gz
+            app/build/bin/cmdIDE-linux-amd64
+            app/build/bin/cmdIDE-plugins-linux-amd64
+            app/build/bin/cmdIDE-installer-linux
 
       - name: Upload to release
         env:
@@ -228,7 +222,4 @@ jobs:
             "app/build/bin/cmdIDE-linux-amd64#cmdIDE-linux-amd64" \
             "app/build/bin/cmdIDE-plugins-linux-amd64#cmdIDE-plugins-linux-amd64" \
             "app/build/bin/cmdIDE-installer-linux#cmdIDE-installer-linux" \
-            "app/build/bin/cmdIDE-linux-amd64.tar.gz#cmdIDE-linux-amd64.tar.gz" \
-            "app/build/bin/cmdIDE-plugins-linux-amd64.tar.gz#cmdIDE-plugins-linux-amd64.tar.gz" \
-            "app/build/bin/cmdIDE-installer-linux.tar.gz#cmdIDE-installer-linux.tar.gz" \
             --clobber

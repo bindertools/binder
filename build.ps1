@@ -95,11 +95,10 @@ if ($useObfuscate) { $coreFlags += '-obfuscated' }
 if ($useUpx)       { $coreFlags += '-upx' }
 
 # Per-target tag sets
-$appTagStr     = $baseTags -join ','
-$pluginTagStr  = ($baseTags + @('plugins')) -join ','
+$appTagStr = $baseTags -join ','
 
-$appFlags  = if ($appTagStr)    { $coreFlags + @('-tags', $appTagStr) }    else { $coreFlags }
-$pluginFlags = if ($pluginTagStr) { $coreFlags + @('-tags', $pluginTagStr) } else { $coreFlags }
+$appFlags    = if ($appTagStr) { $coreFlags + @('-tags', $appTagStr) } else { $coreFlags }
+$pluginFlags = $appFlags  # plugins variant differs only in VITE_PLUGINS env var
 
 # Installer: same core flags, no UPX, with base tags
 $instFlags = @('build', '-trimpath', '-ldflags', '-s -w')
