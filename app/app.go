@@ -2,17 +2,20 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 
+	"terminal-ide/config"
 	"terminal-ide/database"
 	"terminal-ide/fullscreen"
 	"terminal-ide/perf"
+	"terminal-ide/plugins"
 	"terminal-ide/ports"
 	"terminal-ide/problems"
+	"terminal-ide/search"
+	"terminal-ide/session"
 
 	term "github.com/Command-IDE/terminal/src"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -36,7 +39,7 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	initConfig()
+	config.Init()
 	a.explorer.SetContext(ctx)
 }
 
@@ -195,7 +198,6 @@ func (a *App) OpenNewWindow() {
 	cmd.Start() //nolint:errcheck
 }
 
-// CtrlClickPath handles Ctrl+Click on a token in the terminal output.
 func (a *App) CtrlClickPath(id string, path string) {
 	a.mu.Lock()
 	t, ok := a.terminals[id]
@@ -237,6 +239,34 @@ func (a *App) CtrlClickPath(id string, path string) {
 	})
 }
 
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+func (a *App) SearchFiles(id string, query string) []search.Result {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return search.Files(t.cwd, query)
+}
+
+func (a *App) GetCompletions(id string, dir string, partial string) []string {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return search.Completions(t.cwd, dir, partial)
+}
+
+// ─── Session ─────────────────────────────────────────────────────────────────
+
+func (a *App) SaveSession(tabs []session.Tab) { session.Save(tabs) }
+
+func (a *App) LoadSession() []session.Tab { return session.Load() }
+
 // ─── Database ─────────────────────────────────────────────────────────────────
 
 func (a *App) ReadDatabase(path string) (database.DBSchema, error) {
@@ -256,42 +286,30 @@ func (a *App) SetClipboardText(text string) {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-func (a *App) GetAppConfig() Config { return getGlobalConfig() }
+func (a *App) GetAppConfig() config.Config { return config.Get() }
 
 func (a *App) SaveCustomTheme(colors map[string]string) error {
-	globalConfigMu.Lock()
-	globalConfig.CustomTheme = colors
-	globalConfig.Theme = "custom"
-	c := globalConfig
-	globalConfigMu.Unlock()
-
-	data, err := json.MarshalIndent(c, "", "  ")
+	c, err := config.ApplyCustomTheme(colors)
 	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(configFilePath(), data, 0644); err != nil {
 		return err
 	}
 	wailsruntime.EventsEmit(a.ctx, "app:config", c)
 	return nil
 }
 
-func (a *App) SaveAppConfig(incoming Config) error {
-	globalConfigMu.Lock()
-	incoming.CustomTheme = globalConfig.CustomTheme
-	globalConfig = incoming
-	c := globalConfig
-	globalConfigMu.Unlock()
-
-	data, err := json.MarshalIndent(c, "", "  ")
+func (a *App) SaveAppConfig(incoming config.Config) error {
+	c, err := config.Apply(incoming)
 	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(configFilePath(), data, 0644); err != nil {
 		return err
 	}
 	wailsruntime.EventsEmit(a.ctx, "app:config", c)
 	return nil
+}
+
+// ─── Plugins ──────────────────────────────────────────────────────────────────
+
+func (a *App) FetchExternalPlugin(githubURL string) (plugins.ExternalPluginInfo, error) {
+	return plugins.Fetch(githubURL)
 }
 
 // ─── Ports ────────────────────────────────────────────────────────────────────

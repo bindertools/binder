@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -25,21 +25,20 @@ type Config struct {
 	ZoomInsights     bool                 `json:"zoom_insights"`
 	MinimalPwd       bool                 `json:"minimal_pwd"`
 	DefaultZoom      float64              `json:"default_zoom"`
-	// CustomTheme holds per-color overrides used when Theme == "custom".
-	// Keys match the flat color-key scheme defined in frontend/src/themes.ts.
-	CustomTheme      map[string]string `json:"custom_theme,omitempty"`
-	TerminalWordWrap bool              `json:"terminal_word_wrap"`
-	FileWordWrap     bool              `json:"file_word_wrap"`
-	ScrollSpeed      int               `json:"scroll_speed"`
-	PreferredShell   string            `json:"preferred_shell"` // "zsh" | "bash" | "sh" | "" (auto)
+	CustomTheme      map[string]string    `json:"custom_theme,omitempty"`
+	TerminalWordWrap bool                 `json:"terminal_word_wrap"`
+	FileWordWrap     bool                 `json:"file_word_wrap"`
+	ScrollSpeed      int                  `json:"scroll_speed"`
+	PreferredShell   string               `json:"preferred_shell"`
 }
 
 var (
-	globalConfig   Config
-	globalConfigMu sync.RWMutex
+	global   Config
+	globalMu sync.RWMutex
 )
 
-func configFilePath() string {
+// FilePath returns the path to the config file on disk.
+func FilePath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		dir, _ = os.UserHomeDir()
@@ -47,10 +46,11 @@ func configFilePath() string {
 	return filepath.Join(dir, "cmdIDE", "config.json")
 }
 
-func ensureConfig() error {
-	path := configFilePath()
+// Ensure creates the config file with defaults if it does not exist.
+func Ensure() error {
+	path := FilePath()
 	if _, err := os.Stat(path); err == nil {
-		return nil // already exists
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -72,11 +72,11 @@ func ensureConfig() error {
 	return os.WriteFile(path, data, 0644)
 }
 
-func loadConfig() (Config, error) {
-	if err := ensureConfig(); err != nil {
+func load() (Config, error) {
+	if err := Ensure(); err != nil {
 		return Config{}, err
 	}
-	data, err := os.ReadFile(configFilePath())
+	data, err := os.ReadFile(FilePath())
 	if err != nil {
 		return Config{}, err
 	}
@@ -84,12 +84,10 @@ func loadConfig() (Config, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return Config{}, err
 	}
-	// Apply defaults for fields added after initial release.
 	if c.Theme == "" {
 		c.Theme = "dark"
 	}
-	// Apply defaults for keys added after the initial release.
-	// We check the raw JSON map so we can distinguish "absent" from "explicitly false/zero".
+	// Apply defaults for keys added after initial release.
 	if rawMap := (map[string]json.RawMessage{}); json.Unmarshal(data, &rawMap) == nil {
 		if _, exists := rawMap["zoom_insights"]; !exists {
 			c.ZoomInsights = true
@@ -101,43 +99,72 @@ func loadConfig() (Config, error) {
 			c.ScrollSpeed = 3
 		}
 	}
-	// Always write back so the file always reflects all current fields,
-	// including any new ones added in this version.
 	if updated, err2 := json.MarshalIndent(c, "", "  "); err2 == nil {
-		os.WriteFile(configFilePath(), updated, 0644) //nolint:errcheck
+		os.WriteFile(FilePath(), updated, 0644) //nolint:errcheck
 	}
 	return c, nil
 }
 
-func initConfig() {
-	c, _ := loadConfig()
-	globalConfigMu.Lock()
-	globalConfig = c
-	globalConfigMu.Unlock()
+// Init loads config from disk into the global state.
+func Init() {
+	c, _ := load()
+	globalMu.Lock()
+	global = c
+	globalMu.Unlock()
 }
 
-func getGlobalConfig() Config {
-	globalConfigMu.RLock()
-	defer globalConfigMu.RUnlock()
-	return globalConfig
+// Get returns a snapshot of the current global config.
+func Get() Config {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
+	return global
 }
 
-func reloadGlobalConfig() error {
-	c, err := loadConfig()
+// Reload re-reads config from disk and updates global state.
+func Reload() error {
+	c, err := load()
 	if err != nil {
 		return err
 	}
-	globalConfigMu.Lock()
-	globalConfig = c
-	globalConfigMu.Unlock()
+	globalMu.Lock()
+	global = c
+	globalMu.Unlock()
 	return nil
 }
 
-// resetConfig deletes the existing config file and recreates it with defaults.
-func resetConfig() error {
-	path := configFilePath()
+// Reset deletes the config file and recreates it with defaults.
+func Reset() error {
+	path := FilePath()
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return ensureConfig()
+	return Ensure()
+}
+
+// ApplyCustomTheme saves a custom theme palette and returns the updated config.
+func ApplyCustomTheme(colors map[string]string) (Config, error) {
+	globalMu.Lock()
+	global.CustomTheme = colors
+	global.Theme = "custom"
+	c := global
+	globalMu.Unlock()
+	return c, write(c)
+}
+
+// Apply merges incoming settings (preserving the stored custom theme) and saves.
+func Apply(incoming Config) (Config, error) {
+	globalMu.Lock()
+	incoming.CustomTheme = global.CustomTheme
+	global = incoming
+	c := global
+	globalMu.Unlock()
+	return c, write(c)
+}
+
+func write(c Config) error {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(FilePath(), data, 0644)
 }

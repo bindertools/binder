@@ -1,4 +1,4 @@
-package main
+package search
 
 import (
 	"bufio"
@@ -7,28 +7,24 @@ import (
 	"strings"
 )
 
-// SearchResult represents a single file search hit.
-type SearchResult struct {
+// Result represents a single file search hit.
+type Result struct {
 	Path    string `json:"path"`
 	Line    int    `json:"line"`
 	Content string `json:"content"`
 	IsName  bool   `json:"is_name"`
 }
 
-// SearchFiles searches files in the terminal's cwd for the given query.
-func (a *App) SearchFiles(id string, query string) []SearchResult {
-	a.mu.Lock()
-	t, ok := a.terminals[id]
-	a.mu.Unlock()
-	if !ok || query == "" {
+// Files searches files under cwd for the given query (max 100 results).
+func Files(cwd string, query string) []Result {
+	if query == "" {
 		return nil
 	}
-
 	queryLower := strings.ToLower(query)
-	var results []SearchResult
+	var results []Result
 	limit := 100
 
-	filepath.Walk(t.cwd, func(path string, info os.FileInfo, err error) error { //nolint:errcheck
+	filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error { //nolint:errcheck
 		if err != nil || len(results) >= limit {
 			return nil
 		}
@@ -48,11 +44,11 @@ func (a *App) SearchFiles(id string, query string) []SearchResult {
 			return nil
 		}
 
-		rel, _ := filepath.Rel(t.cwd, path)
+		rel, _ := filepath.Rel(cwd, path)
 		rel = filepath.ToSlash(rel)
 
 		if strings.Contains(strings.ToLower(base), queryLower) {
-			results = append(results, SearchResult{Path: rel, IsName: true})
+			results = append(results, Result{Path: rel, IsName: true})
 			return nil
 		}
 
@@ -77,9 +73,9 @@ func (a *App) SearchFiles(id string, query string) []SearchResult {
 			if strings.Contains(strings.ToLower(line), queryLower) {
 				content := strings.TrimSpace(line)
 				if len(content) > 120 {
-					content = content[:120] + "…"
+					content = content[:120] + "..."
 				}
-				results = append(results, SearchResult{
+				results = append(results, Result{
 					Path:    rel,
 					Line:    lineNum,
 					Content: content,
@@ -92,22 +88,15 @@ func (a *App) SearchFiles(id string, query string) []SearchResult {
 	return results
 }
 
-// GetCompletions returns filesystem entries whose names start with partial.
-func (a *App) GetCompletions(id string, dir string, partial string) []string {
-	a.mu.Lock()
-	t, ok := a.terminals[id]
-	a.mu.Unlock()
-	if !ok {
-		return nil
-	}
-
-	lookDir := t.cwd
+// Completions returns filesystem entries under cwd whose names start with partial.
+func Completions(cwd string, dir string, partial string) []string {
+	lookDir := cwd
 	if dir != "" {
 		dir = filepath.FromSlash(dir)
 		if filepath.IsAbs(dir) {
 			lookDir = filepath.Clean(dir)
 		} else {
-			lookDir = filepath.Clean(filepath.Join(t.cwd, dir))
+			lookDir = filepath.Clean(filepath.Join(cwd, dir))
 		}
 	}
 

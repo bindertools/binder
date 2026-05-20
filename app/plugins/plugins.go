@@ -1,4 +1,4 @@
-package main
+package plugins
 
 import (
 	"encoding/json"
@@ -10,8 +10,18 @@ import (
 	"time"
 )
 
-// FetchExternalPlugin downloads a plugin from a public GitHub repository.
-func (a *App) FetchExternalPlugin(githubURL string) (ExternalPluginInfo, error) {
+// ExternalPluginInfo holds metadata and the bundled JS for an external plugin.
+type ExternalPluginInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	Version     string `json:"version"`
+	Code        string `json:"code"`
+}
+
+// Fetch downloads a plugin from a public GitHub repository.
+func Fetch(githubURL string) (ExternalPluginInfo, error) {
 	u, err := url.Parse(strings.TrimSpace(githubURL))
 	if err != nil || u.Host != "github.com" {
 		return ExternalPluginInfo{}, fmt.Errorf("not a valid GitHub URL")

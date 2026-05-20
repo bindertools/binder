@@ -222,7 +222,7 @@
 .ctx-menu__icon { width: 16px; text-align: center; font-size: 12px; opacity: 0.85; }
 .ctx-menu__divider { height: 1px; background: var(--ide-border-lo); margin: 3px 4px; }
 
-/* ── Editor area ──────────────────────────────────────────────────────────────── */
+/* ── Editor area (column: panes-row + status bar) ─────────────────────────────── */
 .ide-editor-area {
   display: flex;
   flex-direction: column;
@@ -231,6 +231,34 @@
   overflow: hidden;
   background: var(--ide-editor-bg);
 }
+
+/* Row that holds the panes side-by-side */
+.ide-panes-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Individual editor pane ───────────────────────────────────────────────────── */
+.ide-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.ide-pane--focused { outline: none; }
+
+/* ── Split pane divider ────────────────────────────────────────────────────────── */
+.ide-pane-divider {
+  width: 4px;
+  flex-shrink: 0;
+  background: var(--ide-border);
+  cursor: col-resize;
+  transition: background 0.12s;
+}
+.ide-pane-divider:hover { background: var(--ide-accent); }
 
 /* ── Tab bar ──────────────────────────────────────────────────────────────────── */
 .ide-tabs {
@@ -243,8 +271,16 @@
   overflow-x: auto;
   overflow-y: hidden;
   height: 35px;
+  position: relative;
 }
 .ide-tabs::-webkit-scrollbar { height: 0; }
+
+/* Drop target highlight when dragging a tab over the tab bar */
+.ide-tabs--drop-target {
+  background: color-mix(in srgb, var(--ide-accent) 12%, var(--ide-bg-alt));
+  outline: 1px dashed var(--ide-accent);
+  outline-offset: -1px;
+}
 
 .ide-tabs__empty {
   padding: 0 14px;
@@ -253,6 +289,7 @@
   display: flex;
   align-items: center;
   font-style: italic;
+  user-select: none;
 }
 
 .ide-tab {
@@ -267,13 +304,27 @@
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
+  user-select: none;
 }
 .ide-tab:hover { color: var(--ide-fg); background: var(--ide-bg-hi); }
+
 .ide-tab--active {
   color: var(--ide-fg);
   background: var(--ide-editor-bg);
   border-bottom: 2px solid var(--ide-accent);
 }
+
+/* Preview tab: italic + slightly dimmed — has not been edited yet */
+.ide-tab--preview .ide-tab__name { font-style: italic; opacity: 0.8; }
+
+/* Multi-selected tab */
+.ide-tab--selected {
+  background: color-mix(in srgb, var(--ide-accent) 18%, var(--ide-bg-alt));
+}
+.ide-tab--selected.ide-tab--active {
+  background: color-mix(in srgb, var(--ide-accent) 18%, var(--ide-editor-bg));
+}
+
 .ide-tab__name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .ide-tab__dot  {
   width: 7px; height: 7px;

@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"terminal-ide/config"
 	"terminal-ide/database"
 	"terminal-ide/pack"
 	"terminal-ide/ports"
@@ -35,7 +36,7 @@ type Terminal struct {
 }
 
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
-	dir := term.DefaultDir(getGlobalConfig().DefaultDirectory)
+	dir := term.DefaultDir(config.Get().DefaultDirectory)
 	if initialCwd != "" {
 		if info, err := os.Stat(initialCwd); err == nil && info.IsDir() {
 			dir = initialCwd
@@ -91,7 +92,7 @@ func (t *Terminal) getGitBranch() string {
 // prompt builds the styled prompt, optionally prefixing a timestamp and/or
 // appending the current git branch, based on the active config.
 func (t *Terminal) prompt() string {
-	cfg := getGlobalConfig()
+	cfg := config.Get()
 	home, _ := os.UserHomeDir()
 	dir := t.cwd
 	if rel, err := filepath.Rel(home, dir); err == nil && !strings.HasPrefix(rel, "..") {
@@ -116,7 +117,7 @@ func (t *Terminal) prompt() string {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	// Optional timestamp — (hh:mm:ss)
+	// Optional timestamp â€” (hh:mm:ss)
 	if cfg.ShowTimestamps {
 		now := time.Now()
 		sb.WriteString(fmt.Sprintf("\x1b[38;5;246m(%02d:%02d:%02d)\x1b[0m ", now.Hour(), now.Minute(), now.Second()))
@@ -125,14 +126,14 @@ func (t *Terminal) prompt() string {
 	// Current directory
 	sb.WriteString("\x1b[38;5;75m" + dir + "\x1b[0m")
 
-	// Optional git branch — (branch-name) in orange
+	// Optional git branch â€” (branch-name) in orange
 	if cfg.GitRecognition.ShowGitBranch {
 		if branch := t.getGitBranch(); branch != "" {
 			sb.WriteString(" \x1b[38;5;214m(" + branch + ")\x1b[0m")
 		}
 	}
 
-	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")
+	sb.WriteString(" \x1b[38;5;246mâ¯\x1b[0m ")
 	return sb.String()
 }
 
@@ -163,7 +164,7 @@ func (t *Terminal) ExecuteCommand(line string) {
 	isSlash := strings.HasPrefix(raw, "/")
 	cmd := strings.TrimPrefix(raw, "/")
 
-	// Standard built-ins — work with or without a leading slash.
+	// Standard built-ins â€” work with or without a leading slash.
 	switch cmd {
 	case "cd":
 		t.builtinCD(parts[1:])
@@ -184,7 +185,7 @@ func (t *Terminal) ExecuteCommand(line string) {
 		return
 	}
 
-	// App-specific commands — require the "/" prefix.
+	// App-specific commands â€” require the "/" prefix.
 	if isSlash {
 		switch cmd {
 		case "themes":
@@ -267,7 +268,7 @@ func (t *Terminal) Close() {
 	t.once.Do(t.Interrupt)
 }
 
-// ─── built-in commands ────────────────────────────────────────────────────────
+// â”€â”€â”€ built-in commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (t *Terminal) builtinCD(args []string) {
 	var target string
@@ -313,7 +314,7 @@ func (t *Terminal) builtinLS(parts []string) {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	if getGlobalConfig().OrderDirectory {
+	if config.Get().OrderDirectory {
 		// Folders first A-Z, then files A-Z, one per line
 		var dirs, files []os.DirEntry
 		for _, e := range entries {
@@ -369,7 +370,7 @@ func (t *Terminal) builtinThemes() {
 	var sb strings.Builder
 	sb.WriteString("\r\n\x1b[38;5;75mAvailable themes\x1b[0m\r\n")
 	for _, name := range availableThemes {
-		sb.WriteString("  \x1b[38;5;246m•\x1b[0m " + name + "\r\n")
+		sb.WriteString("  \x1b[38;5;246mâ€¢\x1b[0m " + name + "\r\n")
 	}
 	sb.WriteString("\r\n\x1b[38;5;246mTo apply: run \x1b[38;5;75m/config\x1b[38;5;246m and select from the theme dropdown\x1b[0m")
 	t.write(sb.String())
@@ -440,12 +441,12 @@ func (t *Terminal) builtinConfigOpen() {
 
 // builtinConfigRaw opens config.json directly in the editor (old /config behaviour).
 func (t *Terminal) builtinConfigRaw() {
-	if err := ensureConfig(); err != nil {
+	if err := config.Ensure(); err != nil {
 		t.write("\r\n\x1b[31mconfig: " + err.Error() + "\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
-	path := configFilePath()
+	path := config.FilePath()
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.write("\r\n\x1b[31mconfig: " + err.Error() + "\x1b[0m")
@@ -463,28 +464,28 @@ func (t *Terminal) builtinConfigRaw() {
 }
 
 func (t *Terminal) builtinConfigReset() {
-	if err := resetConfig(); err != nil {
+	if err := config.Reset(); err != nil {
 		t.write("\r\n\x1b[31mconfig: reset failed: " + err.Error() + "\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
-	if err := reloadGlobalConfig(); err != nil {
+	if err := config.Reload(); err != nil {
 		t.write("\r\n\x1b[31mconfig: reload failed after reset: " + err.Error() + "\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
-	wailsruntime.EventsEmit(t.ctx, "app:config", getGlobalConfig())
+	wailsruntime.EventsEmit(t.ctx, "app:config", config.Get())
 	t.write("\r\n\x1b[38;5;75mconfig reset to defaults\x1b[0m")
 	t.write(t.prompt())
 }
 
 func (t *Terminal) builtinConfigReload() {
-	if err := reloadGlobalConfig(); err != nil {
+	if err := config.Reload(); err != nil {
 		t.write("\r\n\x1b[31mconfig: reload failed: " + err.Error() + "\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
-	wailsruntime.EventsEmit(t.ctx, "app:config", getGlobalConfig())
+	wailsruntime.EventsEmit(t.ctx, "app:config", config.Get())
 	t.write("\r\n\x1b[38;5;75mconfig reloaded\x1b[0m")
 	t.write(t.prompt())
 }
@@ -510,7 +511,7 @@ func colorFile(name string) string {
 }
 
 func (t *Terminal) builtinDebug() {
-	cfg := getGlobalConfig()
+	cfg := config.Get()
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		if goruntime.GOOS == "windows" {
@@ -541,7 +542,7 @@ func (t *Terminal) builtinDebug() {
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%v\x1b[0m\r\n", "file_word_wrap", cfg.FileWordWrap))
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%d\x1b[0m\r\n", "scroll_speed", cfg.ScrollSpeed))
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%.1f\x1b[0m\r\n", "default_zoom", cfg.DefaultZoom))
-	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "config_path", configFilePath()))
+	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-18s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "config_path", config.FilePath()))
 	t.write(sb.String())
 	t.write(t.prompt())
 }
@@ -593,7 +594,7 @@ func (t *Terminal) builtinPack(args []string) {
 	if dryrun || len(entries) == 0 {
 		var total int64
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview — %d files\x1b[0m\r\n\r\n", len(entries)))
+		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview â€” %d files\x1b[0m\r\n\r\n", len(entries)))
 		for _, e := range entries {
 			total += e.Size
 			sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%s\x1b[0m  %s\r\n", pack.FormatBytes(e.Size), e.RelPath))
@@ -611,7 +612,7 @@ func (t *Terminal) builtinPack(args []string) {
 	zipName := dirName + ".zip"
 	zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
 
-	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %s…\x1b[0m", len(entries), zipName))
+	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %sâ€¦\x1b[0m", len(entries), zipName))
 	if err := pack.CreateZip(t.cwd, zipPath, entries); err != nil {
 		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
 	} else {
@@ -667,7 +668,7 @@ func (t *Terminal) builtinProblems() {
 		probDim   = "\x1b[38;5;246m"
 		probReset = "\x1b[0m"
 	)
-	t.write("\r\n" + probDim + "  scanning…" + probReset)
+	t.write("\r\n" + probDim + "  scanningâ€¦" + probReset)
 
 	result := problems.Scan(t.cwd)
 
@@ -676,7 +677,7 @@ func (t *Terminal) builtinProblems() {
 	if len(result.Sources) == 0 {
 		t.write("\r\n" + probDim +
 			"  No source files found.\r\n" +
-			"  Scans: Go (.go) · TypeScript/JS (.ts .tsx .js .jsx)\r\n" + probReset)
+			"  Scans: Go (.go) Â· TypeScript/JS (.ts .tsx .js .jsx)\r\n" + probReset)
 		t.write(t.prompt())
 		return
 	}
@@ -695,7 +696,7 @@ func (t *Terminal) builtinProblems() {
 	if len(result.Items) == 0 {
 		label = "no issues"
 	}
-	t.write("\r\n" + probDim + "  opened problems tab — " + label + probReset)
+	t.write("\r\n" + probDim + "  opened problems tab â€” " + label + probReset)
 	t.write(t.prompt())
 }
 
@@ -746,7 +747,7 @@ func (t *Terminal) builtinPreview(args []string) {
 	case ".html", ".htm":
 		previewType = "html"
 	default:
-		t.write("\r\n\x1b[31mpreview: unsupported file type — use .md, .html, or a URL\x1b[0m")
+		t.write("\r\n\x1b[31mpreview: unsupported file type â€” use .md, .html, or a URL\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
@@ -766,7 +767,7 @@ func isPreviewURL(s string) bool {
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
 		return true
 	}
-	// host:PORT — second segment must be all digits
+	// host:PORT â€” second segment must be all digits
 	parts := strings.SplitN(s, ":", 2)
 	if len(parts) == 2 {
 		for _, c := range parts[1] {
@@ -779,10 +780,10 @@ func isPreviewURL(s string) bool {
 	return false
 }
 
-// ─── external command execution ───────────────────────────────────────────────
+// â”€â”€â”€ external command execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (t *Terminal) execExternal(line string) {
-	cmd := ps.BuildShellCmdWithPref(line, getGlobalConfig().PreferredShell)
+	cmd := ps.BuildShellCmdWithPref(line, config.Get().PreferredShell)
 	cmd.Dir = t.cwd
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
@@ -843,7 +844,7 @@ func (t *Terminal) execExternal(line string) {
 	}
 }
 
-// normNewlines converts bare \n → \r\n while leaving \r and \r\n intact
+// normNewlines converts bare \n â†’ \r\n while leaving \r and \r\n intact
 // (so progress bars that use \r to overwrite the line still work).
 func normNewlines(b []byte) string {
 	out := make([]byte, 0, len(b)+64)
@@ -856,7 +857,7 @@ func normNewlines(b []byte) string {
 	return string(out)
 }
 
-// ─── command-line parser ──────────────────────────────────────────────────────
+// â”€â”€â”€ command-line parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func parseArgs(line string) []string {
 	var args []string
@@ -883,3 +884,4 @@ func parseArgs(line string) []string {
 	}
 	return args
 }
+
