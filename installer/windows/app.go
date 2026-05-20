@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	releaseURL        = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-windows-amd64.exe"
-	releaseURLPlugins = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-plugins-windows-amd64.exe"
+	releaseURL        = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-windows-amd64.exe"
+	releaseURLPlugins = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-plugins-windows-amd64.exe"
 	binaryName        = "cmdIDE.exe"
 )
 

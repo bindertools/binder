@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	releaseURL        = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-darwin-arm64.zip"
-	releaseURLPlugins = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-plugins-darwin-arm64.zip"
+	releaseURL        = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-darwin-arm64.zip"
+	releaseURLPlugins = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-plugins-darwin-arm64.zip"
 	appBundleName     = "cmdIDE.app"
 )
 
@@ -113,7 +113,7 @@ func unzipBundle(data []byte, destDir string) error {
 }
 
 func createUsrLocalSymlink(exe string) error {
-	link := "/usr/local/bin/cmdide"
+	link := "/usr/local/bin/cmdIDE"
 	_ = os.Remove(link)
 	return os.Symlink(exe, link)
 }

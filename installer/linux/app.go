@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	releaseURL        = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-linux-amd64"
-	releaseURLPlugins = "https://github.com/Command-IDE/cmdIDE/releases/latest/download/cmdIDE-plugins-linux-amd64"
-	binaryName        = "cmdide"
+	releaseURL        = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-linux-amd64"
+	releaseURLPlugins = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-plugins-linux-amd64"
+	binaryName        = "cmdIDE"
 )
 
 type App struct{ ctx context.Context }
@@ -81,7 +81,7 @@ func createDesktopFile(exe string) error {
 		return err
 	}
 	content := fmt.Sprintf("[Desktop Entry]\nName=cmdIDE\nExec=%s\nType=Application\nCategories=Development;\n", exe)
-	return os.WriteFile(filepath.Join(desktopDir, "cmdide.desktop"), []byte(content), 0o644)
+	return os.WriteFile(filepath.Join(desktopDir, "cmdIDE.desktop"), []byte(content), 0o644)
 }
 
 func (a *App) LaunchAndClose() {
