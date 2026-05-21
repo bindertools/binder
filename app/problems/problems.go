@@ -16,7 +16,7 @@ type ProbData struct {
 	File string `json:"file"`
 	Line int    `json:"line"`
 	Col  int    `json:"col"`
-	Sev  int    `json:"sev"`  // 0 = error · 1 = warn · 2 = info
+	Sev  int    `json:"sev"` // 0 = error · 1 = warn · 2 = info
 	Code string `json:"code"`
 	Msg  string `json:"msg"`
 }
@@ -194,7 +194,10 @@ func scanTSFiles(root string) (items []probItem, found bool) {
 }
 
 func checkBrackets(file, src string) []probItem {
-	type frame struct{ ch rune; line, col int }
+	type frame struct {
+		ch        rune
+		line, col int
+	}
 	stack := make([]frame, 0, 32)
 
 	var inLine, inBlock, inSing, inDbl, inTmpl bool

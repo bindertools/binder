@@ -54,6 +54,11 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Set up Go
         if: matrix.language == 'go'
         uses: actions/setup-go@v5
@@ -61,22 +66,23 @@ jobs:
           go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
+      # Go embeds frontend/dist at compile time — must be built before go build
+      - name: Install app frontend dependencies
+        if: matrix.language == 'go'
+        run: npm.cmd ci
+        working-directory: app/frontend
+
+      - name: Build app frontend
+        if: matrix.language == 'go'
+        run: npm.cmd run build
+        working-directory: app/frontend
+
       - name: Build app Go module for analysis
         if: matrix.language == 'go'
         run: go build ./...
         working-directory: app
 
-      - name: Build installer Go module for analysis
-        if: matrix.language == 'go'
-        run: go build ./...
-        working-directory: installer/windows
-
-      - name: Set up Node.js
-        if: matrix.language == 'javascript-typescript'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
+      # JS/TS: CodeQL analyzes source directly (build-mode: none)
       - name: Install app frontend dependencies
         if: matrix.language == 'javascript-typescript'
         run: npm.cmd ci

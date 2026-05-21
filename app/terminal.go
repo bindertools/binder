@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"terminal-ide/ports"
 	"terminal-ide/problems"
 
-	ps   "github.com/Command-IDE/powershell/src"
+	ps "github.com/Command-IDE/powershell/src"
 	term "github.com/Command-IDE/terminal/src"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -884,4 +884,3 @@ func parseArgs(line string) []string {
 	}
 	return args
 }
-
