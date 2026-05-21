@@ -99,8 +99,9 @@ jobs:
       - name: Verify build outputs
         run: |
           $expected = @(
-            'app\build\bin\cmdIDE.exe',
-            'installer\build\bin\cmdIDE-installer.exe'
+            'app\build\bin\cmdIDE-windows-amd64.exe',
+            'app\build\bin\cmdIDE-plugins-windows-amd64.exe',
+            'app\build\bin\cmdIDE-installer-windows.exe'
           )
 
           foreach ($path in $expected) {
