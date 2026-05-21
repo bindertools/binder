@@ -9,6 +9,7 @@ installer/build/bin
 installer/frontend/dist
 installer/frontend/node_modules
 installer/assets/terminal-IDE.exe
+installer/windows/terminal-ide-installer-windows.exe
 
 # Stale root-level artifacts (pre-restructure)
 /build/
