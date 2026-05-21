@@ -168,7 +168,11 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
-    term.loadAddon(new WebLinksAddon())
+    // Custom handler: open URLs in an in-app preview tab instead of the system browser
+    term.loadAddon(new WebLinksAddon((e, url) => {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId } }))
+    }))
     term.open(container)
     fitAddon.fit()
     termRef.current = term
@@ -261,6 +265,22 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
       const token = lineText.slice(start, end).replace(/[/\\]$/, '') // strip trailing slash
       if (!token) return
+
+      // URL detection — expand with URL-safe chars (isPathChar excludes ':' so http:// splits)
+      const isUrlChar = (c: string) => /[a-zA-Z0-9_./:?#&=@%~!-]/.test(c)
+      let us = clampedCol, ue = clampedCol + 1
+      while (us > 0 && isUrlChar(lineText[us - 1])) us--
+      while (ue < lineText.length && isUrlChar(lineText[ue])) ue++
+      const urlCandidate = lineText.slice(us, ue)
+      const isUrl = /^https?:\/\//i.test(urlCandidate)
+        || /^(localhost|[\d]{1,3}(\.[\d]{1,3}){3}|[\w.-]+\.\w{2,}):\d+/.test(urlCandidate)
+
+      if (isUrl) {
+        const url = /^https?:\/\//i.test(urlCandidate) ? urlCandidate : 'http://' + urlCandidate
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId } }))
+        return
+      }
 
       CtrlClickPath(tabId, token).catch(() => {})
     }

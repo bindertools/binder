@@ -5,7 +5,7 @@ export function CloseInstaller():Promise<void>;
 
 export function GetInstallDir():Promise<string>;
 
-export function GetReleases():Promise<Array<string>>;
+export function GetReleases():Promise<Array<{tag: string, prerelease: boolean}>>;
 
 export function Install(arg1:string,arg2:boolean,arg3:boolean):Promise<void>;
 

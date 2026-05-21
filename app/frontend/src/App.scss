@@ -172,6 +172,27 @@
 .wc-btn:hover   { color: var(--tab-color-hover); background: var(--surface-raised); }
 .wc-close:hover { background: var(--color-error); color: #fff; }
 
+/* ── Update available indicator ─────────────────────────────────────────────── */
+.app__update-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: #3fb950;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+}
+.app__update-btn:hover {
+  background: rgba(63, 185, 80, 0.15);
+  color: #56d364;
+}
+
 /* ── Content area ───────────────────────────────────────────────────────────── */
 .app__content {
   flex: 1;

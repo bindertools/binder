@@ -4,6 +4,7 @@ import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile } from '../../wailsjs/go/main/App'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
+import MenuBar from './MenuBar'
 import type { AppTheme } from '../themes'
 import './fullscreen.scss'
 
@@ -334,8 +335,14 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       setTotalLines(editor.getModel()?.getLineCount() ?? 0)
     })
 
-    // Ctrl+S inside Monaco — window listener never fires because Monaco stops propagation
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { saveFile() })
+    // Ctrl+S — onKeyDown fires before Monaco's keybinding service so it cannot be swallowed
+    editor.onKeyDown((e: any) => {
+      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.KeyS) {
+        e.preventDefault()
+        e.stopPropagation()
+        saveFile()
+      }
+    })
 
     const dom = editor.getDomNode()
     if (dom) {
@@ -599,12 +606,58 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── explorer divider ──────────────────────────────────────────────────────────
   const explorerDivider = <div className="ide-divider" onMouseDown={onExplorerDividerDown} />
 
+  // Stable getter so MenuBar always reads the currently-focused editor
+  const getEditor = useCallback(() =>
+    focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+  , [])
+
+  // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
+  const zoomIn    = useCallback(() => {
+    const next = Math.min(fontSize + 1, 36)
+    setFontSize(next)
+    leftEditorRef.current?.updateOptions({ fontSize: next })
+    rightEditorRef.current?.updateOptions({ fontSize: next })
+  }, [fontSize])
+
+  const zoomOut   = useCallback(() => {
+    const next = Math.max(fontSize - 1, 8)
+    setFontSize(next)
+    leftEditorRef.current?.updateOptions({ fontSize: next })
+    rightEditorRef.current?.updateOptions({ fontSize: next })
+  }, [fontSize])
+
+  const resetZoom = useCallback(() => {
+    const next = Math.round(13 * defaultZoom)
+    setFontSize(next)
+    leftEditorRef.current?.updateOptions({ fontSize: next })
+    rightEditorRef.current?.updateOptions({ fontSize: next })
+  }, [defaultZoom])
+
+  // Close the active file in the focused panel
+  const closeActive = useCallback(() => {
+    const path = focusedPanelRef.current === 'left' ? leftActiveRef.current : rightActiveRef.current
+    if (path) closeFiles([path])
+  }, [closeFiles])
+
   return (
-    <div className="ide-root" style={themeVars}>
-      {explorerPos === 'left'
-        ? <>{explorerPanel}{explorerDivider}{editorArea}</>
-        : <>{editorArea}{explorerDivider}{explorerPanel}</>
-      }
+    <div className="ide-root ide-root--col" style={themeVars}>
+      <MenuBar
+        onSave={saveFile}
+        onCloseActive={closeActive}
+        onCloseAll={() => closeFiles(openFiles.map(f => f.path))}
+        onToggleExplorer={() => setCollapsed(c => !c)}
+        onToggleSplit={() => setSplitMode(s => !s)}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onResetZoom={resetZoom}
+        getEditor={getEditor}
+      />
+      <div className="ide-body">
+        {explorerPos === 'left'
+          ? <>{explorerPanel}{explorerDivider}{editorArea}</>
+          : <>{editorArea}{explorerDivider}{explorerPanel}</>
+        }
+      </div>
     </div>
   )
 }

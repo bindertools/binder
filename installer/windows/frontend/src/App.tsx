@@ -4,13 +4,15 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 
 type Phase = 'ready' | 'installing' | 'done' | 'error'
 
+interface ReleaseInfo { tag: string; prerelease: boolean }
+
 const drag   = { '--wails-draggable': 'drag'    } as React.CSSProperties
 const noDrag = { '--wails-draggable': 'no-drag' } as React.CSSProperties
 
 function VersionSelect({ value, onChange, releases }: {
   value: string
   onChange: (v: string) => void
-  releases: string[]
+  releases: ReleaseInfo[]
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -24,23 +26,35 @@ function VersionSelect({ value, onChange, releases }: {
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
+  const selectedRelease = releases.find(r => r.tag === value)
+
   return (
     <div className="vsel" ref={ref}>
       <button className="vsel-btn" data-open={String(open)} onClick={() => setOpen(o => !o)}>
-        <span>{value === 'latest' ? 'Latest' : value}</span>
+        <span>
+          {value === 'latest' ? 'Latest (stable)' : value}
+          {selectedRelease?.prerelease && <span className="vsel-snapshot"> ⚠ Snapshot</span>}
+        </span>
         <svg className="vsel-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
           <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </button>
       {open && (
         <div className="vsel-menu">
-          {['latest', ...releases].map(tag => (
+          <div
+            className={`vsel-item${value === 'latest' ? ' active' : ''}`}
+            onClick={() => { onChange('latest'); setOpen(false) }}
+          >
+            Latest (stable)
+          </div>
+          {releases.map(r => (
             <div
-              key={tag}
-              className={`vsel-item${value === tag ? ' active' : ''}`}
-              onClick={() => { onChange(tag); setOpen(false) }}
+              key={r.tag}
+              className={`vsel-item${value === r.tag ? ' active' : ''}${r.prerelease ? ' vsel-item--pre' : ''}`}
+              onClick={() => { onChange(r.tag); setOpen(false) }}
             >
-              {tag === 'latest' ? 'Latest' : tag}
+              <span>{r.tag}</span>
+              {r.prerelease && <span className="vsel-badge">Snapshot</span>}
             </div>
           ))}
         </div>
@@ -58,11 +72,11 @@ export default function App() {
   const [createShortcut,  setCreateShortcut] = useState(true)
   const [installPlugins,  setInstallPlugins] = useState(false)
   const [version,         setVersion]        = useState('latest')
-  const [releases,        setReleases]       = useState<string[]>([])
+  const [releases,        setReleases]       = useState<ReleaseInfo[]>([])
 
   useEffect(() => {
     GetInstallDir().then(setInstallDir)
-    GetReleases().then(tags => { if (tags && tags.length > 0) setReleases(tags) })
+    GetReleases().then(list => { if (list && list.length > 0) setReleases(list) })
     EventsOn('install:progress', (pct: number, msg: string) => {
       setProgress(pct)
       setStatusMsg(msg)

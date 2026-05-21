@@ -1,0 +1,103 @@
+/* ── Menu bar ─────────────────────────────────────────────────────────────── */
+.ide-menubar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  flex-shrink: 0;
+  background: var(--ide-bg-alt);
+  border-bottom: 1px solid var(--ide-border-lo);
+  padding: 0 4px;
+  position: relative;
+  z-index: 300;
+  user-select: none;
+}
+
+/* ── Individual menu ──────────────────────────────────────────────────────── */
+.ide-menubar__menu {
+  position: relative;
+}
+
+.ide-menubar__trigger {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--ide-text-mid);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+
+.ide-menubar__trigger:hover,
+.ide-menubar__trigger--open {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ide-fg);
+}
+
+/* ── Dropdown panel ───────────────────────────────────────────────────────── */
+.ide-menubar__dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 240px;
+  background: var(--ide-bg-alt);
+  border: 1px solid var(--ide-border);
+  border-radius: 5px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 3px 0;
+  z-index: 1000;
+}
+
+/* ── Menu item ────────────────────────────────────────────────────────────── */
+.ide-menubar__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 14px 5px 22px;
+  gap: 32px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--ide-text-mid);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  border-radius: 3px;
+  margin: 0 3px;
+  width: calc(100% - 6px);
+  box-sizing: border-box;
+  transition: background 0.08s, color 0.08s;
+}
+
+.ide-menubar__item:hover {
+  background: var(--ide-accent, #0078d4);
+  color: #fff;
+}
+
+.ide-menubar__item:hover .ide-menubar__item-shortcut {
+  opacity: 0.8;
+}
+
+.ide-menubar__item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.ide-menubar__item-shortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.5;
+  font-family: inherit;
+}
+
+/* ── Separator ────────────────────────────────────────────────────────────── */
+.ide-menubar__sep {
+  height: 1px;
+  background: var(--ide-border-lo);
+  margin: 3px 0;
+}

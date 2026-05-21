@@ -16,7 +16,7 @@ import { loadInstalledPlugins } from './plugins'
 import type { Plugin, PluginContext } from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
-import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig } from '../wailsjs/go/main/App'
+import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
 import { Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.scss'
@@ -275,6 +275,7 @@ export default function App() {
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
   const [currentZoom, setCurrentZoom] = useState(defaultConfig.default_zoom)
   const [liveColors,  setLiveColors]  = useState<Record<string, string> | null>(null)
+  const [updateTag,   setUpdateTag]   = useState<string>('')
 
   const resolvedTheme = useMemo(() => {
     if (liveColors) return customColorsToTheme(liveColors)
@@ -311,6 +312,10 @@ export default function App() {
   }, [tabs, rightActiveId, rightTabs])
 
   // ── config load ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    CheckForUpdate().then(tag => { if (tag) setUpdateTag(tag) }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     GetAppConfig().then(cfg => {
       setAppConfig(cfg as AppConfig)
@@ -412,6 +417,18 @@ export default function App() {
       dispatch({ type: 'open-preview', payload })
     })
     return () => EventsOff('app:open-preview')
+  }, [])
+
+  // URL clicks inside terminals (plain click via WebLinksAddon, Ctrl+Click on URL tokens)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { url, tabId } = (e as CustomEvent<{ url: string; tabId: string }>).detail
+      if (!url) return
+      const payload: OpenPreviewPayload = { type: 'url', url, path: url, terminalId: tabId }
+      dispatch({ type: 'open-preview', payload })
+    }
+    window.addEventListener('ide:open-url', handler)
+    return () => window.removeEventListener('ide:open-url', handler)
   }, [])
 
   useEffect(() => {
@@ -819,6 +836,19 @@ export default function App() {
             <span className="app__search-bar-label">Search...</span>
             <span className="app__search-bar-kbd">Ctrl K</span>
           </button>
+          {updateTag && (
+            <button
+              className="app__update-btn"
+              title={`Update available: ${updateTag} — click to install`}
+              onClick={() => PerformUpdate(updateTag).catch(() => {})}
+              aria-label="Update available"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
           <div className="app__wincontrols">
             <button className="wc-btn wc-min" onClick={WindowMinimise} aria-label="Minimise">
               <svg width="10" height="2" viewBox="0 0 10 2">

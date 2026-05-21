@@ -10,6 +10,19 @@
   font-size: 13px;
   overflow: hidden;
   user-select: none;
+
+/* Column variant: menubar on top, then the horizontal body row below */
+&.ide-root--col {
+  flex-direction: column;
+}
+
+.ide-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 }
 
 /* ── Resize divider ───────────────────────────────────────────────────────────── */

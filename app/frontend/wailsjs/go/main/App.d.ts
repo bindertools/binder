@@ -10,6 +10,8 @@ import {database} from '../models';
 import {problems} from '../models';
 import {search} from '../models';
 
+export function CheckForUpdate():Promise<string>;
+
 export function CloseTerminal(arg1:string):Promise<void>;
 
 export function CreateTerminal(arg1:string,arg2:string):Promise<void>;
@@ -61,6 +63,8 @@ export function KillPort(arg1:string):Promise<string>;
 export function LoadSession():Promise<Array<session.Tab>>;
 
 export function OpenNewWindow():Promise<void>;
+
+export function PerformUpdate(arg1:string):Promise<void>;
 
 export function ReadDatabase(arg1:string):Promise<database.DBSchema>;
 

@@ -62,6 +62,10 @@ export function FetchExternalPlugin(arg1) {
   return window['go']['main']['App']['FetchExternalPlugin'](arg1);
 }
 
+export function CheckForUpdate() {
+  return window['go']['main']['App']['CheckForUpdate']();
+}
+
 export function GetAppConfig() {
   return window['go']['main']['App']['GetAppConfig']();
 }
@@ -104,6 +108,10 @@ export function LoadSession() {
 
 export function OpenNewWindow() {
   return window['go']['main']['App']['OpenNewWindow']();
+}
+
+export function PerformUpdate(arg1) {
+  return window['go']['main']['App']['PerformUpdate'](arg1);
 }
 
 export function ReadDatabase(arg1) {

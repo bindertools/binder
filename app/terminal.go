@@ -380,8 +380,8 @@ func (t *Terminal) builtinThemes() {
 func (t *Terminal) builtinVersion() {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
-	sb.WriteString("  \x1b[1m\x1b[38;5;75mterminal\x1b[38;5;33mIDE\x1b[0m")
-	sb.WriteString("  \x1b[38;5;246mv1.0.0\x1b[0m\r\n\r\n")
+	sb.WriteString("  \x1b[1m\x1b[38;5;75mCommand\x1b[38;5;33m IDE\x1b[0m")
+	sb.WriteString("  \x1b[38;5;246m" + AppVersion + "\x1b[0m\r\n\r\n")
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-12s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "Go", goruntime.Version()))
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-12s\x1b[0m  \x1b[38;5;253m%s\x1b[0m\r\n", "Wails", "v2.12.0"))
 	sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%-12s\x1b[0m  \x1b[38;5;253m%s/%s\x1b[0m\r\n", "Platform", goruntime.GOOS, goruntime.GOARCH))

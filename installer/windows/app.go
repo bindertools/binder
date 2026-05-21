@@ -32,7 +32,13 @@ func (a *App) GetInstallDir() string {
 	return filepath.Join(local, "Programs", "cmdIDE")
 }
 
-func (a *App) GetReleases() []string {
+// ReleaseInfo describes a single GitHub release entry.
+type ReleaseInfo struct {
+	Tag        string `json:"tag"`
+	Prerelease bool   `json:"prerelease"`
+}
+
+func (a *App) GetReleases() []ReleaseInfo {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases", githubRepo)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -48,18 +54,19 @@ func (a *App) GetReleases() []string {
 	}
 	defer resp.Body.Close()
 
-	var releases []struct {
-		TagName string `json:"tag_name"`
+	var raw []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil
 	}
 
-	tags := make([]string, 0, len(releases))
-	for _, r := range releases {
-		tags = append(tags, r.TagName)
+	result := make([]ReleaseInfo, 0, len(raw))
+	for _, r := range raw {
+		result = append(result, ReleaseInfo{Tag: r.TagName, Prerelease: r.Prerelease})
 	}
-	return tags
+	return result
 }
 
 func buildDownloadURL(version string, installPlugins bool) string {
