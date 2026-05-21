@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Force LF for Go files so gofmt works correctly on Windows CI
+*.go text eol=lf
