@@ -219,7 +219,7 @@
 .ctx-menu__item:hover { background: var(--ide-select); color: #fff; }
 .ctx-menu__item--danger { color: #ff6c6b; }
 .ctx-menu__item--danger:hover { background: rgba(255, 108, 107, 0.15); color: #ff6c6b; }
-.ctx-menu__icon { width: 16px; text-align: center; font-size: 12px; opacity: 0.85; }
+.ctx-menu__icon { width: 16px; display: flex; align-items: center; justify-content: center; opacity: 0.75; flex-shrink: 0; }
 .ctx-menu__divider { height: 1px; background: var(--ide-border-lo); margin: 3px 4px; }
 
 /* ── Editor area (column: panes-row + status bar) ─────────────────────────────── */

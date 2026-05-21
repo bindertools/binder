@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 
 export interface ContextMenuItem {
   label?: string
-  icon?: string
+  icon?: React.ReactNode
   danger?: boolean
   divider?: boolean
   action?: () => void

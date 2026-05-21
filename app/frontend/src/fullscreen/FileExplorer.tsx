@@ -24,6 +24,12 @@ interface CtxState {
   node: FileNode
 }
 
+const IconNewFile  = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6"/><path d="M9 2v4h4"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="6" y1="11" x2="10" y2="11"/></svg>
+const IconNewFolder = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/><line x1="8" y1="8" x2="8" y2="12"/><line x1="6" y1="10" x2="10" y2="10"/></svg>
+const IconRename    = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11.5 2.5z"/></svg>
+const IconCopyPath  = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M11 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h1"/></svg>
+const IconDelete    = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4,6 12,6"/><path d="M6 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><path d="M5 6l.6 7a1 1 0 0 0 1 .9h2.8a1 1 0 0 0 1-.9L11 6"/></svg>
+
 export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }: Props) {
   const [expanded,   setExpanded]   = useState<Set<string>>(new Set())
   const [ctx,        setCtx]        = useState<CtxState | null>(null)
@@ -88,13 +94,13 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
   }, [])
 
   const buildMenu = useCallback((node: FileNode): ContextMenuItem[] => [
-    { label: 'New File',   icon: '+', action: () => handleNewFile(node) },
-    { label: 'New Folder', icon: '+', action: () => handleNewFolder(node) },
+    { label: 'New File',   icon: <IconNewFile />,   action: () => handleNewFile(node) },
+    { label: 'New Folder', icon: <IconNewFolder />, action: () => handleNewFolder(node) },
     { divider: true },
-    { label: 'Rename',     icon: '~', action: () => startRename(node) },
-    { label: 'Copy Path',  icon: '⎘', action: () => handleCopyPath(node) },
+    { label: 'Rename',     icon: <IconRename />,    action: () => startRename(node) },
+    { label: 'Copy Path',  icon: <IconCopyPath />,  action: () => handleCopyPath(node) },
     { divider: true },
-    { label: 'Delete',     danger: true, action: () => handleDelete(node) },
+    { label: 'Delete',     icon: <IconDelete />,    danger: true, action: () => handleDelete(node) },
   ], [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete])
 
   // ── drag and drop ────────────────────────────────────────────────────────────
