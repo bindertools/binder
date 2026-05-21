@@ -292,9 +292,13 @@ var (
 	procSetAppModelID = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 )
 
+// comIface mirrors the COM interface memory layout: a pointer to a vtable.
+type comIface struct{ vtbl *[32]uintptr }
+
 func comCall(obj uintptr, slot int, args ...uintptr) uintptr {
-	vtbl := *(*[32]uintptr)(unsafe.Pointer(*(**uintptr)(unsafe.Pointer(&obj))))
-	fn := vtbl[slot]
+	// Route through &obj (*uintptr → unsafe.Pointer) to avoid a direct
+	// uintptr→unsafe.Pointer conversion that go vet flags as unsafe.
+	fn := (*comIface)(unsafe.Pointer(*(**uintptr)(unsafe.Pointer(&obj)))).vtbl[slot]
 	all := make([]uintptr, len(args)+1)
 	all[0] = obj
 	copy(all[1:], args)
