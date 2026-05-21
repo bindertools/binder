@@ -107,7 +107,9 @@ func (a *App) Install(version string, createShortcut bool, installPlugins bool) 
 
 	if createShortcut {
 		emit(94, "Creating desktop shortcut…")
-		_ = createDesktopShortcut(installDir, dest)
+		if err := createDesktopShortcut(installDir, dest); err != nil {
+			return fmt.Errorf("desktop shortcut: %w", err)
+		}
 	}
 
 	emit(100, "Installation complete")
@@ -124,9 +126,18 @@ func createDesktopShortcut(installDir, exe string) error {
 			`$l.Save()`,
 		exe, installDir,
 	)
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
-	noWindow(cmd)
-	return cmd.Run()
+	// -Sta and -WindowStyle Hidden instead of CREATE_NO_WINDOW: COM automation
+	// (WScript.Shell) requires a proper STA message pump which CREATE_NO_WINDOW
+	// can prevent in a GUI-subsystem host process.
+	cmd := exec.Command("powershell.exe",
+		"-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+		"-Command", script,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("shortcut: %w: %s", err, out)
+	}
+	return nil
 }
 
 func (a *App) LaunchAndClose() {
