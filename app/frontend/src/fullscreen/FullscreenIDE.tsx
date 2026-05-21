@@ -334,6 +334,9 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       setTotalLines(editor.getModel()?.getLineCount() ?? 0)
     })
 
+    // Ctrl+S inside Monaco — window listener never fires because Monaco stops propagation
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { saveFile() })
+
     const dom = editor.getDomNode()
     if (dom) {
       dom.addEventListener('wheel', (e: WheelEvent) => {

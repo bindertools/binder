@@ -154,8 +154,11 @@ function tabReducer(state: TabState, action: TabAction): TabState {
 
     case 'open-tab': {
       // Generic singleton-style tab (ports, perf, plugins, notepad, git, claude, etc.)
-      const existing = state.tabs.find(t => t.type === action.tabType)
-      if (existing) return { ...state, activeId: existing.id }
+      // fullscreen (/fs) tabs are NOT singletons — each invocation opens its own tab at its own cwd
+      if (action.tabType !== 'fullscreen') {
+        const existing = state.tabs.find(t => t.type === action.tabType)
+        if (existing) return { ...state, activeId: existing.id }
+      }
       const tab: Tab = {
         id: nextId(),
         type: action.tabType as any,
