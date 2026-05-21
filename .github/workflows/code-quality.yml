@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,9 +42,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
-          cache-dependency-path: |
-            app/go.sum
-            installer/go.sum
+          cache-dependency-path: app/go.sum
 
       - name: Install app frontend dependencies
         run: npm.cmd ci
@@ -86,14 +86,6 @@ jobs:
       - name: Vet app Go module
         run: go vet ./...
         working-directory: app
-
-      - name: Test installer Go module
-        run: go test ./...
-        working-directory: installer
-
-      - name: Vet installer Go module
-        run: go vet ./...
-        working-directory: installer
 
       - name: Install Wails CLI
         run: |

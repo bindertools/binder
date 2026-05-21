@@ -24,6 +24,16 @@ jobs:
   codeql:
     runs-on: windows-latest
     timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
     env:
       GOCACHE: ${{ github.workspace }}\.cache\go-build
 
@@ -34,50 +44,50 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
-          languages: go,javascript-typescript
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Set up Go
+        if: matrix.language == 'go'
         uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
-          cache-dependency-path: |
-            app/go.sum
-            installer/go.sum
-
-      - name: Install app frontend dependencies
-        run: npm.cmd ci
-        working-directory: app/frontend
-
-      - name: Install installer frontend dependencies
-        run: npm.cmd ci
-        working-directory: installer/frontend
-
-      - name: Build app frontend
-        run: npm.cmd run build
-        working-directory: app/frontend
-
-      - name: Build installer frontend
-        run: npm.cmd run build
-        working-directory: installer/frontend
+          cache-dependency-path: app/go.sum
 
       - name: Build app Go module for analysis
+        if: matrix.language == 'go'
         run: go build ./...
         working-directory: app
 
       - name: Build installer Go module for analysis
+        if: matrix.language == 'go'
         run: go build ./...
-        working-directory: installer
+        working-directory: installer/windows
+
+      - name: Set up Node.js
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install app frontend dependencies
+        if: matrix.language == 'javascript-typescript'
+        run: npm.cmd ci
+        working-directory: app/frontend
+
+      - name: Install installer frontend dependencies
+        if: matrix.language == 'javascript-typescript'
+        run: npm.cmd ci
+        working-directory: installer/frontend
 
       - name: Analyze with CodeQL
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

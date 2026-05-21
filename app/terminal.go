@@ -117,7 +117,7 @@ func (t *Terminal) prompt() string {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	// Optional timestamp â€” (hh:mm:ss)
+	// Optional timestamp — (hh:mm:ss)
 	if cfg.ShowTimestamps {
 		now := time.Now()
 		sb.WriteString(fmt.Sprintf("\x1b[38;5;246m(%02d:%02d:%02d)\x1b[0m ", now.Hour(), now.Minute(), now.Second()))
@@ -126,14 +126,14 @@ func (t *Terminal) prompt() string {
 	// Current directory
 	sb.WriteString("\x1b[38;5;75m" + dir + "\x1b[0m")
 
-	// Optional git branch â€” (branch-name) in orange
+	// Optional git branch — (branch-name) in orange
 	if cfg.GitRecognition.ShowGitBranch {
 		if branch := t.getGitBranch(); branch != "" {
 			sb.WriteString(" \x1b[38;5;214m(" + branch + ")\x1b[0m")
 		}
 	}
 
-	sb.WriteString(" \x1b[38;5;246mâ¯\x1b[0m ")
+	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")
 	return sb.String()
 }
 
@@ -164,7 +164,7 @@ func (t *Terminal) ExecuteCommand(line string) {
 	isSlash := strings.HasPrefix(raw, "/")
 	cmd := strings.TrimPrefix(raw, "/")
 
-	// Standard built-ins â€” work with or without a leading slash.
+	// Standard built-ins — work with or without a leading slash.
 	switch cmd {
 	case "cd":
 		t.builtinCD(parts[1:])
@@ -185,7 +185,7 @@ func (t *Terminal) ExecuteCommand(line string) {
 		return
 	}
 
-	// App-specific commands â€” require the "/" prefix.
+	// App-specific commands — require the "/" prefix.
 	if isSlash {
 		switch cmd {
 		case "themes":
@@ -370,7 +370,7 @@ func (t *Terminal) builtinThemes() {
 	var sb strings.Builder
 	sb.WriteString("\r\n\x1b[38;5;75mAvailable themes\x1b[0m\r\n")
 	for _, name := range availableThemes {
-		sb.WriteString("  \x1b[38;5;246mâ€¢\x1b[0m " + name + "\r\n")
+		sb.WriteString("  \x1b[38;5;246m•\x1b[0m " + name + "\r\n")
 	}
 	sb.WriteString("\r\n\x1b[38;5;246mTo apply: run \x1b[38;5;75m/config\x1b[38;5;246m and select from the theme dropdown\x1b[0m")
 	t.write(sb.String())
@@ -594,7 +594,7 @@ func (t *Terminal) builtinPack(args []string) {
 	if dryrun || len(entries) == 0 {
 		var total int64
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview â€” %d files\x1b[0m\r\n\r\n", len(entries)))
+		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview — %d files\x1b[0m\r\n\r\n", len(entries)))
 		for _, e := range entries {
 			total += e.Size
 			sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%s\x1b[0m  %s\r\n", pack.FormatBytes(e.Size), e.RelPath))
@@ -612,7 +612,7 @@ func (t *Terminal) builtinPack(args []string) {
 	zipName := dirName + ".zip"
 	zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
 
-	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %sâ€¦\x1b[0m", len(entries), zipName))
+	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %s…\x1b[0m", len(entries), zipName))
 	if err := pack.CreateZip(t.cwd, zipPath, entries); err != nil {
 		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
 	} else {
@@ -668,7 +668,7 @@ func (t *Terminal) builtinProblems() {
 		probDim   = "\x1b[38;5;246m"
 		probReset = "\x1b[0m"
 	)
-	t.write("\r\n" + probDim + "  scanningâ€¦" + probReset)
+	t.write("\r\n" + probDim + "  scanning…" + probReset)
 
 	result := problems.Scan(t.cwd)
 
@@ -696,7 +696,7 @@ func (t *Terminal) builtinProblems() {
 	if len(result.Items) == 0 {
 		label = "no issues"
 	}
-	t.write("\r\n" + probDim + "  opened problems tab â€” " + label + probReset)
+	t.write("\r\n" + probDim + "  opened problems tab — " + label + probReset)
 	t.write(t.prompt())
 }
 
@@ -747,7 +747,7 @@ func (t *Terminal) builtinPreview(args []string) {
 	case ".html", ".htm":
 		previewType = "html"
 	default:
-		t.write("\r\n\x1b[31mpreview: unsupported file type â€” use .md, .html, or a URL\x1b[0m")
+		t.write("\r\n\x1b[31mpreview: unsupported file type — use .md, .html, or a URL\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
@@ -767,7 +767,7 @@ func isPreviewURL(s string) bool {
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
 		return true
 	}
-	// host:PORT â€” second segment must be all digits
+	// host:PORT — second segment must be all digits
 	parts := strings.SplitN(s, ":", 2)
 	if len(parts) == 2 {
 		for _, c := range parts[1] {
