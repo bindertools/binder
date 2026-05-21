@@ -293,7 +293,7 @@ var (
 )
 
 func comCall(obj uintptr, slot int, args ...uintptr) uintptr {
-	vtbl := *(*[32]uintptr)(unsafe.Pointer(*(*uintptr)(unsafe.Pointer(obj))))
+	vtbl := *(*[32]uintptr)(unsafe.Pointer(*(**uintptr)(unsafe.Pointer(&obj))))
 	fn := vtbl[slot]
 	all := make([]uintptr, len(args)+1)
 	all[0] = obj
