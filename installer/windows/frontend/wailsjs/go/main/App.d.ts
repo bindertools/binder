@@ -5,6 +5,8 @@ export function CloseInstaller():Promise<void>;
 
 export function GetInstallDir():Promise<string>;
 
-export function Install(arg1:boolean,arg2:boolean):Promise<void>;
+export function GetReleases():Promise<Array<string>>;
+
+export function Install(arg1:string,arg2:boolean,arg3:boolean):Promise<void>;
 
 export function LaunchAndClose():Promise<void>;

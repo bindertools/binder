@@ -10,8 +10,12 @@ export function GetInstallDir() {
   return window['go']['main']['App']['GetInstallDir']();
 }
 
-export function Install(arg1, arg2) {
-  return window['go']['main']['App']['Install'](arg1, arg2);
+export function GetReleases() {
+  return window['go']['main']['App']['GetReleases']();
+}
+
+export function Install(arg1, arg2, arg3) {
+  return window['go']['main']['App']['Install'](arg1, arg2, arg3);
 }
 
 export function LaunchAndClose() {

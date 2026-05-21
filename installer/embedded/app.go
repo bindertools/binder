@@ -28,7 +28,10 @@ func (a *App) GetInstallDir() string {
 	return filepath.Join(local, "cmdIDE")
 }
 
-func (a *App) Install(createShortcut bool) error {
+// GetReleases returns an empty slice — the embedded installer bundles a fixed version.
+func (a *App) GetReleases() []string { return []string{} }
+
+func (a *App) Install(version string, createShortcut bool, installPlugins bool) error {
 	emit := func(pct int, msg string) {
 		wailsruntime.EventsEmit(a.ctx, "install:progress", pct, msg)
 		time.Sleep(100 * time.Millisecond)

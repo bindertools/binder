@@ -17,7 +17,7 @@ func main() {
 	err := wails.Run(&options.App{
 		Title:         "cmdIDE Installer",
 		Width:         460,
-		Height:        290,
+		Height:        330,
 		Frameless:     true,
 		DisableResize: true,
 		AssetServer:   &assetserver.Options{Assets: assets},

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +17,8 @@ import (
 )
 
 const (
-	releaseURL        = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-linux-amd64"
-	releaseURLPlugins = "https://github.com/Command-IDE/cmd-ide/releases/latest/download/cmdIDE-plugins-linux-amd64"
-	binaryName        = "cmdIDE"
+	githubRepo = "Command-IDE/cmd-ide"
+	binaryName = "cmdIDE"
 )
 
 type App struct{ ctx context.Context }
@@ -32,7 +32,51 @@ func (a *App) GetInstallDir() string {
 	return filepath.Join(home, ".local", "bin")
 }
 
-func (a *App) Install(createDesktopEntry bool, installPlugins bool) error {
+func (a *App) GetReleases() []string {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases", githubRepo)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "cmdIDE-installer")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var releases []struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil
+	}
+
+	tags := make([]string, 0, len(releases))
+	for _, r := range releases {
+		tags = append(tags, r.TagName)
+	}
+	return tags
+}
+
+func buildDownloadURL(version string, installPlugins bool) string {
+	base := fmt.Sprintf("https://github.com/%s/releases", githubRepo)
+	var filename string
+	if installPlugins {
+		filename = "cmdIDE-plugins-linux-amd64"
+	} else {
+		filename = "cmdIDE-linux-amd64"
+	}
+	if version == "" || version == "latest" {
+		return fmt.Sprintf("%s/latest/download/%s", base, filename)
+	}
+	return fmt.Sprintf("%s/download/%s/%s", base, version, filename)
+}
+
+func (a *App) Install(version string, createDesktopEntry bool, installPlugins bool) error {
 	emit := func(pct int, msg string) {
 		wailsruntime.EventsEmit(a.ctx, "install:progress", pct, msg)
 		time.Sleep(80 * time.Millisecond)
@@ -40,13 +84,9 @@ func (a *App) Install(createDesktopEntry bool, installPlugins bool) error {
 
 	emit(5, "Preparing…")
 	installDir := a.GetInstallDir()
+	url := buildDownloadURL(version, installPlugins)
 
-	url := releaseURL
-	if installPlugins {
-		url = releaseURLPlugins
-	}
-
-	emit(10, "Fetching latest release…")
+	emit(10, "Fetching release…")
 	data, err := downloadWithProgress(url, func(pct int) {
 		wailsruntime.EventsEmit(a.ctx, "install:progress", 10+pct*70/100, "Downloading…")
 	})
