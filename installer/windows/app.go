@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -133,13 +134,14 @@ func createDesktopShortcut(installDir, exe string) error {
 			`$l.Save()`,
 		exe, installDir,
 	)
-	// -Sta and -WindowStyle Hidden instead of CREATE_NO_WINDOW: COM automation
-	// (WScript.Shell) requires a proper STA message pump which CREATE_NO_WINDOW
-	// can prevent in a GUI-subsystem host process.
+	// HideWindow hides the console before it appears (STARTF_USESHOWWINDOW | SW_HIDE)
+	// without using CREATE_NO_WINDOW, so the STA message pump COM needs still works.
+	// -Sta ensures WScript.Shell gets a proper STA apartment.
 	cmd := exec.Command("powershell.exe",
-		"-Sta", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+		"-Sta", "-NoProfile", "-NonInteractive",
 		"-Command", script,
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("shortcut: %w: %s", err, out)

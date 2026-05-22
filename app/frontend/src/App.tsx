@@ -824,18 +824,6 @@ export default function App() {
 
         {/* Search bar + window controls */}
         <div className="app__header-controls" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-          <button
-            className="app__search-bar"
-            onClick={() => setSearchOpen(true)}
-            title="Search files and tabs (Ctrl+K)"
-          >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            <span className="app__search-bar-label">Search...</span>
-            <span className="app__search-bar-kbd">Ctrl K</span>
-          </button>
           {updateTag && (
             <button
               className="app__update-btn"
@@ -849,6 +837,18 @@ export default function App() {
               </svg>
             </button>
           )}
+          <button
+            className="app__search-bar"
+            onClick={() => setSearchOpen(true)}
+            title="Search files and tabs (Ctrl+K)"
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="app__search-bar-label">Search...</span>
+            <span className="app__search-bar-kbd">Ctrl K</span>
+          </button>
           <div className="app__wincontrols">
             <button className="wc-btn wc-min" onClick={WindowMinimise} aria-label="Minimise">
               <svg width="10" height="2" viewBox="0 0 10 2">

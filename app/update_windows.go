@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -48,9 +49,13 @@ func (a *App) PerformUpdate(version string) error {
 		tmpFile, exePath, exePath,
 	)
 	cmd := exec.Command("powershell.exe",
-		"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+		"-NoProfile", "-NonInteractive",
 		"-Command", script,
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW — never show a console
+		HideWindow:    true,
+	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("could not start update script: %w", err)
 	}
