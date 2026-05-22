@@ -7,7 +7,9 @@ import (
 )
 
 // AppVersion is injected at build time via:
-//   wails build -ldflags "-X 'main.AppVersion=v1.2.3'"
+//
+//	wails build -ldflags "-X 'main.AppVersion=v1.2.3'"
+//
 // Falls back to "dev" for local/untagged builds.
 var AppVersion = "dev"
 
