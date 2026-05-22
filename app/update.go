@@ -6,8 +6,10 @@ import (
 	"time"
 )
 
-// AppVersion is the current build version. Keep in sync with GitHub release tags.
-const AppVersion = "v1.0.0"
+// AppVersion is injected at build time via:
+//   wails build -ldflags "-X 'main.AppVersion=v1.2.3'"
+// Falls back to "dev" for local/untagged builds.
+var AppVersion = "dev"
 
 const githubUpdateRepo = "Command-IDE/cmd-ide"
 
