@@ -9,5 +9,12 @@
   "author": {
     "name": "Kris Powers",
     "email": ""
+  },
+  "info": {
+    "companyName": "Command IDE",
+    "productName": "Command IDE",
+    "productVersion": "1.0.0",
+    "copyright": "© Command IDE. All rights reserved.",
+    "comments": "The open-source IDE for serious developers."
   }
 }

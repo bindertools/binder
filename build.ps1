@@ -13,7 +13,8 @@ param(
     [switch]$InstallerOnly,
     [switch]$NoObfuscate,
     [switch]$NoUpx,
-    [switch]$NoArchive
+    [switch]$NoArchive,
+    [string]$Version = ''   # e.g. "v1.2.3" — injected into main.AppVersion at link time
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,7 +65,10 @@ Write-Host ''
 $baseTags  = if ($goOs -eq 'linux') { @('webkit2_41') } else { @() }
 $appTagStr = $baseTags -join ','
 
-$coreFlags = @('build', '-trimpath', '-ldflags', '-s -w')
+# Inject the release version string at link time so /version shows the real tag.
+$versionFlag = if ($Version) { "-s -w -X 'main.AppVersion=$Version'" } else { '-s -w' }
+
+$coreFlags = @('build', '-trimpath', '-ldflags', $versionFlag)
 if ($useObfuscate) { $coreFlags += '-obfuscated' }
 if ($useUpx)       { $coreFlags += '-upx' }
 

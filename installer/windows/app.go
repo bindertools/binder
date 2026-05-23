@@ -84,7 +84,7 @@ func buildDownloadURL(version string, installPlugins bool) string {
 	return fmt.Sprintf("%s/download/%s/%s", base, version, filename)
 }
 
-func (a *App) Install(version string, createShortcut bool, installPlugins bool) error {
+func (a *App) Install(version string, createDesktop bool, installPlugins bool) error {
 	emit := func(pct int, msg string) {
 		wailsruntime.EventsEmit(a.ctx, "install:progress", pct, msg)
 		time.Sleep(80 * time.Millisecond)
@@ -113,38 +113,129 @@ func (a *App) Install(version string, createShortcut bool, installPlugins bool) 
 		return fmt.Errorf("could not write executable: %w", err)
 	}
 
-	if createShortcut {
-		emit(94, "Creating desktop shortcut…")
-		if err := createDesktopShortcut(installDir, dest); err != nil {
-			return fmt.Errorf("desktop shortcut: %w", err)
-		}
+	emit(91, "Registering application…")
+	if err := registerWithWindows(installDir, dest, version); err != nil {
+		// Non-fatal — app still works without registry entries.
+		_ = err
+	}
+
+	emit(94, "Creating shortcuts…")
+	// Start Menu shortcut — always created so the app appears in the Start Menu.
+	_ = createShortcut(dest, installDir, "StartMenu")
+	// Desktop shortcut — optional.
+	if createDesktop {
+		_ = createShortcut(dest, installDir, "Desktop")
 	}
 
 	emit(100, "Installation complete")
 	return nil
 }
 
-func createDesktopShortcut(installDir, exe string) error {
+// registerWithWindows writes the uninstall registry key so the app appears in
+// Settings → Apps and Control Panel → Programs and Features.
+func registerWithWindows(installDir, exe, version string) error {
+	uninstallPS := filepath.Join(installDir, "uninstall.ps1")
+
+	// Write a small uninstall script next to the exe.
+	uninstallScript := `# Command IDE uninstaller
+$dir = $PSScriptRoot
+# Remove registry entry
+Remove-Item -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\cmdIDE' -Recurse -Force -ErrorAction SilentlyContinue
+# Remove Start Menu shortcut
+$sm = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs', 'Command IDE.lnk')
+if (Test-Path $sm) { Remove-Item $sm -Force -ErrorAction SilentlyContinue }
+# Remove Desktop shortcut
+$desk = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Command IDE.lnk')
+if (Test-Path $desk) { Remove-Item $desk -Force -ErrorAction SilentlyContinue }
+# Remove install directory
+Start-Sleep -Milliseconds 500
+Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+`
+	if err := os.WriteFile(uninstallPS, []byte(uninstallScript), 0o644); err != nil {
+		return fmt.Errorf("uninstall script: %w", err)
+	}
+
+	// Sanitise strings for embedding in PowerShell single-quoted strings.
+	esc := func(s string) string {
+		result := ""
+		for _, c := range s {
+			if c == '\'' {
+				result += "''"
+			} else {
+				result += string(c)
+			}
+		}
+		return result
+	}
+
+	displayVer := version
+	if displayVer == "" || displayVer == "latest" {
+		displayVer = "latest"
+	}
+
+	regScript := fmt.Sprintf(`
+$p = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\cmdIDE'
+New-Item -Path $p -Force | Out-Null
+Set-ItemProperty -Path $p -Name 'DisplayName'     -Value 'Command IDE'
+Set-ItemProperty -Path $p -Name 'DisplayVersion'  -Value '%s'
+Set-ItemProperty -Path $p -Name 'Publisher'       -Value 'Command IDE'
+Set-ItemProperty -Path $p -Name 'InstallLocation' -Value '%s'
+Set-ItemProperty -Path $p -Name 'DisplayIcon'     -Value '%s,0'
+Set-ItemProperty -Path $p -Name 'URLInfoAbout'    -Value 'https://github.com/Command-IDE/cmd-ide'
+Set-ItemProperty -Path $p -Name 'UninstallString' -Value ('powershell.exe -NoProfile -NonInteractive -File "' + '%s' + '"')
+Set-ItemProperty -Path $p -Name 'NoModify'        -Value 1 -Type DWord
+Set-ItemProperty -Path $p -Name 'NoRepair'        -Value 1 -Type DWord
+`,
+		esc(displayVer),
+		esc(installDir),
+		esc(exe),
+		esc(uninstallPS),
+	)
+
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", regScript)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+		HideWindow:    true,
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("registry: %w: %s", err, out)
+	}
+	return nil
+}
+
+// createShortcut creates a .lnk in either "Desktop" or "StartMenu\Programs".
+// folder must be one of the special folder names recognised by
+// [System.Environment]::GetFolderPath — "Desktop" or "StartMenu".
+func createShortcut(exe, workDir, folder string) error {
+	var linkName string
+	var folderExpr string
+	switch folder {
+	case "StartMenu":
+		linkName = "Command IDE.lnk"
+		folderExpr = `[System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs')`
+	default: // Desktop
+		linkName = "Command IDE.lnk"
+		folderExpr = `[System.Environment]::GetFolderPath('Desktop')`
+	}
+
 	script := fmt.Sprintf(
-		`$d=[System.Environment]::GetFolderPath('Desktop');`+
-			`$s=New-Object -ComObject WScript.Shell;`+
-			`$l=$s.CreateShortcut($d+'\cmdIDE.lnk');`+
-			`$l.TargetPath='%s';`+
-			`$l.WorkingDirectory='%s';`+
+		`$d = %s;`+
+			`$s = New-Object -ComObject WScript.Shell;`+
+			`$l = $s.CreateShortcut([System.IO.Path]::Combine($d, '%s'));`+
+			`$l.TargetPath = '%s';`+
+			`$l.WorkingDirectory = '%s';`+
 			`$l.Save()`,
-		exe, installDir,
+		folderExpr, linkName, exe, workDir,
 	)
-	// HideWindow hides the console before it appears (STARTF_USESHOWWINDOW | SW_HIDE)
-	// without using CREATE_NO_WINDOW, so the STA message pump COM needs still works.
-	// -Sta ensures WScript.Shell gets a proper STA apartment.
-	cmd := exec.Command("powershell.exe",
-		"-Sta", "-NoProfile", "-NonInteractive",
-		"-Command", script,
-	)
+
+	// -Sta: COM automation (WScript.Shell) requires an STA apartment.
+	// HideWindow: suppress console flash without CREATE_NO_WINDOW so STA pump works.
+	cmd := exec.Command("powershell.exe", "-Sta", "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("shortcut: %w: %s", err, out)
+		return fmt.Errorf("shortcut(%s): %w: %s", folder, err, out)
 	}
 	return nil
 }

@@ -49,7 +49,7 @@ jobs:
         run: go install mvdan.cc/garble@latest
 
       - name: Build
-        run: ./build.ps1 -NoUpx -NoArchive
+        run: ./build.ps1 -NoUpx -NoArchive -Version "${{ github.event.release.tag_name }}"
 
       - name: Verify outputs
         run: |
@@ -60,6 +60,54 @@ jobs:
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
+          }
+
+      # ── Self-sign with a CI-generated certificate ─────────────────────────────
+      # A self-signed Authenticode signature costs $0 and requires no external
+      # service. It moves the binaries from "unsigned" to "signed" which causes
+      # many AV engines (Defender included) to skip the deep heuristic pass that
+      # flags obfuscated code. The cert is created fresh each run inside the
+      # runner's certificate store — nothing is stored or transmitted externally.
+      # DigiCert's public timestamp server is used so the signature remains valid
+      # after the ephemeral cert's notional expiry.
+      - name: Self-sign executables
+        run: |
+          # Generate a 4096-bit RSA code-signing cert in the runner's user store
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=Command IDE, O=Command IDE, C=US" `
+            -KeyAlgorithm RSA `
+            -KeyLength 4096 `
+            -HashAlgorithm SHA256 `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddYears(10)
+
+          # Locate signtool.exe from the Windows SDK (always present on windows-latest)
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'x64' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          $files = @(
+            'app/build/bin/cmdIDE-windows-amd64.exe',
+            'app/build/bin/cmdIDE-plugins-windows-amd64.exe',
+            'app/build/bin/cmdIDE-installer-windows.exe'
+          )
+
+          foreach ($f in $files) {
+            # Sign with SHA-256 + free DigiCert timestamp so signature never expires
+            & $signtool sign `
+              /fd SHA256 `
+              /sha1 $cert.Thumbprint `
+              /t http://timestamp.digicert.com `
+              /d "Command IDE" `
+              /du "https://github.com/Command-IDE/cmd-ide" `
+              $f
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed on $f" }
+            Write-Host "  signed: $f" -ForegroundColor Green
           }
 
       - name: Upload workflow artifacts
