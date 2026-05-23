@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react'
-import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename } from '../../wailsjs/go/main/App'
+import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
+import DeleteConfirmDialog from './DeleteConfirmDialog'
 import FileIcon from './FileIcon'
 
 export interface FileNode {
@@ -18,24 +19,62 @@ interface Props {
   onRefresh: () => void
 }
 
+type CtxKind = 'file' | 'area'
+
 interface CtxState {
   x: number
   y: number
   node: FileNode
+  kind: CtxKind
 }
 
-const IconNewFile  = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6"/><path d="M9 2v4h4"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="6" y1="11" x2="10" y2="11"/></svg>
-const IconNewFolder = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/><line x1="8" y1="8" x2="8" y2="12"/><line x1="6" y1="10" x2="10" y2="10"/></svg>
-const IconRename    = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11.5 2.5z"/></svg>
-const IconCopyPath  = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M11 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h1"/></svg>
-const IconDelete    = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4,6 12,6"/><path d="M6 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><path d="M5 6l.6 7a1 1 0 0 0 1 .9h2.8a1 1 0 0 0 1-.9L11 6"/></svg>
+// ── Icons (area menu only) ────────────────────────────────────────────────────
+const IconNewFile = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6"/>
+    <path d="M9 2v4h4"/>
+    <line x1="8" y1="9" x2="8" y2="13"/>
+    <line x1="6" y1="11" x2="10" y2="11"/>
+  </svg>
+)
+
+const IconNewFolder = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/>
+    <line x1="8" y1="8" x2="8" y2="12"/>
+    <line x1="6" y1="10" x2="10" y2="10"/>
+  </svg>
+)
+
+const IconOpenFolder = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/>
+    <path d="M10.5 8.5l2 2-2 2"/>
+    <path d="M7 10.5h5"/>
+  </svg>
+)
+
+const IconRefresh = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 4.4 2.2"/>
+    <path d="M10 2h3.5V5.5"/>
+  </svg>
+)
+
+const IconCollapseAll = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 4h10M3 8h7M3 12h4"/>
+    <path d="M12 9l2 2-2 2"/>
+  </svg>
+)
 
 export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }: Props) {
-  const [expanded,   setExpanded]   = useState<Set<string>>(new Set())
-  const [ctx,        setCtx]        = useState<CtxState | null>(null)
-  const [renaming,   setRenaming]   = useState<string | null>(null)
-  const [renameVal,  setRenameVal]  = useState('')
-  const [dragOver,   setDragOver]   = useState<string | null>(null)
+  const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
+  const [ctx,          setCtx]          = useState<CtxState | null>(null)
+  const [renaming,     setRenaming]     = useState<string | null>(null)
+  const [renameVal,    setRenameVal]    = useState('')
+  const [dragOver,     setDragOver]     = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
   const dragSrc = useRef<string | null>(null)
 
   const toggle = useCallback((path: string) => {
@@ -46,10 +85,17 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     })
   }, [])
 
-  const openCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
+  // Right-click on a file/folder node
+  const openFileCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtx({ x: e.clientX, y: e.clientY, node })
+    setCtx({ x: e.clientX, y: e.clientY, node, kind: 'file' })
+  }, [])
+
+  // Right-click on empty tree area or header
+  const openAreaCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
+    e.preventDefault()
+    setCtx({ x: e.clientX, y: e.clientY, node, kind: 'area' })
   }, [])
 
   const startRename = useCallback((node: FileNode) => {
@@ -65,11 +111,17 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     onRefresh()
   }, [renameVal, onRefresh])
 
-  const handleDelete = useCallback(async (node: FileNode) => {
-    if (!confirm(`Delete "${node.name}"?`)) return
-    await ExplorerDelete(node.path)
+  // Opens the custom delete confirm dialog
+  const handleDelete = useCallback((node: FileNode) => {
+    setDeleteTarget(node)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return
+    await ExplorerDelete(deleteTarget.path)
+    setDeleteTarget(null)
     onRefresh()
-  }, [onRefresh])
+  }, [deleteTarget, onRefresh])
 
   const handleNewFile = useCallback(async (node: FileNode) => {
     const dir = node.isDir ? node.path : node.path.substring(0, node.path.lastIndexOf('/'))
@@ -93,17 +145,36 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     navigator.clipboard.writeText(node.path)
   }, [])
 
-  const buildMenu = useCallback((node: FileNode): ContextMenuItem[] => [
-    { label: 'New File',   icon: <IconNewFile />,   action: () => handleNewFile(node) },
-    { label: 'New Folder', icon: <IconNewFolder />, action: () => handleNewFolder(node) },
+  const handleReveal = useCallback((node: FileNode) => {
+    ExplorerReveal(node.path).catch(() => {})
+  }, [])
+
+  const collapseAll = useCallback(() => {
+    setExpanded(new Set())
+  }, [])
+
+  // ── File-node context menu — no icons ──────────────────────────────────────
+  const buildFileMenu = useCallback((node: FileNode): ContextMenuItem[] => [
+    { label: 'New File',   action: () => handleNewFile(node) },
+    { label: 'New Folder', action: () => handleNewFolder(node) },
     { divider: true },
-    { label: 'Rename',     icon: <IconRename />,    action: () => startRename(node) },
-    { label: 'Copy Path',  icon: <IconCopyPath />,  action: () => handleCopyPath(node) },
+    { label: 'Rename',     action: () => startRename(node) },
+    { label: 'Copy Path',  action: () => handleCopyPath(node) },
     { divider: true },
-    { label: 'Delete',     icon: <IconDelete />,    danger: true, action: () => handleDelete(node) },
+    { label: 'Delete',     danger: true, action: () => handleDelete(node) },
   ], [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete])
 
-  // ── drag and drop ────────────────────────────────────────────────────────────
+  // ── Empty-area context menu — with icons, acts on root dir ────────────────
+  const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [
+    { label: 'New File',         icon: <IconNewFile />,     action: () => handleNewFile(node) },
+    { label: 'New Folder',       icon: <IconNewFolder />,   action: () => handleNewFolder(node) },
+    { divider: true },
+    { label: 'Open in Explorer', icon: <IconOpenFolder />,  action: () => handleReveal(node) },
+    { label: 'Refresh',          icon: <IconRefresh />,     action: onRefresh },
+    { label: 'Collapse All',     icon: <IconCollapseAll />, action: collapseAll },
+  ], [handleNewFile, handleNewFolder, handleReveal, onRefresh, collapseAll])
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────
   const onDragStart = (e: React.DragEvent, node: FileNode) => {
     dragSrc.current = node.path
     e.dataTransfer.effectAllowed = 'move'
@@ -128,11 +199,11 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
 
   const onDragEnd = () => { dragSrc.current = null; setDragOver(null) }
 
-  // ── recursive tree node ──────────────────────────────────────────────────────
+  // ── Recursive tree node ───────────────────────────────────────────────────
   function renderNode(node: FileNode, depth: number): React.ReactNode {
-    const isOpen     = expanded.has(node.path)
-    const isSelected = node.path === selectedPath
-    const isDragTarget = dragOver === node.path
+    const isOpen        = expanded.has(node.path)
+    const isSelected    = node.path === selectedPath
+    const isDragTarget  = dragOver === node.path
     const isRenamingThis = renaming === node.path
 
     return (
@@ -140,7 +211,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
         <div
           className={[
             'fe-node',
-            isSelected  ? 'fe-node--selected'  : '',
+            isSelected   ? 'fe-node--selected' : '',
             isDragTarget ? 'fe-node--dragover'  : '',
           ].join(' ')}
           style={{ paddingLeft: `${depth * 14 + 8}px` }}
@@ -148,7 +219,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
             if (node.isDir) toggle(node.path)
             else onSelect(node)
           }}
-          onContextMenu={e => openCtx(e, node)}
+          onContextMenu={e => openFileCtx(e, node)}
           draggable
           onDragStart={e => onDragStart(e, node)}
           onDragOver={e => onDragOver(e, node)}
@@ -158,7 +229,8 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
         >
           <span className="fe-node__chevron">
             {node.isDir ? (
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
+                style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>
                 <path d="M2 1l4 3-4 3V1z"/>
               </svg>
             ) : null}
@@ -195,12 +267,16 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     return <div className="fe-empty">No directory open</div>
   }
 
+  const activeItems = ctx
+    ? ctx.kind === 'area' ? buildAreaMenu(ctx.node) : buildFileMenu(ctx.node)
+    : []
+
   return (
     <div className="fe-root">
-      {/* Root label */}
+      {/* Root label — area menu */}
       <div
         className="fe-header"
-        onContextMenu={e => openCtx(e, root)}
+        onContextMenu={e => openAreaCtx(e, root)}
       >
         <span className="fe-header__icon">
           <FileIcon name={root.name} ext="" isDir={true} isOpen={true} />
@@ -208,8 +284,11 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
         <span className="fe-header__name">{root.name.toUpperCase()}</span>
       </div>
 
-      {/* Tree */}
-      <div className="fe-tree">
+      {/* Tree — area menu on empty space */}
+      <div
+        className="fe-tree"
+        onContextMenu={e => openAreaCtx(e, root)}
+      >
         {root.children?.map(child => renderNode(child, 0))}
       </div>
 
@@ -218,8 +297,18 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
         <ContextMenu
           x={ctx.x}
           y={ctx.y}
-          items={buildMenu(ctx.node)}
+          items={activeItems}
           onClose={() => setCtx(null)}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          name={deleteTarget.name}
+          isDir={deleteTarget.isDir}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"terminal-ide/config"
@@ -102,6 +103,20 @@ func (a *App) ExplorerDelete(path string) error {
 
 func (a *App) ExplorerMove(src string, dest string) error {
 	return a.explorer.MoveFile(src, dest)
+}
+
+func (a *App) ExplorerReveal(path string) error {
+	native := filepath.FromSlash(path)
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", native)
+	case "darwin":
+		cmd = exec.Command("open", native)
+	default:
+		cmd = exec.Command("xdg-open", native)
+	}
+	return cmd.Start()
 }
 
 // ─── Terminal management ──────────────────────────────────────────────────────

@@ -46,6 +46,10 @@ export function ExplorerMove(arg1, arg2) {
   return window['go']['main']['App']['ExplorerMove'](arg1, arg2);
 }
 
+export function ExplorerReveal(arg1) {
+  return window['go']['main']['App']['ExplorerReveal'](arg1);
+}
+
 export function ExplorerOpen(arg1) {
   return window['go']['main']['App']['ExplorerOpen'](arg1);
 }

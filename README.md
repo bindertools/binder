@@ -17,15 +17,7 @@
 
 ---
 
-cmdIDE is a native desktop application built with [Wails](https://wails.io), [Go](https://go.dev), and [React](https://react.dev). It wraps your real shell in a multi-tab, session-restoring terminal, then layers on a Monaco-powered editor, live preview, database inspector, plugin system, and more — all in a single window, with no browser involved.
-
----
-
-## Screenshots
-
-> *Screenshots and a demo GIF will be added here.*
-
----
+Command IDE (CMD IDE) is a native desktop application built with [Wails](https://wails.io), [Go](https://go.dev), and [React](https://react.dev). It wraps your real shell in a multi-tab, session-restoring terminal, then layers on a Monaco-powered editor, live preview, database inspector, plugin system, and more — all in a single window, with no browser involved.
 
 ## Features
 

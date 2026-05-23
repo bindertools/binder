@@ -235,6 +235,75 @@
 .ctx-menu__icon { width: 16px; display: flex; align-items: center; justify-content: center; opacity: 0.75; flex-shrink: 0; }
 .ctx-menu__divider { height: 1px; background: var(--ide-border-lo); margin: 3px 4px; }
 
+/* ── Delete confirmation dialog ──────────────────────────────────────────────── */
+.del-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.del-dialog {
+  background: var(--ide-bg-alt);
+  border: 1px solid var(--ide-border-lo);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.3);
+  padding: 20px 22px 16px;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+}
+
+.del-dialog__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ide-text-hi);
+  margin-bottom: 10px;
+}
+
+.del-dialog__body {
+  font-size: 12.5px;
+  color: var(--ide-fg);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+
+.del-dialog__warn { color: #e6a817; }
+.del-dialog__note { color: var(--ide-text-lo); }
+
+.del-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.del-dialog__btn {
+  padding: 5px 16px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: background 0.12s;
+}
+
+.del-dialog__btn--cancel {
+  background: var(--ide-bg-hi);
+  color: var(--ide-fg);
+  border: 1px solid var(--ide-border-lo);
+}
+.del-dialog__btn--cancel:hover { background: var(--ide-border-lo); }
+
+.del-dialog__btn--delete {
+  background: rgba(255, 108, 107, 0.18);
+  color: #ff6c6b;
+  border: 1px solid rgba(255, 108, 107, 0.35);
+}
+.del-dialog__btn--delete:hover { background: rgba(255, 108, 107, 0.32); }
+
 /* ── Editor area (column: panes-row + status bar) ─────────────────────────────── */
 .ide-editor-area {
   display: flex;
