@@ -95,7 +95,6 @@ export default function Preview({ previewType, src, path }: Props) {
             ref={iframeRef}
             className="preview-iframe"
             src={src}
-            sandbox="allow-scripts allow-forms allow-modals"
             title="URL Preview"
           />
         )}
