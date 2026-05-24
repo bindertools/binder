@@ -4,14 +4,12 @@
 # Flags:
 #   -AppOnly        build only base + plugins, skip installer
 #   -InstallerOnly  build only the installer
-#   -NoObfuscate    skip garble even if installed
 #   -NoUpx          skip UPX even if installed
 #   -NoArchive      produce binaries but skip archive creation
 
 param(
     [switch]$AppOnly,
     [switch]$InstallerOnly,
-    [switch]$NoObfuscate,
     [switch]$NoUpx,
     [switch]$NoArchive,
     [string]$Version = ''   # e.g. "v1.2.3" — injected into main.AppVersion at link time
@@ -50,14 +48,11 @@ $binDir = Join-Path (Join-Path (Join-Path $root 'app') 'build') 'bin'
 New-Item -Force -ItemType Directory $binDir | Out-Null
 
 # -- Optional tool detection ---------------------------------------------------
-$hasGarble    = $null -ne (Get-Command garble -ErrorAction SilentlyContinue)
-$hasUpx       = $null -ne (Get-Command upx    -ErrorAction SilentlyContinue)
-$useObfuscate = $hasGarble -and -not $NoObfuscate
-$useUpx       = $hasUpx -and -not $NoUpx -and ($goOs -ne 'darwin')
+$hasUpx = $null -ne (Get-Command upx -ErrorAction SilentlyContinue)
+$useUpx = $hasUpx -and -not $NoUpx -and ($goOs -ne 'darwin')
 
 Write-Host ''
 Write-Host "  Platform     : $goOs / $goArch" -ForegroundColor DarkGray
-Write-Host "  Obfuscation  : $(if ($useObfuscate) { 'garble (enabled)' } else { '-s -w strip only' })" -ForegroundColor DarkGray
 Write-Host "  UPX packing  : $(if ($useUpx) { 'enabled' } elseif ($goOs -eq 'darwin') { 'skipped (macOS codesign)' } else { 'upx not found' })" -ForegroundColor DarkGray
 Write-Host ''
 
@@ -69,15 +64,13 @@ $appTagStr = $baseTags -join ','
 $versionFlag = if ($Version) { "-s -w -X 'main.AppVersion=$Version'" } else { '-s -w' }
 
 $coreFlags = @('build', '-trimpath', '-ldflags', $versionFlag)
-if ($useObfuscate) { $coreFlags += '-obfuscated' }
-if ($useUpx)       { $coreFlags += '-upx' }
+if ($useUpx) { $coreFlags += '-upx' }
 
 $appFlags    = if ($appTagStr) { $coreFlags + @('-tags', $appTagStr) } else { $coreFlags }
 $pluginFlags = $appFlags
 
 $instFlags = @('build', '-trimpath', '-ldflags', '-s -w')
-if ($useObfuscate) { $instFlags += '-obfuscated' }
-if ($appTagStr)    { $instFlags += @('-tags', $appTagStr) }
+if ($appTagStr) { $instFlags += @('-tags', $appTagStr) }
 
 # -- Artifact names ------------------------------------------------------------
 $baseName         = "cmdIDE-$goOs-$goArch$binExt"

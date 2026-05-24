@@ -12,7 +12,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # Three jobs run in parallel — each native runner builds for its own OS.
-# build.ps1 handles obfuscation and symbol stripping.
+# build.ps1 handles symbol stripping.
 
 jobs:
 
@@ -45,9 +45,6 @@ jobs:
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
           Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install garble (obfuscation)
-        run: go install mvdan.cc/garble@latest
-
       - name: Build
         run: ./build.ps1 -NoUpx -NoArchive -Version "${{ github.event.release.tag_name }}"
 
@@ -65,8 +62,8 @@ jobs:
       # ── Self-sign with a CI-generated certificate ─────────────────────────────
       # A self-signed Authenticode signature costs $0 and requires no external
       # service. It moves the binaries from "unsigned" to "signed" which causes
-      # many AV engines (Defender included) to skip the deep heuristic pass that
-      # flags obfuscated code. The cert is created fresh each run inside the
+      # many AV engines (Defender included) to skip the heuristic pass that
+      # flags unfamiliar binaries. The cert is created fresh each run inside the
       # runner's certificate store — nothing is stored or transmitted externally.
       # DigiCert's public timestamp server is used so the signature remains valid
       # after the ephemeral cert's notional expiry.
@@ -158,9 +155,6 @@ jobs:
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
           Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install garble (obfuscation)
-        run: go install mvdan.cc/garble@latest
-
       # macOS produces .app bundles (directories) — zip is required for distribution.
       # UPX is skipped as it breaks codesign/Gatekeeper.
 
@@ -232,9 +226,6 @@ jobs:
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
           Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install garble (obfuscation)
-        run: go install mvdan.cc/garble@latest
 
       - name: Build
         run: pwsh ./build.ps1 -NoUpx -NoArchive
