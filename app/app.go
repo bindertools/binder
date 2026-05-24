@@ -42,6 +42,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	config.Init()
 	a.explorer.SetContext(ctx)
+	go cleanupAfterUpdate() // remove .old / .update left by the rename-based updater
 }
 
 func (a *App) domReady(ctx context.Context) {

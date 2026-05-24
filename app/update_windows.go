@@ -9,13 +9,17 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// PerformUpdate downloads the requested version, spawns a PowerShell script
-// to replace the running exe after it exits, then quits the app.
+// PerformUpdate downloads the requested version, atomically replaces the
+// running exe using Go file renames (no child process, no PowerShell), then
+// launches the new binary and quits.
+//
+// Windows allows renaming a running exe; the file stays open by handle while
+// the process runs, so the rename succeeds and the new exe can take the name.
+// The .old file is cleaned up on the next launch by cleanupAfterUpdate.
 func (a *App) PerformUpdate(version string) error {
 	filename := "cmdIDE-windows-amd64.exe"
 	var downloadURL string
@@ -36,33 +40,49 @@ func (a *App) PerformUpdate(version string) error {
 		return fmt.Errorf("could not determine executable path: %w", err)
 	}
 
-	tmpFile := os.TempDir() + `\cmdIDE_update.exe`
-	if err := downloadUpdateFile(downloadURL, tmpFile); err != nil {
+	// Download alongside the exe (same volume = rename is always atomic).
+	// Use a non-exe extension so Defender doesn't quarantine it on write.
+	tmpPath := exePath + ".update"
+	if err := downloadUpdateFile(downloadURL, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	// PowerShell: wait briefly for the process to exit, replace the exe, relaunch.
-	script := fmt.Sprintf(
-		`Start-Sleep -Milliseconds 800; `+
-			`Copy-Item -Force '%s' '%s'; `+
-			`Start-Process '%s'`,
-		tmpFile, exePath, exePath,
-	)
-	cmd := exec.Command("powershell.exe",
-		"-NoProfile", "-NonInteractive",
-		"-Command", script,
-	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW — never show a console
-		HideWindow:    true,
+	// Rename current exe → .old (freeing the name), new file → current name.
+	oldPath := exePath + ".old"
+	_ = os.Remove(oldPath) // clean up any leftover from a prior update
+	if err := os.Rename(exePath, oldPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("could not move current exe: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("could not start update script: %w", err)
+	if err := os.Rename(tmpPath, exePath); err != nil {
+		_ = os.Rename(oldPath, exePath) // best-effort restore
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("could not install new exe: %w", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	// Launch the updated binary. It is a GUI (Wails) app — no console appears.
+	// DETACHED_PROCESS ensures it outlives this process cleanly.
+	cmd := exec.Command(exePath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000008} // DETACHED_PROCESS
+	if err := cmd.Start(); err != nil {
+		// Restore old binary so the user can still run the app.
+		_ = os.Rename(oldPath, exePath)
+		return fmt.Errorf("could not launch updated exe: %w", err)
+	}
+
 	wailsruntime.Quit(a.ctx)
 	return nil
+}
+
+// cleanupAfterUpdate removes <exe>.old left behind by the rename-based updater.
+func cleanupAfterUpdate() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(exe + ".old")
+	_ = os.Remove(exe + ".update") // remove any interrupted download
 }
 
 func downloadUpdateFile(url, dest string) error {
