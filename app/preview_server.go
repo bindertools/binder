@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strings"
 	"sync"
 )
 
@@ -62,8 +64,48 @@ func previewFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	baseDir, err := os.Getwd()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	baseDir, err = filepath.Abs(filepath.Clean(baseDir))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	baseDirCanonical, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	resolvedPath, err := filepath.Abs(filepath.Clean(fsPath))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	resolvedPathCanonical, err := filepath.EvalSymlinks(resolvedPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	relPath, err := filepath.Rel(baseDirCanonical, resolvedPathCanonical)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Disable directory listings — serve only files
-	http.ServeFile(w, r, fsPath)
+	http.ServeFile(w, r, resolvedPathCanonical)
 }
 
 // localFileURL converts an absolute OS path to the URL that the local preview
