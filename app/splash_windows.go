@@ -4,9 +4,10 @@ package main
 
 import (
 	_ "embed"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -65,7 +66,6 @@ var (
 	_gdi32    = windows.NewLazySystemDLL("gdi32.dll")
 	_kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	_dwmapi   = windows.NewLazySystemDLL("dwmapi.dll")
-	_shlwapi  = windows.NewLazySystemDLL("shlwapi.dll")
 	_gdiplus  = windows.NewLazySystemDLL("gdiplus.dll")
 
 	// user32
@@ -104,18 +104,15 @@ var (
 	// dwmapi
 	_procDwmSetWindowAttribute = _dwmapi.NewProc("DwmSetWindowAttribute")
 
-	// shlwapi — creates an IStream over a memory buffer (no COM init needed)
-	_procSHCreateMemStream = _shlwapi.NewProc("SHCreateMemStream")
-
 	// gdiplus
-	_procGdiplusStartup             = _gdiplus.NewProc("GdiplusStartup")
-	_procGdiplusShutdown            = _gdiplus.NewProc("GdiplusShutdown")
-	_procGdipCreateBitmapFromStream = _gdiplus.NewProc("GdipCreateBitmapFromStream")
-	_procGdipCreateFromHDC          = _gdiplus.NewProc("GdipCreateFromHDC")
-	_procGdipDrawImageRectI         = _gdiplus.NewProc("GdipDrawImageRectI")
-	_procGdipSetInterpolationMode   = _gdiplus.NewProc("GdipSetInterpolationMode")
-	_procGdipDeleteGraphics         = _gdiplus.NewProc("GdipDeleteGraphics")
-	_procGdipDisposeImage           = _gdiplus.NewProc("GdipDisposeImage")
+	_procGdiplusStartup           = _gdiplus.NewProc("GdiplusStartup")
+	_procGdiplusShutdown          = _gdiplus.NewProc("GdiplusShutdown")
+	_procGdipLoadImageFromFile    = _gdiplus.NewProc("GdipLoadImageFromFile")
+	_procGdipCreateFromHDC        = _gdiplus.NewProc("GdipCreateFromHDC")
+	_procGdipDrawImageRectI       = _gdiplus.NewProc("GdipDrawImageRectI")
+	_procGdipSetInterpolationMode = _gdiplus.NewProc("GdipSetInterpolationMode")
+	_procGdipDeleteGraphics       = _gdiplus.NewProc("GdipDeleteGraphics")
+	_procGdipDisposeImage         = _gdiplus.NewProc("GdipDisposeImage")
 )
 
 // ─── Win32 struct definitions ────────────────────────────────────────────────
@@ -194,18 +191,6 @@ func init() {
 		ret, _, _ := _procDefWindowProcW.Call(hwnd, msg, wParam, lParam)
 		return ret
 	})
-}
-
-// ─── COM helper ───────────────────────────────────────────────────────────────
-
-// _comRelease calls IUnknown::Release() on a COM object via its vtable.
-func _comRelease(p uintptr) {
-	if p == 0 {
-		return
-	}
-	vtbl := *(*uintptr)(unsafe.Pointer(p))
-	relFn := *(*uintptr)(unsafe.Pointer(vtbl + 2*8)) // vtable[2] = Release
-	syscall.Syscall(relFn, 1, p, 0, 0)
 }
 
 // ─── Painting helpers ─────────────────────────────────────────────────────────
@@ -321,15 +306,19 @@ func showSplash() {
 			0,
 		)
 
-		// Pre-load the banner bitmap so WM_PAINT doesn't re-decode it each time.
+		// Pre-load the banner bitmap via a temp file so WM_PAINT doesn't
+		// re-decode on every frame. Using GdipLoadImageFromFile avoids the
+		// IStream/COM pattern that go vet flags as unsafe pointer misuse.
 		if len(_splashBanner) > 0 {
-			stream, _, _ := _procSHCreateMemStream.Call(
-				uintptr(unsafe.Pointer(&_splashBanner[0])),
-				uintptr(len(_splashBanner)),
-			)
-			if stream != 0 {
-				_procGdipCreateBitmapFromStream.Call(stream, uintptr(unsafe.Pointer(&_splashBitmap)))
-				_comRelease(stream)
+			tmp := filepath.Join(os.TempDir(), "cmdide_splash_banner.png")
+			if os.WriteFile(tmp, _splashBanner, 0600) == nil {
+				pngPath, _ := windows.UTF16PtrFromString(tmp)
+				_procGdipLoadImageFromFile.Call(
+					uintptr(unsafe.Pointer(pngPath)),
+					uintptr(unsafe.Pointer(&_splashBitmap)),
+				)
+				runtime.KeepAlive(pngPath)
+				os.Remove(tmp)
 			}
 		}
 
