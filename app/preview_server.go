@@ -76,20 +76,32 @@ func previewFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	baseDirCanonical, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
 	resolvedPath, err := filepath.Abs(filepath.Clean(fsPath))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	basePrefix := baseDir + string(os.PathSeparator)
-	if resolvedPath != baseDir && !strings.HasPrefix(resolvedPath, basePrefix) {
+	resolvedPathCanonical, err := filepath.EvalSymlinks(resolvedPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	basePrefix := baseDirCanonical + string(os.PathSeparator)
+	if resolvedPathCanonical != baseDirCanonical && !strings.HasPrefix(resolvedPathCanonical, basePrefix) {
 		http.NotFound(w, r)
 		return
 	}
 
 	// Disable directory listings — serve only files
-	http.ServeFile(w, r, resolvedPath)
+	http.ServeFile(w, r, resolvedPathCanonical)
 }
 
 // localFileURL converts an absolute OS path to the URL that the local preview
