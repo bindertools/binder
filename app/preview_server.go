@@ -94,8 +94,12 @@ func previewFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePrefix := baseDirCanonical + string(os.PathSeparator)
-	if resolvedPathCanonical != baseDirCanonical && !strings.HasPrefix(resolvedPathCanonical, basePrefix) {
+	relPath, err := filepath.Rel(baseDirCanonical, resolvedPathCanonical)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 		http.NotFound(w, r)
 		return
 	}
