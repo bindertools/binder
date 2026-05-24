@@ -2,6 +2,6 @@
 
 package main
 
-func showSplash()  {}
-func closeSplash() {}
+func showSplash()   {}
+func closeSplash()  {}
 func bringToFront() {}

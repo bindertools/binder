@@ -32,25 +32,25 @@ var _splashBanner []byte
 // ─── Win32 constants ─────────────────────────────────────────────────────────
 
 const (
-	_WS_POPUP      = 0x80000000
-	_WS_VISIBLE    = 0x10000000
-	_WM_DESTROY    = 0x0002
-	_WM_CLOSE      = 0x0010
-	_WM_PAINT      = 0x000F
-	_WM_TIMER      = 0x0113
-	_WM_ERASEBKGND = 0x0014
-	_WM_NCHITTEST  = 0x0084
-	_HTCAPTION     = 2
-	_SW_SHOW       = 5
-	_TRANSPARENT   = 1
-	_DT_CENTER     = 0x00000001
-	_DT_VCENTER    = 0x00000004
-	_DT_SINGLELINE = 0x00000020
-	_FW_NORMAL     = 400
-	_DEFAULT_CHARSET    = 1
-	_CLEARTYPE_QUALITY  = 5
-	_VARIABLE_PITCH     = 2
-	_FF_SWISS           = 0x20
+	_WS_POPUP          = 0x80000000
+	_WS_VISIBLE        = 0x10000000
+	_WM_DESTROY        = 0x0002
+	_WM_CLOSE          = 0x0010
+	_WM_PAINT          = 0x000F
+	_WM_TIMER          = 0x0113
+	_WM_ERASEBKGND     = 0x0014
+	_WM_NCHITTEST      = 0x0084
+	_HTCAPTION         = 2
+	_SW_SHOW           = 5
+	_TRANSPARENT       = 1
+	_DT_CENTER         = 0x00000001
+	_DT_VCENTER        = 0x00000004
+	_DT_SINGLELINE     = 0x00000020
+	_FW_NORMAL         = 400
+	_DEFAULT_CHARSET   = 1
+	_CLEARTYPE_QUALITY = 5
+	_VARIABLE_PITCH    = 2
+	_FF_SWISS          = 0x20
 	_DWMWA_CORNER_PREF = 33
 	_DWMWCP_ROUND      = 2
 
