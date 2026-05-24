@@ -785,7 +785,7 @@ func isPreviewURL(s string) bool {
 func (t *Terminal) execExternal(line string) {
 	cmd := ps.BuildShellCmdWithPref(line, config.Get().PreferredShell)
 	cmd.Dir = t.cwd
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(liveEnv(),
 		"TERM=xterm-256color",
 		"COLORTERM=truecolor",
 		"FORCE_COLOR=1",    // Node.js / chalk
