@@ -28,45 +28,6 @@ interface CtxState {
   kind: CtxKind
 }
 
-// ── Icons (area menu only) ────────────────────────────────────────────────────
-const IconNewFile = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6"/>
-    <path d="M9 2v4h4"/>
-    <line x1="8" y1="9" x2="8" y2="13"/>
-    <line x1="6" y1="11" x2="10" y2="11"/>
-  </svg>
-)
-
-const IconNewFolder = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/>
-    <line x1="8" y1="8" x2="8" y2="12"/>
-    <line x1="6" y1="10" x2="10" y2="10"/>
-  </svg>
-)
-
-const IconOpenFolder = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M2 5a1 1 0 0 1 1-1h3.586a1 1 0 0 1 .707.293L8.414 5.4A1 1 0 0 0 9.121 5.7H13a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"/>
-    <path d="M10.5 8.5l2 2-2 2"/>
-    <path d="M7 10.5h5"/>
-  </svg>
-)
-
-const IconRefresh = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5a5.5 5.5 0 0 1 4.4 2.2"/>
-    <path d="M10 2h3.5V5.5"/>
-  </svg>
-)
-
-const IconCollapseAll = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 4h10M3 8h7M3 12h4"/>
-    <path d="M12 9l2 2-2 2"/>
-  </svg>
-)
 
 export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }: Props) {
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
@@ -164,14 +125,14 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     { label: 'Delete',     danger: true, action: () => handleDelete(node) },
   ], [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete])
 
-  // ── Empty-area context menu — with icons, acts on root dir ────────────────
+  // ── Empty-area context menu — acts on root dir ─────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [
-    { label: 'New File',         icon: <IconNewFile />,     action: () => handleNewFile(node) },
-    { label: 'New Folder',       icon: <IconNewFolder />,   action: () => handleNewFolder(node) },
+    { label: 'New File',         action: () => handleNewFile(node) },
+    { label: 'New Folder',       action: () => handleNewFolder(node) },
     { divider: true },
-    { label: 'Open in Explorer', icon: <IconOpenFolder />,  action: () => handleReveal(node) },
-    { label: 'Refresh',          icon: <IconRefresh />,     action: onRefresh },
-    { label: 'Collapse All',     icon: <IconCollapseAll />, action: collapseAll },
+    { label: 'Open in Explorer', action: () => handleReveal(node) },
+    { label: 'Refresh',          action: onRefresh },
+    { label: 'Collapse All',     action: collapseAll },
   ], [handleNewFile, handleNewFolder, handleReveal, onRefresh, collapseAll])
 
   // ── Drag and drop ─────────────────────────────────────────────────────────
