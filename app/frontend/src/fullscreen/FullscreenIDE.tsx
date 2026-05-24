@@ -639,25 +639,34 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     if (path) closeFiles([path])
   }, [closeFiles])
 
+  const menuBar = (
+    <MenuBar
+      onSave={saveFile}
+      onCloseActive={closeActive}
+      onCloseAll={() => closeFiles(openFiles.map(f => f.path))}
+      onToggleExplorer={() => setCollapsed(c => !c)}
+      onToggleSplit={() => setSplitMode(s => !s)}
+      onZoomIn={zoomIn}
+      onZoomOut={zoomOut}
+      onResetZoom={resetZoom}
+      getEditor={getEditor}
+    />
+  )
+
+  // MenuBar sits above the editor area only — aligned with the code, not the explorer.
+  const mainCol = (
+    <div className="ide-main-col">
+      {menuBar}
+      {editorArea}
+    </div>
+  )
+
   return (
-    <div className="ide-root ide-root--col" style={themeVars}>
-      <MenuBar
-        onSave={saveFile}
-        onCloseActive={closeActive}
-        onCloseAll={() => closeFiles(openFiles.map(f => f.path))}
-        onToggleExplorer={() => setCollapsed(c => !c)}
-        onToggleSplit={() => setSplitMode(s => !s)}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onResetZoom={resetZoom}
-        getEditor={getEditor}
-      />
-      <div className="ide-body">
-        {explorerPos === 'left'
-          ? <>{explorerPanel}{explorerDivider}{editorArea}</>
-          : <>{editorArea}{explorerDivider}{explorerPanel}</>
-        }
-      </div>
+    <div className="ide-root" style={themeVars}>
+      {explorerPos === 'left'
+        ? <>{explorerPanel}{explorerDivider}{mainCol}</>
+        : <>{mainCol}{explorerDivider}{explorerPanel}</>
+      }
     </div>
   )
 }

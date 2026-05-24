@@ -10,19 +10,16 @@
   font-size: 13px;
   overflow: hidden;
   user-select: none;
-
-/* Column variant: menubar on top, then the horizontal body row below */
-&.ide-root--col {
-  flex-direction: column;
 }
 
-.ide-body {
+/* Column that holds the menu bar + editor area (everything to the right of explorer) */
+.ide-main-col {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
 }
 
 /* ── Resize divider ───────────────────────────────────────────────────────────── */
@@ -31,6 +28,16 @@
   flex-shrink: 0;
   background: var(--ide-border);
   cursor: col-resize;
+  position: relative;
+  transition: background 0.15s;
+
+  /* Wider invisible hit-zone so it's easy to grab */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0 -4px;
+    cursor: col-resize;
+  }
 }
 .ide-divider:hover { background: var(--ide-accent); }
 

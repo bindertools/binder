@@ -40,10 +40,6 @@ export default function MenuBar({
     if (ed) { ed.focus(); ed.trigger('menu', cmd, null) }
   }, [getEditor])
 
-  // Open a URL in the in-app preview tab
-  const openUrl = (url: string) =>
-    window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId: '' } }))
-
   // Close when clicking outside
   useEffect(() => {
     if (!open) return
@@ -130,30 +126,6 @@ export default function MenuBar({
         { kind: 'separator' },
         { kind: 'action', label: 'Go Back',             shortcut: 'Alt+←',        run: () => trigger('workbench.action.navigateBack') },
         { kind: 'action', label: 'Go Forward',          shortcut: 'Alt+→',        run: () => trigger('workbench.action.navigateForward') },
-      ],
-    },
-    {
-      label: 'Run',
-      items: [
-        { kind: 'action', label: 'Run in Terminal',     shortcut: 'F5',           run: () => {} },
-      ],
-    },
-    {
-      label: 'Terminal',
-      items: [
-        { kind: 'action', label: 'New Terminal',                                  run: () => {} },
-        { kind: 'action', label: 'Split Terminal',                                run: () => {} },
-        { kind: 'separator' },
-        { kind: 'action', label: 'Clear Terminal',                                run: () => {} },
-      ],
-    },
-    {
-      label: 'Help',
-      items: [
-        { kind: 'action', label: 'Documentation',                                 run: () => openUrl('https://github.com/Command-IDE/cmd-ide/wiki') },
-        { kind: 'action', label: 'GitHub Repository',                             run: () => openUrl('https://github.com/Command-IDE/cmd-ide') },
-        { kind: 'separator' },
-        { kind: 'action', label: 'Report Issue',                                  run: () => openUrl('https://github.com/Command-IDE/cmd-ide/issues') },
       ],
     },
   ]
