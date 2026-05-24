@@ -111,10 +111,15 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       const existing = state.tabs.find(t => t.type === 'preview' && t.previewPath === previewKey)
       if (existing) return { ...state, activeId: existing.id }
       const title = previewKey.replace(/\\/g, '/').split('/').pop() ?? previewKey
+      // For html type the Go side now sends a local server URL instead of raw
+      // content — prefer url when present, fall back to content for safety.
+      const previewSrc = payload.type === 'url'
+        ? payload.url!
+        : (payload.url ?? payload.content ?? '')
       const tab: Tab = {
         id: nextId(), type: 'preview', title,
         previewType: payload.type,
-        previewSrc: payload.type === 'url' ? payload.url! : payload.content!,
+        previewSrc,
         previewPath: previewKey,
         parentId: payload.terminalId,
       }

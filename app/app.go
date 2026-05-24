@@ -46,6 +46,11 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) domReady(ctx context.Context) {
+	// bringToFront MUST come first — our process still holds the foreground
+	// lock via the splash window at this point, so SetForegroundWindow succeeds.
+	// Closing the splash first would release that lock before we can use it.
+	bringToFront()
+	closeSplash()
 	wailsruntime.WindowExecJS(ctx, `
 		(function() {
 			window.addEventListener('keydown', function(e) {

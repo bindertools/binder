@@ -13,6 +13,7 @@ var assets embed.FS
 
 func main() {
 	initJumpList()
+	showSplash() // native window visible before WebView2 starts
 
 	app := NewApp()
 

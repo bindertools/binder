@@ -196,6 +196,34 @@ if (-not $InstallerOnly) {
     Ok "Ready     -> app/build/bin/ is clean"
 }
 
+# -- Splash banner (Windows only) ----------------------------------------------
+# Re-render the dark SVG lockup to a PNG so the native splash screen can embed it.
+if ($goOs -eq 'windows' -and -not $InstallerOnly) {
+    Step "Splash banner PNG"
+    $edgePath  = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+    $svgSrc    = Join-Path $appDir 'frontend\public\lockup-dark.svg'
+    $bannerDst = Join-Path $appDir 'build\windows\splash_banner.png'
+    $tmpSvg    = Join-Path $env:TEMP 'lockup_splash_build.svg'
+
+    # Recolour the background rect to match our splash (#0b0d0e -> #0d0d0d).
+    $svgText = (Get-Content $svgSrc -Raw) -replace 'rect width="720" height="240" fill="#0b0d0e"', 'rect width="720" height="240" fill="#0d0d0d"'
+    Set-Content $tmpSvg $svgText -Encoding UTF8
+
+    if (Test-Path $edgePath) {
+        # Build a plain file URI without nested quotes (avoids PS 5.1 parser quirks).
+        $tmpSvgUri = 'file:///' + $tmpSvg.Replace('\', '/')
+        & $edgePath --headless=new --disable-gpu "--screenshot=$bannerDst" --window-size=720,240 $tmpSvgUri | Out-Null
+        if (Test-Path $bannerDst) {
+            Ok "Banner    -> app/build/windows/splash_banner.png"
+        } else {
+            Warn "Edge render failed - using committed splash_banner.png"
+        }
+    } else {
+        Warn "Edge not found - using committed splash_banner.png"
+    }
+    Remove-Item $tmpSvg -ErrorAction SilentlyContinue
+}
+
 # -- 1/3  Base app -------------------------------------------------------------
 if (-not $InstallerOnly) {
     Step "1/3  Base app ($goOs/$goArch)"

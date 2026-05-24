@@ -7,8 +7,8 @@ type PreviewType = 'markdown' | 'html' | 'url'
 
 interface Props {
   previewType: PreviewType
-  src: string      // file content (md/html) or URL
-  path: string     // display label — file path or URL
+  src: string      // markdown content, local-server URL (html), or remote URL
+  path: string     // absolute file path or remote URL (used for dedup / label)
 }
 
 // ── icons ──────────────────────────────────────────────────────────────────
@@ -39,21 +39,35 @@ const RefreshIcon = () => (
   </svg>
 )
 
+// True when src is a URL (local file server or remote) rather than raw content.
+const isUrl = (s: string) => s.startsWith('http://') || s.startsWith('https://')
+
 export default function Preview({ previewType, src, path }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const displayLabel = previewType === 'url' ? src : path
+
+  // html type: Go now sends a local-server URL so assets resolve correctly.
+  // Fall back to srcDoc if for any reason src is raw HTML content.
+  const htmlIsUrl = previewType === 'html' && isUrl(src)
+
+  // Show just the filename for file-based types; full URL for remote urls.
+  const displayLabel = previewType === 'url'
+    ? src
+    : (path.replace(/\\/g, '/').split('/').pop() ?? path)
 
   const Icon = previewType === 'markdown' ? MdIcon
              : previewType === 'html'     ? HtmlIcon
              :                             WebIcon
 
   const handleRefresh = () => {
-    if (iframeRef.current) {
-      if (previewType === 'html') {
-        iframeRef.current.srcdoc = src
-      } else if (previewType === 'url') {
-        iframeRef.current.src = src
-      }
+    if (!iframeRef.current) return
+    if (previewType === 'html' && !htmlIsUrl) {
+      iframeRef.current.srcdoc = src       // raw content reload
+    } else {
+      // Force reload by blanking src then restoring — works for both
+      // local-server and remote URL iframes.
+      const cur = iframeRef.current.src
+      iframeRef.current.src = ''
+      iframeRef.current.src = cur
     }
   }
 
@@ -80,7 +94,18 @@ export default function Preview({ previewType, src, path }: Props) {
           </div>
         )}
 
-        {previewType === 'html' && (
+        {/* HTML via local file server — no sandbox, assets load normally */}
+        {previewType === 'html' && htmlIsUrl && (
+          <iframe
+            ref={iframeRef}
+            className="preview-iframe"
+            src={src}
+            title="HTML Preview"
+          />
+        )}
+
+        {/* HTML as raw content — sandboxed fallback */}
+        {previewType === 'html' && !htmlIsUrl && (
           <iframe
             ref={iframeRef}
             className="preview-iframe"

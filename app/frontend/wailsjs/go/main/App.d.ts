@@ -34,11 +34,11 @@ export function ExplorerGetTree():Promise<fullscreen.FileNode>;
 
 export function ExplorerMove(arg1:string,arg2:string):Promise<void>;
 
-export function ExplorerReveal(arg1:string):Promise<void>;
-
 export function ExplorerOpen(arg1:string):Promise<fullscreen.FileNode>;
 
 export function ExplorerRename(arg1:string,arg2:string):Promise<void>;
+
+export function ExplorerReveal(arg1:string):Promise<void>;
 
 export function ExplorerSaveFile(arg1:string,arg2:string):Promise<void>;
 

@@ -732,33 +732,47 @@ func (t *Terminal) builtinPreview(args []string) {
 	}
 	path = filepath.Clean(path)
 
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.write("\r\n\x1b[31mpreview: " + err.Error() + "\x1b[0m")
-		t.write(t.prompt())
-		return
-	}
-
 	ext := strings.ToLower(filepath.Ext(path))
-	var previewType string
 	switch ext {
 	case ".md", ".mdx":
-		previewType = "markdown"
+		// Markdown: read content and render client-side (no external assets needed).
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.write("\r\n\x1b[31mpreview: " + err.Error() + "\x1b[0m")
+			t.write(t.prompt())
+			return
+		}
+		t.write("\r\n\x1b[38;5;246mopening preview: " + filepath.Base(path) + "\x1b[0m")
+		wailsruntime.EventsEmit(t.ctx, "app:open-preview", map[string]string{
+			"type":       "markdown",
+			"path":       path,
+			"content":    string(content),
+			"terminalId": t.id,
+		})
+
 	case ".html", ".htm":
-		previewType = "html"
+		// HTML: serve via a local file server so relative CSS/JS/image links resolve
+		// correctly — the same behaviour as VS Code's Live Server.
+		url := localFileURL(path)
+		if url == "" {
+			t.write("\r\n\x1b[31mpreview: could not start local file server\x1b[0m")
+			t.write(t.prompt())
+			return
+		}
+		t.write("\r\n\x1b[38;5;246mopening preview: " + filepath.Base(path) + "\x1b[0m")
+		wailsruntime.EventsEmit(t.ctx, "app:open-preview", map[string]string{
+			"type":       "html",
+			"path":       path, // full path used as dedup key
+			"url":        url,  // local server URL rendered in the iframe
+			"terminalId": t.id,
+		})
+
 	default:
 		t.write("\r\n\x1b[31mpreview: unsupported file type — use .md, .html, or a URL\x1b[0m")
 		t.write(t.prompt())
 		return
 	}
 
-	t.write("\r\n\x1b[38;5;246mopening preview: " + filepath.Base(path) + "\x1b[0m")
-	wailsruntime.EventsEmit(t.ctx, "app:open-preview", map[string]string{
-		"type":       previewType,
-		"path":       path,
-		"content":    string(content),
-		"terminalId": t.id,
-	})
 	t.write(t.prompt())
 }
 
