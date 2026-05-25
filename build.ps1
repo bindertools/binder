@@ -224,6 +224,21 @@ if ($goOs -eq 'windows' -and -not $InstallerOnly) {
     Remove-Item $tmpSvg -ErrorAction SilentlyContinue
 }
 
+# -- Purge stale cross-platform npm lockfile (non-Windows) --------------------
+# package-lock.json is committed from Windows and only contains the Windows
+# Rollup native binary (@rollup/rollup-win32-x64-msvc).  On macOS/Linux, npm
+# honours the lockfile but silently skips optional deps that aren't listed —
+# Vite 7 then fails because it can't find the platform-specific native build.
+# Deleting the lockfile here lets Wails' "npm install" re-resolve it fresh and
+# pull in the correct @rollup/rollup-<platform> package automatically.
+if ($goOs -ne 'windows' -and -not $InstallerOnly) {
+    $lockFile = Join-Path $appDir 'frontend/package-lock.json'
+    if (Test-Path $lockFile) {
+        Remove-Item $lockFile -Force
+        Ok "Removed   -> frontend/package-lock.json (re-resolving for $goOs/$goArch)"
+    }
+}
+
 # -- 1/3  Base app -------------------------------------------------------------
 if (-not $InstallerOnly) {
     Step "1/3  Base app ($goOs/$goArch)"
