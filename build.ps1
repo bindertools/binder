@@ -159,15 +159,29 @@ function New-Archive {
     param([string]$srcPath, [string]$archiveName)
     if ($NoArchive) { return }
     $archivePath = Join-Path $binDir $archiveName
+    if (Test-Path $archivePath) { Remove-Item -Recurse -Force $archivePath }
+
     if ($archExt -eq '.tar.gz') {
+        # Linux: plain tar, run from $binDir so the archive has no leading path
         $leaf = Split-Path $srcPath -Leaf
         Push-Location $binDir
         & tar -czf $archiveName $leaf
         $code = $LASTEXITCODE
         Pop-Location
         if ($code -ne 0) { Fail "tar failed for $archiveName" }
+    } elseif ($goOs -eq 'darwin') {
+        # macOS: use ditto to produce a proper Finder-friendly zip that preserves
+        # .app bundle structure, symlinks (Frameworks/), permissions, and xattrs.
+        # Compress-Archive uses .NET ZipFile which silently corrupts app bundles.
+        $leaf   = Split-Path $srcPath -Leaf
+        $srcDir = Split-Path $srcPath -Parent
+        Push-Location $srcDir
+        & ditto -c -k --keepParent $leaf $archivePath
+        $code = $LASTEXITCODE
+        Pop-Location
+        if ($code -ne 0) { Fail "ditto failed for $archiveName" }
     } else {
-        if (Test-Path $archivePath) { Remove-Item -Force $archivePath }
+        # Windows: PowerShell Compress-Archive is fine for .exe files
         Compress-Archive -Path $srcPath -DestinationPath $archivePath
     }
     Ok "Archived  -> app/build/bin/$archiveName"
@@ -189,10 +203,16 @@ function Invoke-Wails {
 # This also ensures any OneDrive/Defender locks have cleared before we start.
 if (-not $InstallerOnly) {
     Step "Pre-clean  old app binaries"
-    Clear-OldBinary $baseName
-    Clear-OldBinary $pluginsName
-    # Also remove any leftover unnamed Wails output from a previous partial run.
-    Clear-OldBinary "cmdIDE$binExt"
+    if ($goOs -eq 'darwin') {
+        # On macOS, staged bundles keep their .app extension.
+        Clear-OldBinary "$baseName.app"
+        Clear-OldBinary "$pluginsName.app"
+        Clear-OldBinary 'cmdIDE.app'     # leftover Wails output from a prior run
+    } else {
+        Clear-OldBinary $baseName
+        Clear-OldBinary $pluginsName
+        Clear-OldBinary "cmdIDE$binExt"
+    }
     Ok "Ready     -> app/build/bin/ is clean"
 }
 
@@ -243,16 +263,42 @@ if ($goOs -ne 'windows' -and -not $InstallerOnly) {
 if (-not $InstallerOnly) {
     Step "1/3  Base app ($goOs/$goArch)"
     Invoke-Wails $appDir $appFlags @{ VITE_PLUGINS = '' } 'Base app'
-    Stage-Output $baseName
-    New-Archive  (Join-Path $binDir $baseName) $baseArchive
-    Ok "Binary    -> app/build/bin/$baseName"
+
+    if ($goOs -eq 'darwin') {
+        # Wails produces cmdIDE.app — archive it FIRST while it still has the
+        # .app name (ditto puts cmdIDE.app/ inside the zip, which macOS and our
+        # installer both expect).  Then rename to stage it so the plugins build
+        # can produce a fresh cmdIDE.app without a name clash.
+        $srcApp = Join-Path $binDir 'cmdIDE.app'
+        if (-not (Test-Path $srcApp)) { Fail 'Wails did not produce cmdIDE.app' }
+        New-Archive  $srcApp $baseArchive
+        $stageApp = Join-Path $binDir "$baseName.app"
+        if (Test-Path $stageApp) { Remove-Item -Recurse -Force $stageApp }
+        Rename-Item  $srcApp $stageApp
+        Ok "Binary    -> app/build/bin/$baseName.app"
+    } else {
+        Stage-Output $baseName
+        New-Archive  (Join-Path $binDir $baseName) $baseArchive
+        Ok "Binary    -> app/build/bin/$baseName"
+    }
 
 # -- 2/3  Plugins app ----------------------------------------------------------
     Step "2/3  Plugins app ($goOs/$goArch)"
     Invoke-Wails $appDir $pluginFlags @{ VITE_PLUGINS = 'true' } 'Plugins app'
-    Stage-Output $pluginsName
-    New-Archive  (Join-Path $binDir $pluginsName) $pluginsArchive
-    Ok "Binary    -> app/build/bin/$pluginsName"
+
+    if ($goOs -eq 'darwin') {
+        $srcApp = Join-Path $binDir 'cmdIDE.app'
+        if (-not (Test-Path $srcApp)) { Fail 'Wails did not produce cmdIDE.app (plugins)' }
+        New-Archive  $srcApp $pluginsArchive
+        $stageApp = Join-Path $binDir "$pluginsName.app"
+        if (Test-Path $stageApp) { Remove-Item -Recurse -Force $stageApp }
+        Rename-Item  $srcApp $stageApp
+        Ok "Binary    -> app/build/bin/$pluginsName.app"
+    } else {
+        Stage-Output $pluginsName
+        New-Archive  (Join-Path $binDir $pluginsName) $pluginsArchive
+        Ok "Binary    -> app/build/bin/$pluginsName"
+    }
 }
 
 if ($AppOnly) {
@@ -283,8 +329,10 @@ $instApp    = Join-Path $instBinDir 'cmdIDE-installer.app'
 $instDest   = Join-Path $binDir $installerName
 
 if ($goOs -eq 'darwin' -and (Test-Path $instApp)) {
-    if (Test-Path $instDest) { Remove-Item -Recurse -Force $instDest }
-    Copy-Item -Recurse $instApp $instDest
+    # Archive directly from the Wails build dir — ditto preserves the .app
+    # bundle structure so the zip contains a working cmdIDE-installer.app.
+    # We do NOT copy to binDir first; only the zip needs to land there.
+    New-Archive $instApp $installerArchive
 } elseif (Test-Path $instBin) {
     if (Test-Path $instDest) {
         if (-not (Remove-WithRetry $instDest)) {
@@ -292,12 +340,12 @@ if ($goOs -eq 'darwin' -and (Test-Path $instApp)) {
         }
     }
     Copy-Item -Force $instBin $instDest
+    New-Archive (Join-Path $binDir $installerName) $installerArchive
 } else {
     Fail "Installer binary not found in $instBinDir"
 }
 
-New-Archive (Join-Path $binDir $installerName) $installerArchive
-Ok "Binary    -> app/build/bin/$installerName"
+Ok "Binary    -> app/build/bin/$installerArchive"
 
 Write-Host ''
 Write-Host '  Build complete.' -ForegroundColor Green
