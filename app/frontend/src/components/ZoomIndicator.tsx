@@ -26,8 +26,6 @@ export default function ZoomIndicator({ enabled, defaultZoom = 1, onZoomChange }
   const stepIdx      = useRef(nearestStepIdx(defaultZoom))
   const defaultIdx   = useRef(nearestStepIdx(defaultZoom))
   const timer        = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Gate Ctrl+Scroll to one zoom step per 120 ms (mirrors Chrome's rate-limiting).
-  const lastScroll   = useRef(0)
   // Track Ctrl key state manually — WebView2 can strip e.ctrlKey from wheel events.
   const ctrlHeld     = useRef(false)
 
@@ -62,18 +60,18 @@ export default function ZoomIndicator({ enabled, defaultZoom = 1, onZoomChange }
     const onWheel = (e: WheelEvent) => {
       // Accept either the event's own ctrlKey flag OR our manually tracked state.
       if (!e.ctrlKey && !ctrlHeld.current) return
-      const now = Date.now()
-      if (now - lastScroll.current < 120) return   // one step per tick
-      lastScroll.current = now
-      show(e.deltaY < 0 ? zoomIn() : zoomOut())
+      // Block browser-level zoom unconditionally. Terminal and Editor each have
+      // their own non-passive Ctrl+Scroll handlers that zoom only themselves —
+      // we don't touch the global zoom level from scroll at all.
+      e.preventDefault()
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Control') { ctrlHeld.current = true; return }
       if (!e.ctrlKey && !ctrlHeld.current) return
-      if (e.key === '=' || e.key === '+') show(zoomIn())
-      else if (e.key === '-')             show(zoomOut())
-      else if (e.key === '0')             show(zoomReset())
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); show(zoomIn()) }
+      else if (e.key === '-')             { e.preventDefault(); show(zoomOut()) }
+      else if (e.key === '0')             { e.preventDefault(); show(zoomReset()) }
     }
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -81,7 +79,8 @@ export default function ZoomIndicator({ enabled, defaultZoom = 1, onZoomChange }
     }
 
     // Use capture phase so we see the event before any child handler can stop it.
-    window.addEventListener('wheel',   onWheel,   { passive: true, capture: true })
+    // Must be non-passive so we can call preventDefault() to block browser zoom.
+    window.addEventListener('wheel',   onWheel,   { passive: false, capture: true })
     window.addEventListener('keydown', onKeyDown, { capture: true })
     window.addEventListener('keyup',   onKeyUp,   { capture: true })
     return () => {

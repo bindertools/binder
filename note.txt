@@ -1,0 +1,10 @@
+Inside of the /packages/ path, is a folder called ai-plugin.
+
+Please help me build this plugin, to work with the production app, using our SDK available here: 
+https://github.com/Command-IDE/plugin-sdk
+
+The goal of this plugin, is to add a command called "/ai", that opens a tab called AI Manager, which provides a UI with a 2 panels, the right side being current chats, and the left being an open chat.
+
+Users using this plugin should be able to connect API keys for OpenAI and Anthropic, along with the ability to select locally run models using Ollama.
+
+When building this, no changes should be made to any files, other than files in or being added to /packages/ai-plugin.

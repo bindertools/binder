@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { getInstalledIds, isInstalled } from '../plugins/index'
 import { Terminal as XTerm } from '@xterm/xterm'
 import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import type { InstalledPluginCommand } from '../plugins'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
   CreateTerminal,
@@ -27,6 +27,7 @@ interface Props {
   xtermTheme: ITheme
   initialCwd?: string
   defaultZoom?: number
+  pluginCommands?: Record<string, InstalledPluginCommand>
   onCwdChange?: (cwd: string) => void
 }
 
@@ -66,33 +67,28 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/help',            desc: 'show all commands' },
 ]
 
-// Plugin slash commands — only shown and executable when the plugin is installed.
-// Keys are all alias names for the command; value is the plugin ID + tab metadata.
-const PLUGIN_COMMANDS: Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> = {
-  'git':        { pluginId: 'git',     tabType: 'git',     title: 'git',     displayName: 'Git Insights' },
-  'note':       { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
-  'notepad':    { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
-  'claude':     { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
-  'ai':         { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
-}
+// Build the full slash command list for autocomplete from installed plugins.
+function buildSlashCommands(pluginCommands: Record<string, InstalledPluginCommand>): { cmd: string; desc: string }[] {
+  const pluginEntries = Object.values(pluginCommands)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(command => ({
+      cmd: `/${command.name}`,
+      desc: command.description,
+    }))
 
-// Build the full slash command list for autocomplete, filtered by installed plugins.
-function buildSlashCommands(): { cmd: string; desc: string }[] {
-  const installed = new Set(getInstalledIds())
-  const pluginEntries: { cmd: string; desc: string }[] = [
-    { cmd: '/git',    desc: 'open git insights tab'  },
-    { cmd: '/note',   desc: 'open notepad tab'        },
-    { cmd: '/claude', desc: 'open claude ai tab'      },
-  ].filter(e => {
-    const key = e.cmd.slice(1)
-    const entry = PLUGIN_COMMANDS[key]
-    return entry && installed.has(entry.pluginId)
-  })
   return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
 }
 
 
-export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaultZoom = 1, onCwdChange }: Props) {
+export default function Terminal({
+  tabId,
+  active,
+  xtermTheme,
+  initialCwd,
+  defaultZoom = 1,
+  pluginCommands = {},
+  onCwdChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -110,6 +106,8 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<MenuState | null>(null)
   useEffect(() => { menuRef.current = menu }, [menu])
+  const pluginCommandsRef = useRef(pluginCommands)
+  useEffect(() => { pluginCommandsRef.current = pluginCommands }, [pluginCommands])
 
   // Refs so JSX handlers can call functions defined inside the main useEffect
   const applyMatchRef = useRef<((match: string) => void) | null>(null)
@@ -361,7 +359,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       const line = lineRef.current
       if (!line.startsWith('/') || line.includes(' ')) return false
 
-      const filtered = buildSlashCommands().filter(c => c.cmd.startsWith(line))
+      const filtered = buildSlashCommands(pluginCommandsRef.current).filter(c => c.cmd.startsWith(line))
       if (filtered.length === 0) { setMenu(null); return true }
 
       const { h, w } = cellDims()
@@ -571,21 +569,18 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
         savedInputRef.current = ''
         term.write('\r\n')
 
-        // Intercept plugin slash commands on the frontend so install state
-        // is enforced before anything reaches Go.
+        // Intercept installed plugin slash commands on the frontend so
+        // metadata-driven tabs and command handlers work before reaching Go.
         if (line.startsWith('/')) {
           const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
-          const pluginCmd = PLUGIN_COMMANDS[cmdName]
+          const pluginCmd = pluginCommandsRef.current[cmdName]
           if (pluginCmd) {
-            if (isInstalled(pluginCmd.pluginId)) {
+            if (pluginCmd.handler) {
+              pluginCmd.handler()
+            } else if (pluginCmd.tabType) {
               window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
                 detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId },
               }))
-            } else {
-              term.write(
-                `\x1b[38;5;203m"/${cmdName}" requires the ${pluginCmd.displayName} plugin.\x1b[0m\r\n` +
-                `\x1b[38;5;246mRun /plugins to open the Plugin Store and install it.\x1b[0m`
-              )
             }
             // Ask Go to re-draw the prompt so the terminal stays usable.
             ExecuteCommand(tabId, '')

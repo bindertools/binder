@@ -1,12 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import MonacoEditor from '@monaco-editor/react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile } from '../../wailsjs/go/main/App'
+import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile, ExplorerGitStatus, ExplorerGitIgnorePath } from '../../wailsjs/go/main/App'
+import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
 import MenuBar from './MenuBar'
 import type { AppTheme } from '../themes'
 import './fullscreen.scss'
+
+interface GitStatusResult {
+  isGitRepo: boolean
+  root: string
+  files: Record<string, string> | null
+  submodules: string[] | null
+}
+
+// Builds an absolute-path → status-code map from a git status result.
+// Propagates 'dirty' upward into parent directories for changed files.
+function buildGitStatusMap(gs: GitStatusResult): Record<string, string> {
+  const map: Record<string, string> = {}
+  const root = gs.root
+
+  for (const sub of gs.submodules ?? []) {
+    map[`${root}/${sub}`] = 'submodule'
+  }
+
+  for (const [rel, code] of Object.entries(gs.files ?? {})) {
+    const abs = `${root}/${rel}`
+    if (!map[abs]) map[abs] = code
+
+    if (code !== '!') {
+      const parts = rel.split('/')
+      for (let i = 1; i < parts.length; i++) {
+        const dirAbs = `${root}/${parts.slice(0, i).join('/')}`
+        if (!map[dirAbs] || map[dirAbs] === '!') {
+          map[dirAbs] = 'dirty'
+        }
+      }
+    }
+  }
+
+  return map
+}
 
 function langFromExt(ext: string): string {
   const map: Record<string, string> = {
@@ -41,7 +77,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const [splitRatio,   setSplitRatio]   = useState(0.5)
 
   // ── explorer state ────────────────────────────────────────────────────────────
-  const [tree,        setTree]        = useState<FileNode | null>(null)
+  const [tree,          setTree]          = useState<FileNode | null>(null)
+  const [gitStatusMap,  setGitStatusMap]  = useState<Record<string, string>>({})
   const [explorerW,   setExplorerW]   = useState(220)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
   const [collapsed,   setCollapsed]   = useState(false)
@@ -133,7 +170,19 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── tree loading ──────────────────────────────────────────────────────────────
   const loadTree = useCallback(async () => {
     if (!cwd) return
-    setTree(await ExplorerOpen(cwd) as FileNode)
+    const [treeNode] = await Promise.all([
+      ExplorerOpen(cwd),
+      (async () => {
+        if (!isInstalled('git')) { setGitStatusMap({}); return }
+        try {
+          const gs = await ExplorerGitStatus(cwd)
+          setGitStatusMap(gs.isGitRepo ? buildGitStatusMap(gs) : {})
+        } catch {
+          setGitStatusMap({})
+        }
+      })(),
+    ])
+    setTree(treeNode as FileNode)
   }, [cwd])
 
   useEffect(() => { loadTree() }, [loadTree])
@@ -481,6 +530,20 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     )
   }
 
+  // ── git ignore ────────────────────────────────────────────────────────────────
+  const handleAddToGitIgnore = useCallback(async (node: FileNode) => {
+    const cwdSlash = cwd.replace(/\\/g, '/')
+    const relPath = node.path.startsWith(cwdSlash + '/')
+      ? node.path.slice(cwdSlash.length + 1)
+      : node.path
+    await ExplorerGitIgnorePath(cwd, relPath)
+    // Refresh git status so ignored indicator appears immediately
+    try {
+      const gs = await ExplorerGitStatus(cwd)
+      setGitStatusMap(gs.isGitRepo ? buildGitStatusMap(gs) : {})
+    } catch { /* ignore */ }
+  }, [cwd])
+
   // ── explorer panel ────────────────────────────────────────────────────────────
   const explorerPanel = (
     <div
@@ -515,6 +578,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
             selectedPath={activeFile ?? ''}
             onSelect={node => openFile(node)}
             onRefresh={loadTree}
+            gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
+            onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
           />
         </>
       )}

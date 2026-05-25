@@ -9,8 +9,10 @@ import (
 func detectLanguage(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	m := map[string]string{
-		".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
-		".ts": "typescript", ".tsx": "typescript", ".mts": "typescript",
+		".js": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+		".jsx": "javascriptreact",
+		".ts": "typescript", ".mts": "typescript",
+		".tsx": "typescriptreact",
 		".py": "python", ".go": "go", ".rs": "rust",
 		".java": "java", ".kt": "kotlin", ".scala": "scala",
 		".c": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".h": "cpp", ".hpp": "cpp",

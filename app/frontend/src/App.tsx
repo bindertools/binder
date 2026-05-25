@@ -12,8 +12,8 @@ import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import { loadInstalledPlugins } from './plugins'
-import type { Plugin, PluginContext } from './plugins'
+import { buildInstalledPluginCommandMap, loadInstalledPlugins } from './plugins'
+import type { InstalledPluginCommand, Plugin, PluginContext } from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
@@ -158,7 +158,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
     }
 
     case 'open-tab': {
-      // Generic singleton-style tab (ports, perf, plugins, notepad, git, claude, etc.)
+      // Generic singleton-style tab (ports, perf, plugins, and plugin tabs)
       // fullscreen (/fs) tabs are NOT singletons — each invocation opens its own tab at its own cwd
       if (action.tabType !== 'fullscreen') {
         const existing = state.tabs.find(t => t.type === action.tabType)
@@ -237,6 +237,65 @@ const initialState: TabState = { tabs: [initialTab], activeId: initialTab.id }
 
 const DIVIDER_PX = 4
 
+interface PluginErrorBoundaryProps {
+  pluginName: string
+  children: React.ReactNode
+}
+
+interface PluginErrorBoundaryState {
+  error: Error | null
+}
+
+class PluginErrorBoundary extends React.Component<PluginErrorBoundaryProps, PluginErrorBoundaryState> {
+  state: PluginErrorBoundaryState = { error: null }
+
+  static getDerivedStateFromError(error: Error): PluginErrorBoundaryState {
+    return { error }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(`[plugins] ${this.props.pluginName} crashed`, error)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          background: 'var(--app-bg)',
+        }}>
+          <div style={{
+            maxWidth: 720,
+            width: '100%',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 18,
+            padding: 20,
+            background: 'rgba(255,255,255,0.03)',
+            color: 'var(--tab-color)',
+            fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+          }}>
+            <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 8 }}>
+              Plugin Error
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+              {this.props.pluginName} failed to render
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.7, opacity: 0.82, whiteSpace: 'pre-wrap' }}>
+              {this.state.error.message}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(tabReducer, initialState)
   const { tabs, activeId } = state
@@ -252,6 +311,7 @@ export default function App() {
   const [terminalCwds,  setTerminalCwds]  = useState<Record<string, string>>({})
   // tabType → Plugin; rebuilt whenever a plugin is installed/uninstalled
   const [plugins, setPlugins] = useState<Record<string, Plugin>>({})
+  const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
 
   const contentRef = useRef<HTMLDivElement>(null)
   const dragging   = useRef(false)
@@ -261,8 +321,11 @@ export default function App() {
     if (!__PLUGINS__) return
     const loaded = await loadInstalledPlugins().catch(() => [] as Plugin[])
     const map: Record<string, Plugin> = {}
-    for (const p of loaded) { if (p.tabType) map[p.tabType] = p }
+    for (const p of loaded) {
+      if (p.tabType) map[p.tabType] = p
+    }
     setPlugins(map)
+    setPluginCommands(buildInstalledPluginCommandMap(loaded))
   }, [])
 
   useEffect(() => { reloadPlugins() }, [reloadPlugins])
@@ -458,13 +521,13 @@ export default function App() {
     EventsOn('app:open-tab', (...args: any[]) => {
       const p = args[0] as { type: string; title: string; terminalId?: string; cwd?: string }
       if (!p?.type) return
-      if (!__PLUGINS__ && (p.type === 'plugins' || p.type in {'git':1,'notepad':1,'claude':1})) return
+      if (!__PLUGINS__ && p.type === 'plugins') return
       dispatch({ type: 'open-tab', tabType: p.type, title: p.title, terminalId: p.terminalId, cwd: p.cwd })
     })
     return () => EventsOff('app:open-tab')
   }, [])
 
-  // terminal:open-plugin-tab — window CustomEvent from Terminal.tsx for /git, /note, /claude, etc.
+  // terminal:open-plugin-tab — window CustomEvent from Terminal.tsx for installed plugin commands.
   useEffect(() => {
     const handler = (e: Event) => {
       if (!__PLUGINS__) return
@@ -663,6 +726,7 @@ export default function App() {
           xtermTheme={resolvedTheme.xtermTheme}
           initialCwd={tab.initialCwd}
           defaultZoom={currentZoom}
+          pluginCommands={pluginCommands}
           onCwdChange={cwd => setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))}
         />
       )
@@ -743,7 +807,7 @@ export default function App() {
         />
       )
     }
-    // Plugin tabs (git, notepad, claude, external plugins)
+    // Plugin tabs (loaded from installed plugin metadata)
     if (!__PLUGINS__) return null
     const plugin = plugins[tab.type]
     if (plugin?.TabComponent) {
@@ -757,7 +821,11 @@ export default function App() {
           : undefined,
         openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
       }
-      return <plugin.TabComponent tabId={tab.id} active={isActive} context={context} />
+      return (
+        <PluginErrorBoundary pluginName={plugin.name}>
+          <plugin.TabComponent tabId={tab.id} active={isActive} context={context} />
+        </PluginErrorBoundary>
+      )
     }
     return null
   }

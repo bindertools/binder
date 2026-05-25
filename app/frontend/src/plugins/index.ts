@@ -1,6 +1,16 @@
-import type { Plugin } from '@cmdide/plugin-sdk'
+import type { Plugin, PluginCommand } from '@cmdide/plugin-sdk'
 export type { Plugin }
 export type { PluginCommand, PluginTabProps, PluginContext } from '@cmdide/plugin-sdk'
+
+export interface InstalledPluginCommand {
+  name: string
+  description: string
+  pluginId: string
+  pluginName: string
+  tabType?: string
+  title: string
+  handler?: () => void
+}
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
 const KEY_INSTALLED = 'cmdide:plugins:installed'
@@ -72,4 +82,48 @@ export async function loadInstalledPlugins(): Promise<Plugin[]> {
   }
 
   return plugins
+}
+
+function defaultCommandDescription(plugin: Plugin): string {
+  return `open ${plugin.name.toLowerCase()} tab`
+}
+
+function addInstalledCommand(
+  registry: Record<string, InstalledPluginCommand>,
+  plugin: Plugin,
+  command: Pick<PluginCommand, 'name' | 'description' | 'handler'>
+) {
+  const name = command.name.trim().toLowerCase()
+  if (!name || registry[name]) return
+
+  registry[name] = {
+    name,
+    description: command.description?.trim() || defaultCommandDescription(plugin),
+    pluginId: plugin.id,
+    pluginName: plugin.name,
+    tabType: plugin.tabType,
+    title: plugin.tabTitle || plugin.tabType || plugin.name,
+    handler: command.handler,
+  }
+}
+
+export function buildInstalledPluginCommandMap(plugins: Plugin[]): Record<string, InstalledPluginCommand> {
+  const registry: Record<string, InstalledPluginCommand> = {}
+
+  for (const plugin of plugins) {
+    for (const command of plugin.commands ?? []) {
+      addInstalledCommand(registry, plugin, command)
+    }
+
+    // Match the SDK's documented default behavior: a tabType alone implies
+    // a slash command that opens the plugin tab.
+    if (plugin.tabType) {
+      addInstalledCommand(registry, plugin, {
+        name: plugin.tabType,
+        description: defaultCommandDescription(plugin),
+      })
+    }
+  }
+
+  return registry
 }
