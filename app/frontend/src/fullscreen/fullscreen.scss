@@ -517,3 +517,143 @@
   flex-shrink: 0;
   margin: 0 4px;
 }
+
+/* ── New File / Folder dialog ────────────────────────────────────────────────── */
+.ni-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.ni-dialog {
+  background: var(--ide-bg-alt);
+  border: 1px solid var(--ide-border-lo);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.3);
+  padding: 20px 22px 18px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+}
+
+.ni-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ide-text-hi);
+  margin-bottom: 16px;
+}
+
+.ni-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ide-text-lo);
+  margin-bottom: 6px;
+}
+.ni-label--type { margin-top: 14px; }
+
+.ni-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.ni-input {
+  flex: 1;
+  background: var(--ide-editor-bg);
+  border: 1px solid var(--ide-border-lo);
+  border-radius: 4px;
+  color: var(--ide-fg);
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  font-family: inherit;
+  &:focus { border-color: var(--ide-accent); }
+}
+
+.ni-ext-badge {
+  flex-shrink: 0;
+  background: var(--ide-editor-bg);
+  border: 1px solid var(--ide-border-lo);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  color: var(--ide-text-lo);
+  font-size: 12.5px;
+  padding: 6px 10px;
+  user-select: none;
+}
+/* When ext-badge is present, square off the input's right edge */
+.ni-name-row .ni-input:has(+ .ni-ext-badge) {
+  border-radius: 4px 0 0 4px;
+}
+
+.ni-preview {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--ide-text-lo);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ni-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.ni-chip {
+  background: var(--ide-bg-hi);
+  border: 1px solid var(--ide-border-lo);
+  border-radius: 3px;
+  color: var(--ide-text-mid);
+  font-size: 11px;
+  padding: 3px 7px;
+  cursor: pointer;
+  font-family: 'Consolas', monospace;
+  transition: background 0.1s, color 0.1s;
+  &:hover { background: var(--ide-border-lo); color: var(--ide-fg); }
+}
+.ni-chip--active {
+  background: var(--ide-select);
+  border-color: var(--ide-select);
+  color: #fff;
+  &:hover { background: var(--ide-select); color: #fff; }
+}
+
+.ni-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.ni-btn {
+  padding: 5px 16px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: background 0.12s;
+}
+.ni-btn--cancel {
+  background: var(--ide-bg-hi);
+  color: var(--ide-fg);
+  border: 1px solid var(--ide-border-lo);
+  &:hover { background: var(--ide-border-lo); }
+}
+.ni-btn--create {
+  background: var(--ide-accent);
+  color: #fff;
+  &:hover { filter: brightness(1.1); }
+  &:disabled { opacity: 0.4; cursor: default; filter: none; }
+}

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react'
 import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
 import DeleteConfirmDialog from './DeleteConfirmDialog'
+import NewItemDialog from './NewItemDialog'
 import FileIcon from './FileIcon'
 
 export interface FileNode {
@@ -36,6 +37,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
   const [renameVal,    setRenameVal]    = useState('')
   const [dragOver,     setDragOver]     = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
+  const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
   const dragSrc = useRef<string | null>(null)
 
   const toggle = useCallback((path: string) => {
@@ -84,23 +86,30 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     onRefresh()
   }, [deleteTarget, onRefresh])
 
-  const handleNewFile = useCallback(async (node: FileNode) => {
+  const handleNewFile = useCallback((node: FileNode) => {
     const dir = node.isDir ? node.path : node.path.substring(0, node.path.lastIndexOf('/'))
-    const name = prompt('File name:')
-    if (!name?.trim()) return
-    await ExplorerCreateFile(`${dir}/${name.trim()}`)
-    setExpanded(prev => new Set(prev).add(dir))
-    onRefresh()
-  }, [onRefresh])
+    setNewItem({ kind: 'file', dir })
+    setCtx(null)
+  }, [])
 
-  const handleNewFolder = useCallback(async (node: FileNode) => {
+  const handleNewFolder = useCallback((node: FileNode) => {
     const dir = node.isDir ? node.path : node.path.substring(0, node.path.lastIndexOf('/'))
-    const name = prompt('Folder name:')
-    if (!name?.trim()) return
-    await ExplorerCreateDir(`${dir}/${name.trim()}`)
-    setExpanded(prev => new Set(prev).add(dir))
+    setNewItem({ kind: 'folder', dir })
+    setCtx(null)
+  }, [])
+
+  const confirmNewItem = useCallback(async (filename: string) => {
+    if (!newItem) return
+    const fullPath = `${newItem.dir}/${filename}`
+    if (newItem.kind === 'file') {
+      await ExplorerCreateFile(fullPath)
+    } else {
+      await ExplorerCreateDir(fullPath)
+    }
+    setExpanded(prev => new Set(prev).add(newItem.dir))
+    setNewItem(null)
     onRefresh()
-  }, [onRefresh])
+  }, [newItem, onRefresh])
 
   const handleCopyPath = useCallback((node: FileNode) => {
     navigator.clipboard.writeText(node.path)
@@ -270,6 +279,15 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
           isDir={deleteTarget.isDir}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {/* New file / folder dialog */}
+      {newItem && (
+        <NewItemDialog
+          kind={newItem.kind}
+          onConfirm={confirmNewItem}
+          onCancel={() => setNewItem(null)}
         />
       )}
     </div>
