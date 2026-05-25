@@ -198,12 +198,31 @@ function New-MacDmg {
     $dmgPath = Join-Path $binDir $dmgName
     if (Test-Path $dmgPath) { Remove-Item -Force $dmgPath }
 
-    # Stage: a temp dir containing only the .app (create-dmg scans the folder).
+    # Deep-sign the entire bundle with an ad-hoc identity.
+    # Wails' built-in self-sign only covers the main binary; frameworks and
+    # helpers inside the bundle are left unsigned, which causes macOS to show the
+    # harsh "This software needs to be updated" Gatekeeper error instead of the
+    # softer "unidentified developer" message that users can bypass via
+    # System Settings → Privacy & Security → Open Anyway.
+    & codesign --deep --force --sign '-' $appPath
+    if ($LASTEXITCODE -ne 0) { Warn "codesign --deep failed (non-fatal)" }
+
+    # Stage: a temp dir containing the .app and an optional helper script.
     $staging = Join-Path ([System.IO.Path]::GetTempPath()) "cmdide-dmg-$(New-Guid)"
     New-Item -ItemType Directory $staging | Out-Null
     & ditto $appPath (Join-Path $staging (Split-Path $appPath -Leaf))
 
-    # Optional background image (convert lockup SVG via Edge, same as splash banner).
+    # Include the Gatekeeper fix script so users have a one-click remedy if
+    # macOS blocks the first launch.
+    $fixSrc = Join-Path $appDir 'build/macos/Fix Gatekeeper.command'
+    $hasFixScript = Test-Path $fixSrc
+    if ($hasFixScript) {
+        $fixDst = Join-Path $staging 'Fix Gatekeeper.command'
+        & ditto $fixSrc $fixDst
+        & chmod '+x' $fixDst
+    }
+
+    # Optional background image.
     $bgArgs = @()
     $bgPng  = Join-Path $appDir 'build/macos/dmg-background.png'
     if (Test-Path $bgPng) { $bgArgs = @('--background', $bgPng) }
@@ -211,13 +230,16 @@ function New-MacDmg {
     $dmgArgs = @(
         '--volname',        $volName,
         '--window-pos',     '200', '120',
-        '--window-size',    '600', '380',
-        '--icon-size',      '128',
-        '--icon',           'cmdIDE.app', '160', '185',
+        '--window-size',    '600', '430',
+        '--icon-size',      '120',
+        '--icon',           'cmdIDE.app', '155', '170',
         '--hide-extension', 'cmdIDE.app',
-        '--app-drop-link',  '440', '185',
+        '--app-drop-link',  '445', '170',
         '--no-internet-enable'
     )
+    if ($hasFixScript) {
+        $dmgArgs += @('--icon', 'Fix Gatekeeper.command', '300', '340')
+    }
     if ($bgArgs.Count -gt 0) { $dmgArgs += $bgArgs }
     $dmgArgs += $dmgPath
     $dmgArgs += $staging
