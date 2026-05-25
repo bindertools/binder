@@ -77,8 +77,11 @@ $baseName         = "cmdIDE-$goOs-$goArch$binExt"
 $pluginsName      = "cmdIDE-plugins-$goOs-$goArch$binExt"
 $installerName    = "cmdIDE-installer$installerSfx$binExt"
 
-$baseArchive      = "cmdIDE-$goOs-$goArch$archExt"
-$pluginsArchive   = "cmdIDE-plugins-$goOs-$goArch$archExt"
+# macOS ships the main app as a drag-to-Applications DMG; the installer and
+# all other platforms continue to use zip / tar.gz.
+$appArchExt       = if ($goOs -eq 'darwin') { '.dmg' } else { $archExt }
+$baseArchive      = "cmdIDE-$goOs-$goArch$appArchExt"
+$pluginsArchive   = "cmdIDE-plugins-$goOs-$goArch$appArchExt"
 $installerArchive = "cmdIDE-installer$installerSfx$archExt"
 
 $appDir  = Join-Path $root 'app'
@@ -187,6 +190,42 @@ function New-Archive {
     Ok "Archived  -> app/build/bin/$archiveName"
 }
 
+function New-MacDmg {
+    # Produces a drag-to-Applications DMG using create-dmg (brew install create-dmg).
+    # The DMG mounts as a Finder window showing the .app icon and an Applications
+    # alias — the user drags the icon to install, exactly like draw.io / VS Code.
+    param([string]$appPath, [string]$dmgName, [string]$volName)
+    $dmgPath = Join-Path $binDir $dmgName
+    if (Test-Path $dmgPath) { Remove-Item -Force $dmgPath }
+
+    # Stage: a temp dir containing only the .app (create-dmg scans the folder).
+    $staging = Join-Path ([System.IO.Path]::GetTempPath()) "cmdide-dmg-$(New-Guid)"
+    New-Item -ItemType Directory $staging | Out-Null
+    & ditto $appPath (Join-Path $staging (Split-Path $appPath -Leaf))
+
+    # Optional background image (convert lockup SVG via Edge, same as splash banner).
+    $bgArgs = @()
+    $bgPng  = Join-Path $appDir 'build/macos/dmg-background.png'
+    if (Test-Path $bgPng) { $bgArgs = @('--background', $bgPng) }
+
+    & create-dmg @(
+        '--volname',       $volName,
+        '--window-pos',    '200', '120',
+        '--window-size',   '600', '380',
+        '--icon-size',     '128',
+        '--icon',          'cmdIDE.app', '160', '185',
+        '--hide-extension','cmdIDE.app',
+        '--app-drop-link', '440', '185',
+        '--no-internet-enable'
+    ) + $bgArgs + @($dmgPath, $staging)
+    $code = $LASTEXITCODE
+    Remove-Item -Recurse -Force $staging
+    # create-dmg exits 1 when it can't set icon positions via osascript but still
+    # produces the DMG — only fail if the output file is actually missing.
+    if ($code -ne 0 -and -not (Test-Path $dmgPath)) { Fail "create-dmg failed for $dmgName" }
+    Ok "DMG       -> app/build/bin/$dmgName"
+}
+
 function Invoke-Wails {
     param([string]$dir, [string[]]$flags, [hashtable]$envVars = @{}, [string]$label = 'Build')
     Push-Location $dir
@@ -204,10 +243,12 @@ function Invoke-Wails {
 if (-not $InstallerOnly) {
     Step "Pre-clean  old app binaries"
     if ($goOs -eq 'darwin') {
-        # On macOS, staged bundles keep their .app extension.
+        # On macOS, staged bundles keep their .app extension; also clear DMG files.
         Clear-OldBinary "$baseName.app"
         Clear-OldBinary "$pluginsName.app"
         Clear-OldBinary 'cmdIDE.app'     # leftover Wails output from a prior run
+        Clear-OldBinary $baseArchive     # stale .dmg
+        Clear-OldBinary $pluginsArchive  # stale .dmg
     } else {
         Clear-OldBinary $baseName
         Clear-OldBinary $pluginsName
@@ -265,13 +306,12 @@ if (-not $InstallerOnly) {
     Invoke-Wails $appDir $appFlags @{ VITE_PLUGINS = '' } 'Base app'
 
     if ($goOs -eq 'darwin') {
-        # Wails produces cmdIDE.app — archive it FIRST while it still has the
-        # .app name (ditto puts cmdIDE.app/ inside the zip, which macOS and our
-        # installer both expect).  Then rename to stage it so the plugins build
-        # can produce a fresh cmdIDE.app without a name clash.
+        # Wails produces cmdIDE.app.  Build the DMG while it's still named
+        # cmdIDE.app (the DMG contains cmdIDE.app/ which is what macOS expects).
+        # Then rename to stage it so the plugins build can emit a fresh cmdIDE.app.
         $srcApp = Join-Path $binDir 'cmdIDE.app'
         if (-not (Test-Path $srcApp)) { Fail 'Wails did not produce cmdIDE.app' }
-        New-Archive  $srcApp $baseArchive
+        New-MacDmg   $srcApp $baseArchive 'cmdIDE'
         $stageApp = Join-Path $binDir "$baseName.app"
         if (Test-Path $stageApp) { Remove-Item -Recurse -Force $stageApp }
         Rename-Item  $srcApp $stageApp
@@ -289,7 +329,7 @@ if (-not $InstallerOnly) {
     if ($goOs -eq 'darwin') {
         $srcApp = Join-Path $binDir 'cmdIDE.app'
         if (-not (Test-Path $srcApp)) { Fail 'Wails did not produce cmdIDE.app (plugins)' }
-        New-Archive  $srcApp $pluginsArchive
+        New-MacDmg   $srcApp $pluginsArchive 'cmdIDE (Plugins)'
         $stageApp = Join-Path $binDir "$pluginsName.app"
         if (Test-Path $stageApp) { Remove-Item -Recurse -Force $stageApp }
         Rename-Item  $srcApp $stageApp
