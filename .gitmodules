@@ -19,3 +19,6 @@
 [submodule "app/themes"]
 	path = app/themes
 	url = https://github.com/Command-IDE/themes
+[submodule "packages/git"]
+	path = packages/git
+	url = https://github.com/Command-IDE/git

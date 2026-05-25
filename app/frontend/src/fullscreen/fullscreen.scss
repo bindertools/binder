@@ -116,30 +116,35 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 8px 5px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  padding: 4px 8px 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ide-text-hi);
+  color: var(--ide-text-lo);
   border-bottom: 1px solid var(--ide-border);
   flex-shrink: 0;
-  height: 28px;
+  height: 26px;
   cursor: default;
   overflow: hidden;
 }
-.fe-header__icon { display: flex; align-items: center; flex-shrink: 0; }
+.fe-header__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  filter: saturate(0.2) opacity(0.5);
+}
 .fe-header__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .fe-tree {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 2px 0 8px;
+  padding: 3px 0 8px;
 }
-.fe-tree::-webkit-scrollbar { width: 5px; }
+.fe-tree::-webkit-scrollbar { width: 4px; }
 .fe-tree::-webkit-scrollbar-track { background: transparent; }
-.fe-tree::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; }
+.fe-tree::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; opacity: 0.5; }
 .fe-tree::-webkit-scrollbar-thumb:hover { background: var(--ide-text-lo); }
 
 .fe-empty {
@@ -152,10 +157,10 @@
 .fe-node {
   display: flex;
   align-items: center;
-  gap: 3px;
-  height: 22px;
-  font-size: 12.5px;
-  color: var(--ide-fg);
+  gap: 2px;
+  height: 20px;
+  font-size: 12px;
+  color: var(--ide-text-mid);
   cursor: pointer;
   padding-right: 10px;
   white-space: nowrap;
@@ -164,10 +169,14 @@
 }
 .fe-node:hover {
   background: var(--ide-bg-hi);
+  color: var(--ide-fg);
 }
 .fe-node--selected {
   background: var(--ide-select) !important;
   color: #fff;
+}
+.fe-node--selected .fe-node__icon {
+  filter: saturate(0.9) opacity(0.95);
 }
 .fe-node--dragover {
   outline: 1px solid var(--ide-accent);
@@ -175,25 +184,38 @@
 }
 
 .fe-node__chevron {
-  width: 14px;
+  width: 12px;
   text-align: center;
-  font-size: 9px;
+  font-size: 8px;
   color: var(--ide-text-lo);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.5;
 }
+.fe-node:hover .fe-node__chevron { opacity: 0.85; }
+
 .fe-node__icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  /* Tone down colorful icons in default view — keep source colors for future theme use */
+  filter: saturate(0.3) opacity(0.7);
+  transition: filter 0.1s;
 }
+.fe-node:hover .fe-node__icon {
+  filter: saturate(0.55) opacity(0.85);
+}
+.fe-node--selected .fe-node__icon {
+  filter: saturate(0.8) opacity(0.9) brightness(1.15);
+}
+
 .fe-node__name {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
-  padding-left: 3px;
+  padding-left: 2px;
 }
 .fe-node__rename {
   flex: 1;
@@ -201,11 +223,11 @@
   border: 1px solid var(--ide-accent);
   border-radius: 2px;
   color: var(--ide-fg);
-  font-size: 12.5px;
+  font-size: 12px;
   padding: 0 4px;
   outline: none;
-  height: 18px;
-  margin-left: 3px;
+  height: 17px;
+  margin-left: 2px;
   font-family: inherit;
 }
 
