@@ -160,17 +160,17 @@ jobs:
         run: brew install create-dmg
 
       # macOS ships the app as a drag-to-Applications DMG (like draw.io / VS Code).
+      # No installer needed — users just drag cmdIDE.app into Applications.
       # UPX is skipped as it breaks codesign/Gatekeeper.
 
       - name: Build
-        run: pwsh ./build.ps1 -NoUpx
+        run: pwsh ./build.ps1 -NoUpx -AppOnly
 
       - name: Verify outputs
         run: |
           @(
             'app/build/bin/cmdIDE-darwin-arm64.dmg',
-            'app/build/bin/cmdIDE-plugins-darwin-arm64.dmg',
-            'app/build/bin/cmdIDE-installer-darwin.zip'
+            'app/build/bin/cmdIDE-plugins-darwin-arm64.dmg'
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -185,7 +185,6 @@ jobs:
           path: |
             app/build/bin/cmdIDE-darwin-arm64.dmg
             app/build/bin/cmdIDE-plugins-darwin-arm64.dmg
-            app/build/bin/cmdIDE-installer-darwin.zip
 
       - name: Upload to release
         env:
@@ -195,7 +194,6 @@ jobs:
           gh release upload "${{ github.event.release.tag_name }}" \
             "app/build/bin/cmdIDE-darwin-arm64.dmg#cmdIDE-darwin-arm64.dmg" \
             "app/build/bin/cmdIDE-plugins-darwin-arm64.dmg#cmdIDE-plugins-darwin-arm64.dmg" \
-            "app/build/bin/cmdIDE-installer-darwin.zip#cmdIDE-installer-darwin.zip" \
             --clobber
 
   # ── Linux ────────────────────────────────────────────────────────────────────
