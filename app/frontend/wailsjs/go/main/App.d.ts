@@ -13,6 +13,8 @@ import {search} from '../models';
 
 export function CheckForUpdate():Promise<string>;
 
+export function ExecSilent(arg1:string,arg2:string,arg3:string[]):Promise<string>;
+
 export function CloseTerminal(arg1:string):Promise<void>;
 
 export function CreateTerminal(arg1:string,arg2:string):Promise<void>;
@@ -32,10 +34,6 @@ export function ExplorerDelete(arg1:string):Promise<void>;
 export function ExplorerGetFile(arg1:string):Promise<string>;
 
 export function ExplorerGetTree():Promise<fullscreen.FileNode>;
-
-export function ExplorerGitIgnorePath(arg1:string,arg2:string):Promise<void>;
-
-export function ExplorerGitStatus(arg1:string):Promise<main.GitStatusResult>;
 
 export function ExplorerMove(arg1:string,arg2:string):Promise<void>;
 

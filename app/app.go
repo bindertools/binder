@@ -202,6 +202,19 @@ func (a *App) DeleteFile(path string) error { return os.Remove(path) }
 
 func (a *App) GetFileLanguage(path string) string { return detectLanguage(path) }
 
+// ExecSilent runs an arbitrary command in cwd, captures stdout, and never
+// shows a console window on Windows. This is generic infrastructure — any
+// plugin-driven feature can call it; the app has no knowledge of what is run.
+func (a *App) ExecSilent(cwd string, name string, args []string) (string, error) {
+	cmd := exec.Command(name, args...)
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
+	term.NoWindow(cmd)
+	out, err := cmd.Output()
+	return string(out), err
+}
+
 func (a *App) SelectDirectory() string {
 	path, _ := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: "Select Directory",

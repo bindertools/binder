@@ -42,16 +42,12 @@ export function ExplorerGetFile(arg1) {
   return window['go']['main']['App']['ExplorerGetFile'](arg1);
 }
 
+export function ExecSilent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExecSilent'](arg1, arg2, arg3);
+}
+
 export function ExplorerGetTree() {
   return window['go']['main']['App']['ExplorerGetTree']();
-}
-
-export function ExplorerGitIgnorePath(arg1, arg2) {
-  return window['go']['main']['App']['ExplorerGitIgnorePath'](arg1, arg2);
-}
-
-export function ExplorerGitStatus(arg1) {
-  return window['go']['main']['App']['ExplorerGitStatus'](arg1);
 }
 
 export function ExplorerMove(arg1, arg2) {

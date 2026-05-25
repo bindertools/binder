@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import MonacoEditor from '@monaco-editor/react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile, ExplorerGitStatus, ExplorerGitIgnorePath } from '../../wailsjs/go/main/App'
+import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
@@ -9,39 +9,66 @@ import MenuBar from './MenuBar'
 import type { AppTheme } from '../themes'
 import './fullscreen.scss'
 
-interface GitStatusResult {
-  isGitRepo: boolean
-  root: string
-  files: Record<string, string> | null
-  submodules: string[] | null
-}
+// All git logic lives here in the frontend — the app has no git-specific code.
+// ExecSilent is a generic infrastructure binding (like ReadFile/WriteFile).
 
-// Builds an absolute-path → status-code map from a git status result.
-// Propagates 'dirty' upward into parent directories for changed files.
-function buildGitStatusMap(gs: GitStatusResult): Record<string, string> {
-  const map: Record<string, string> = {}
-  const root = gs.root
+async function fetchGitStatusMap(cwd: string): Promise<Record<string, string>> {
+  try {
+    const root = (await ExecSilent(cwd, 'git', ['-C', cwd, 'rev-parse', '--show-toplevel'])).trim().replace(/\\/g, '/')
+    if (!root) return {}
 
-  for (const sub of gs.submodules ?? []) {
-    map[`${root}/${sub}`] = 'submodule'
-  }
+    const [porcelain, gitmodulesRaw] = await Promise.all([
+      ExecSilent(cwd, 'git', ['-C', cwd, 'status', '--porcelain=v1', '--ignored']),
+      ReadFile(root + '/.gitmodules').catch(() => ''),
+    ])
 
-  for (const [rel, code] of Object.entries(gs.files ?? {})) {
-    const abs = `${root}/${rel}`
-    if (!map[abs]) map[abs] = code
+    // Parse submodule paths from .gitmodules
+    const submodules = gitmodulesRaw
+      .split('\n')
+      .filter(l => l.trimStart().startsWith('path'))
+      .map(l => l.split('=')[1]?.trim() ?? '')
+      .filter(Boolean)
 
-    if (code !== '!') {
-      const parts = rel.split('/')
-      for (let i = 1; i < parts.length; i++) {
-        const dirAbs = `${root}/${parts.slice(0, i).join('/')}`
-        if (!map[dirAbs] || map[dirAbs] === '!') {
-          map[dirAbs] = 'dirty'
+    const map: Record<string, string> = {}
+
+    for (const sub of submodules) {
+      map[`${root}/${sub}`] = 'submodule'
+    }
+
+    for (const line of porcelain.split('\n')) {
+      if (line.length < 4) continue
+      const xy = line.slice(0, 2)
+      let rel = line.slice(3)
+      const arrow = rel.indexOf(' -> ')
+      if (arrow >= 0) rel = rel.slice(arrow + 4)
+      rel = rel.replace(/\/$/, '').replace(/^"|"$/g, '')
+
+      let code: string
+      if      (xy === '!!') code = '!'
+      else if (xy === '??') code = '?'
+      else {
+        const x = xy[0], y = xy[1]
+        code = (x !== ' ' && x !== '.') ? x : (y !== ' ' && y !== '.') ? y : ''
+      }
+      if (!code || !rel) continue
+
+      const abs = `${root}/${rel}`
+      if (!map[abs]) map[abs] = code
+
+      // Propagate dirty indicator up into parent directories
+      if (code !== '!') {
+        const parts = rel.split('/')
+        for (let i = 1; i < parts.length; i++) {
+          const dirAbs = `${root}/${parts.slice(0, i).join('/')}`
+          if (!map[dirAbs] || map[dirAbs] === '!') map[dirAbs] = 'dirty'
         }
       }
     }
-  }
 
-  return map
+    return map
+  } catch {
+    return {}
+  }
 }
 
 function langFromExt(ext: string): string {
@@ -170,19 +197,12 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── tree loading ──────────────────────────────────────────────────────────────
   const loadTree = useCallback(async () => {
     if (!cwd) return
-    const [treeNode] = await Promise.all([
+    const [treeNode, statusMap] = await Promise.all([
       ExplorerOpen(cwd),
-      (async () => {
-        if (!isInstalled('git')) { setGitStatusMap({}); return }
-        try {
-          const gs = await ExplorerGitStatus(cwd)
-          setGitStatusMap(gs.isGitRepo ? buildGitStatusMap(gs) : {})
-        } catch {
-          setGitStatusMap({})
-        }
-      })(),
+      isInstalled('git') ? fetchGitStatusMap(cwd) : Promise.resolve({}),
     ])
     setTree(treeNode as FileNode)
+    setGitStatusMap(statusMap)
   }, [cwd])
 
   useEffect(() => { loadTree() }, [loadTree])
@@ -536,12 +556,16 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     const relPath = node.path.startsWith(cwdSlash + '/')
       ? node.path.slice(cwdSlash.length + 1)
       : node.path
-    await ExplorerGitIgnorePath(cwd, relPath)
-    // Refresh git status so ignored indicator appears immediately
-    try {
-      const gs = await ExplorerGitStatus(cwd)
-      setGitStatusMap(gs.isGitRepo ? buildGitStatusMap(gs) : {})
-    } catch { /* ignore */ }
+    const gitignorePath = cwdSlash + '/.gitignore'
+
+    const existing = await ReadFile(gitignorePath).catch(() => '')
+    // Skip if already present
+    if (existing.split('\n').some(l => l.trim() === relPath)) return
+    const newContent = (existing && !existing.endsWith('\n') ? existing + '\n' : existing) + relPath + '\n'
+    await WriteFile(gitignorePath, newContent)
+
+    // Refresh git status so the ignored indicator appears immediately
+    setGitStatusMap(await fetchGitStatusMap(cwd))
   }, [cwd])
 
   // ── explorer panel ────────────────────────────────────────────────────────────
