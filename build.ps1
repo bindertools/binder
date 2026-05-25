@@ -208,16 +208,20 @@ function New-MacDmg {
     $bgPng  = Join-Path $appDir 'build/macos/dmg-background.png'
     if (Test-Path $bgPng) { $bgArgs = @('--background', $bgPng) }
 
-    & create-dmg @(
-        '--volname',       $volName,
-        '--window-pos',    '200', '120',
-        '--window-size',   '600', '380',
-        '--icon-size',     '128',
-        '--icon',          'cmdIDE.app', '160', '185',
-        '--hide-extension','cmdIDE.app',
-        '--app-drop-link', '440', '185',
+    $dmgArgs = @(
+        '--volname',        $volName,
+        '--window-pos',     '200', '120',
+        '--window-size',    '600', '380',
+        '--icon-size',      '128',
+        '--icon',           'cmdIDE.app', '160', '185',
+        '--hide-extension', 'cmdIDE.app',
+        '--app-drop-link',  '440', '185',
         '--no-internet-enable'
-    ) + $bgArgs + @($dmgPath, $staging)
+    )
+    if ($bgArgs.Count -gt 0) { $dmgArgs += $bgArgs }
+    $dmgArgs += $dmgPath
+    $dmgArgs += $staging
+    & create-dmg @dmgArgs
     $code = $LASTEXITCODE
     Remove-Item -Recurse -Force $staging
     # create-dmg exits 1 when it can't set icon positions via osascript but still
