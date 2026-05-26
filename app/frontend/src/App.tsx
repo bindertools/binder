@@ -12,7 +12,7 @@ import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import { loadInstalledPlugins } from './plugins'
+import { loadInstalledPlugins, setLoadedPlugins } from './plugins'
 import type { Plugin, PluginContext } from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
@@ -260,6 +260,7 @@ export default function App() {
   const reloadPlugins = useCallback(async () => {
     if (!__PLUGINS__) return
     const loaded = await loadInstalledPlugins().catch(() => [] as Plugin[])
+    setLoadedPlugins(loaded)
     const map: Record<string, Plugin> = {}
     for (const p of loaded) { if (p.tabType) map[p.tabType] = p }
     setPlugins(map)

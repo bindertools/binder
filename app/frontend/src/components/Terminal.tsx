@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { getInstalledIds, isInstalled } from '../plugins/index'
+import { getInstalledIds, isInstalled, getLoadedPlugins } from '../plugins/index'
 import { Terminal as XTerm } from '@xterm/xterm'
 import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -66,28 +66,33 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/help',            desc: 'show all commands' },
 ]
 
-// Plugin slash commands — only shown and executable when the plugin is installed.
-// Keys are all alias names for the command; value is the plugin ID + tab metadata.
-const PLUGIN_COMMANDS: Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> = {
-  'git':        { pluginId: 'git',     tabType: 'git',     title: 'git',     displayName: 'Git Insights' },
-  'note':       { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
-  'notepad':    { pluginId: 'notepad', tabType: 'notepad', title: 'notepad', displayName: 'Notepad' },
-  'claude':     { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
-  'ai':         { pluginId: 'claude',  tabType: 'claude',  title: 'claude',  displayName: 'Claude AI' },
+// Build a command-name → plugin metadata map from currently loaded plugins.
+// Called at command-dispatch time so it always reflects the latest install state.
+function getPluginCommandMap(): Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> {
+  const map: Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> = {}
+  for (const plugin of getLoadedPlugins()) {
+    for (const cmd of plugin.commands ?? []) {
+      map[cmd.name.toLowerCase()] = {
+        pluginId:    plugin.id,
+        tabType:     plugin.tabType ?? plugin.id,
+        title:       plugin.tabTitle ?? plugin.id,
+        displayName: plugin.name,
+      }
+    }
+  }
+  return map
 }
 
 // Build the full slash command list for autocomplete, filtered by installed plugins.
 function buildSlashCommands(): { cmd: string; desc: string }[] {
   const installed = new Set(getInstalledIds())
-  const pluginEntries: { cmd: string; desc: string }[] = [
-    { cmd: '/git',    desc: 'open git insights tab'  },
-    { cmd: '/note',   desc: 'open notepad tab'        },
-    { cmd: '/claude', desc: 'open claude ai tab'      },
-  ].filter(e => {
-    const key = e.cmd.slice(1)
-    const entry = PLUGIN_COMMANDS[key]
-    return entry && installed.has(entry.pluginId)
-  })
+  const pluginEntries: { cmd: string; desc: string }[] = []
+  for (const plugin of getLoadedPlugins()) {
+    if (!installed.has(plugin.id)) continue
+    for (const cmd of plugin.commands ?? []) {
+      pluginEntries.push({ cmd: `/${cmd.name}`, desc: cmd.description })
+    }
+  }
   return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
 }
 
@@ -105,6 +110,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
+  const cwdRef = useRef('')        // tracks cwd without causing re-renders; read by plugin-tab dispatch
   const [, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -120,12 +126,12 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
   const savedInputRef = useRef('')   // current input saved when entering history
 
   useEffect(() => {
-    GetTerminalCwd(tabId).then(p => { if (p) { setCwd(p); onCwdChange?.(p) } }).catch(() => {})
+    GetTerminalCwd(tabId).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
     const event = `terminal:cwd:${tabId}`
-    EventsOn(event, (path: string) => { setCwd(path); onCwdChange?.(path) })
+    EventsOn(event, (path: string) => { cwdRef.current = path; setCwd(path); onCwdChange?.(path) })
     return () => EventsOff(event)
   }, [tabId])
 
@@ -575,11 +581,11 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
         // is enforced before anything reaches Go.
         if (line.startsWith('/')) {
           const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
-          const pluginCmd = PLUGIN_COMMANDS[cmdName]
+          const pluginCmd = getPluginCommandMap()[cmdName]
           if (pluginCmd) {
             if (isInstalled(pluginCmd.pluginId)) {
               window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
-                detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId },
+                detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
               }))
             } else {
               term.write(
