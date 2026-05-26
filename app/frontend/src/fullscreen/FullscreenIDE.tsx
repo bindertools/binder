@@ -197,12 +197,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── tree loading ──────────────────────────────────────────────────────────────
   const loadTree = useCallback(async () => {
     if (!cwd) return
-    const [treeNode, statusMap] = await Promise.all([
-      ExplorerOpen(cwd),
-      isInstalled('git') ? fetchGitStatusMap(cwd) : Promise.resolve({}),
-    ])
-    setTree(treeNode as FileNode)
-    setGitStatusMap(statusMap)
+    // Render the tree immediately — never block on git status
+    setTree(await ExplorerOpen(cwd) as FileNode)
+    // Fetch git badges in the background; they paint in once ready
+    if (isInstalled('git')) fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
 
   useEffect(() => { loadTree() }, [loadTree])

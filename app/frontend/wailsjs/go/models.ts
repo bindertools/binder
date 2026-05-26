@@ -203,29 +203,6 @@ export namespace fullscreen {
 
 }
 
-export namespace main {
-	
-	export class GitStatusResult {
-	    isGitRepo: boolean;
-	    root: string;
-	    files: Record<string, string>;
-	    submodules: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new GitStatusResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.isGitRepo = source["isGitRepo"];
-	        this.root = source["root"];
-	        this.files = source["files"];
-	        this.submodules = source["submodules"];
-	    }
-	}
-
-}
-
 export namespace perf {
 	
 	export class PerfData {

@@ -184,6 +184,24 @@ func (a *App) SetTerminalCwd(id string, path string) {
 	}
 }
 
+func (a *App) TerminalInput(id string, data string) {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if ok {
+		t.WriteInput(data)
+	}
+}
+
+func (a *App) ResizeTerminal(id string, cols int, rows int) {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if ok {
+		t.Resize(cols, rows)
+	}
+}
+
 // ─── File & editor ────────────────────────────────────────────────────────────
 
 func (a *App) ReadFile(path string) (string, error) {

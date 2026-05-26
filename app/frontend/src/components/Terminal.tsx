@@ -18,6 +18,8 @@ import {
   SelectDirectory,
   GetCompletions,
   CtrlClickPath,
+  TerminalInput,
+  ResizeTerminal,
 } from '../../wailsjs/go/main/App'
 import '@xterm/xterm/css/xterm.css'
 
@@ -94,6 +96,7 @@ export default function Terminal({
   const fitRef = useRef<FitAddon | null>(null)
   const activeRef = useRef(active)
   useEffect(() => { activeRef.current = active }, [active])
+  const ptyModeRef = useRef(false)
 
   const xtermThemeRef = useRef(xtermTheme)
   useEffect(() => { xtermThemeRef.current = xtermTheme }, [xtermTheme])
@@ -101,6 +104,7 @@ export default function Terminal({
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
+  const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
   const [, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -118,12 +122,12 @@ export default function Terminal({
   const savedInputRef = useRef('')   // current input saved when entering history
 
   useEffect(() => {
-    GetTerminalCwd(tabId).then(p => { if (p) { setCwd(p); onCwdChange?.(p) } }).catch(() => {})
+    GetTerminalCwd(tabId).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
     const event = `terminal:cwd:${tabId}`
-    EventsOn(event, (path: string) => { setCwd(path); onCwdChange?.(path) })
+    EventsOn(event, (path: string) => { cwdRef.current = path; setCwd(path); onCwdChange?.(path) })
     return () => EventsOff(event)
   }, [tabId])
 
@@ -304,6 +308,17 @@ export default function Terminal({
     const outEvent = `terminal:output:${tabId}`
     EventsOn(outEvent, (data: string) => { term.write(data) })
 
+    // PTY mode: switch to raw pass-through when an interactive process is running
+    const ptyStartEvent = `terminal:pty:start:${tabId}`
+    const ptyEndEvent   = `terminal:pty:end:${tabId}`
+    EventsOn(ptyStartEvent, () => { ptyModeRef.current = true  })
+    EventsOn(ptyEndEvent,   () => { ptyModeRef.current = false })
+
+    // Forward xterm resize events to the backend PTY
+    term.onResize(({ cols, rows }) => {
+      ResizeTerminal(tabId, cols, rows).catch(() => {})
+    })
+
     const lineRef = { current: '' }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -476,6 +491,8 @@ export default function Terminal({
     }
 
     const onContainerKeyDown = (e: KeyboardEvent) => {
+      if (ptyModeRef.current) return
+
       if (e.key === 'Tab') {
         e.preventDefault()
         e.stopPropagation()
@@ -542,7 +559,12 @@ export default function Terminal({
       if (!activeRef.current) return
       e.preventDefault()
       const text = e.clipboardData?.getData('text/plain') ?? ''
-      if (text) processPaste(text)
+      if (!text) return
+      if (ptyModeRef.current) {
+        TerminalInput(tabId, text).catch(() => {})
+      } else {
+        processPaste(text)
+      }
     }
     window.addEventListener('paste', onWindowPaste)
 
@@ -551,6 +573,12 @@ export default function Terminal({
     const undoStack: string[] = []
 
     term.onData((data: string) => {
+      // PTY mode: raw pass-through — the process drives the display
+      if (ptyModeRef.current) {
+        TerminalInput(tabId, data).catch(() => {})
+        return
+      }
+
       // Enter
       if (data === '\r' || data === '\n') {
         setMenu(null)
@@ -673,7 +701,14 @@ export default function Terminal({
 
       // Ctrl+V
       if (data === '\x16') {
-        GetClipboardText().then(text => { if (text) processPaste(text) }).catch(() => {})
+        GetClipboardText().then(text => {
+          if (!text) return
+          if (ptyModeRef.current) {
+            TerminalInput(tabId, text).catch(() => {})
+          } else {
+            processPaste(text)
+          }
+        }).catch(() => {})
         return
       }
 
@@ -713,6 +748,9 @@ export default function Terminal({
       window.removeEventListener('paste', onWindowPaste)
       window.removeEventListener('plugin:execute', handlePluginExec)
       EventsOff(outEvent)
+      EventsOff(ptyStartEvent)
+      EventsOff(ptyEndEvent)
+      ptyModeRef.current = false
       CloseTerminal(tabId)
       term.dispose()
       termRef.current = null

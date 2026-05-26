@@ -19,20 +19,24 @@ import (
 	"terminal-ide/ports"
 	"terminal-ide/problems"
 
-	ps "github.com/Command-IDE/powershell/src"
 	term "github.com/Command-IDE/terminal/src"
+	gopty "github.com/aymanbagabas/go-pty"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type Terminal struct {
-	id         string
-	cwd        string
-	ctx        context.Context
-	mu         sync.Mutex
-	runningCmd *exec.Cmd
-	runningIn  io.WriteCloser
-	once       sync.Once
+	id           string
+	cwd          string
+	ctx          context.Context
+	mu           sync.Mutex
+	runningCmd   *exec.Cmd      // line-oriented external command (Windows default path)
+	runningIn    io.WriteCloser // stdin for runningCmd when it accepts line input
+	runningPty   gopty.Pty      // active PTY (nil when idle)
+	runningGoCmd *gopty.Cmd     // command attached to the PTY
+	ptyCols      int            // last known terminal width
+	ptyRows      int            // last known terminal height
+	once         sync.Once
 }
 
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
@@ -138,13 +142,18 @@ func (t *Terminal) prompt() string {
 }
 
 // ExecuteCommand is called from the frontend when the user presses Enter.
-// If a command is already running, the line is forwarded as stdin.
+// PTY-backed apps receive raw bytes via TerminalInput; line-oriented commands
+// receive whole lines through runningIn.
 func (t *Terminal) ExecuteCommand(line string) {
 	t.mu.Lock()
 	runIn := t.runningIn
+	ptyRunning := t.runningPty != nil
 	t.mu.Unlock()
 	if runIn != nil {
 		runIn.Write([]byte(line + "\n")) //nolint:errcheck
+		return
+	}
+	if ptyRunning {
 		return
 	}
 
@@ -249,17 +258,27 @@ func (t *Terminal) ExecuteCommand(line string) {
 	t.execExternal(line)
 }
 
-// Interrupt kills any currently-running external command (user pressed Ctrl+C).
+// Interrupt kills the active PTY process (user pressed Ctrl+C or force-kill).
 func (t *Terminal) Interrupt() {
 	t.mu.Lock()
 	cmd := t.runningCmd
+	goCmd := t.runningGoCmd
+	ptyInst := t.runningPty
 	t.runningCmd = nil
 	t.runningIn = nil
+	t.runningGoCmd = nil
+	t.runningPty = nil // signals execExternal goroutine that we interrupted
 	t.mu.Unlock()
+
 	if cmd != nil && cmd.Process != nil {
 		cmd.Process.Kill()
-		t.write("^C")
 		t.write(t.prompt())
+	}
+	if goCmd != nil && goCmd.Process != nil {
+		goCmd.Process.Kill()
+	}
+	if ptyInst != nil {
+		ptyInst.Close() // unblocks the PTY read loop
 	}
 }
 
@@ -796,14 +815,58 @@ func isPreviewURL(s string) bool {
 
 // â”€â”€â”€ external command execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+func windowsShellPath() string {
+	const shellName = "powershell.exe"
+
+	// go-pty resolves bare executable names against Cmd.Dir on Windows, so we
+	// must pass an absolute shell path before attaching the PTY in another cwd.
+	path, err := exec.LookPath(shellName)
+	if err != nil {
+		return shellName
+	}
+	return path
+}
+
+func shouldUsePTY(line string) bool {
+	if goruntime.GOOS != "windows" {
+		return true
+	}
+
+	parts := parseArgs(strings.TrimSpace(line))
+	if len(parts) == 0 {
+		return false
+	}
+
+	name := strings.ToLower(filepath.Base(parts[0]))
+	switch name {
+	case "claude", "claude.exe", "cmd", "cmd.exe", "codex", "codex.exe",
+		"fzf", "less", "more", "nvim", "powershell", "powershell.exe",
+		"pwsh", "pwsh.exe", "ssh", "sftp", "top", "vim":
+		return true
+	default:
+		return false
+	}
+}
+
 func (t *Terminal) execExternal(line string) {
-	cmd := ps.BuildShellCmdWithPref(line, config.Get().PreferredShell)
+	if !shouldUsePTY(line) {
+		t.execExternalWindows(line)
+		return
+	}
+
+	t.execExternalPTY(line)
+}
+
+func (t *Terminal) execExternalWindows(line string) {
+	cmd := exec.Command(windowsShellPath(),
+		"-NoProfile", "-ExecutionPolicy", "Bypass",
+		"-Command", line)
 	cmd.Dir = t.cwd
 	cmd.Env = append(liveEnv(),
 		"TERM=xterm-256color",
 		"COLORTERM=truecolor",
-		"FORCE_COLOR=1",    // Node.js / chalk
-		"CLICOLOR_FORCE=1", // BSD / macOS tools
+		"FORCE_COLOR=1",
+		"CLICOLOR_FORCE=1",
 	)
 
 	stdout, _ := cmd.StdoutPipe()
@@ -820,7 +883,8 @@ func (t *Terminal) execExternal(line string) {
 	if err := cmd.Start(); err != nil {
 		t.write("\r\n\x1b[31m" + err.Error() + "\x1b[0m")
 		t.mu.Lock()
-		t.runningCmd, t.runningIn = nil, nil
+		t.runningCmd = nil
+		t.runningIn = nil
 		t.mu.Unlock()
 		t.write(t.prompt())
 		return
@@ -845,21 +909,98 @@ func (t *Terminal) execExternal(line string) {
 	go stream(stdout, &wg)
 	go stream(stderr, &wg)
 	wg.Wait()
-	cmd.Wait()
+	cmd.Wait() //nolint:errcheck
 
 	t.mu.Lock()
-	wasInterrupted := t.runningCmd == nil // Interrupt() already cleared it
-	t.runningCmd, t.runningIn = nil, nil
+	wasInterrupted := t.runningCmd == nil
+	t.runningCmd = nil
+	t.runningIn = nil
 	t.mu.Unlock()
 
-	// Only print a prompt if Interrupt() hasn't already done so.
 	if !wasInterrupted {
 		t.write(t.prompt())
 	}
 }
 
-// normNewlines converts bare \n â†’ \r\n while leaving \r and \r\n intact
-// (so progress bars that use \r to overwrite the line still work).
+func (t *Terminal) execExternalPTY(line string) {
+	p, err := gopty.New()
+	if err != nil {
+		t.write("\r\n\x1b[31mpty: " + err.Error() + "\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+
+	t.mu.Lock()
+	cols, rows := t.ptyCols, t.ptyRows
+	t.mu.Unlock()
+	if cols == 0 {
+		cols = 80
+	}
+	if rows == 0 {
+		rows = 24
+	}
+	p.Resize(cols, rows) //nolint:errcheck
+
+	var c *gopty.Cmd
+	switch goruntime.GOOS {
+	case "windows":
+		c = p.Command(windowsShellPath(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", line)
+	default:
+		shell := config.Get().PreferredShell
+		if shell == "" {
+			shell = "bash"
+		}
+		c = p.Command(shell, "-c", line)
+	}
+	c.Dir = t.cwd
+	c.Env = append(liveEnv(),
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+		"FORCE_COLOR=1",
+		"CLICOLOR_FORCE=1",
+	)
+
+	if err := c.Start(); err != nil {
+		p.Close()
+		t.write("\r\n\x1b[31m" + err.Error() + "\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+
+	t.mu.Lock()
+	t.runningPty = p
+	t.runningGoCmd = c
+	t.mu.Unlock()
+
+	wailsruntime.EventsEmit(t.ctx, "terminal:pty:start:"+t.id, nil)
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := p.Read(buf)
+		if n > 0 {
+			t.write(string(buf[:n]))
+		}
+		if err != nil {
+			break
+		}
+	}
+	c.Wait()  //nolint:errcheck
+	p.Close() //nolint:errcheck
+
+	t.mu.Lock()
+	wasInterrupted := t.runningPty == nil // Interrupt() already cleared it
+	t.runningPty = nil
+	t.runningGoCmd = nil
+	t.mu.Unlock()
+
+	wailsruntime.EventsEmit(t.ctx, "terminal:pty:end:"+t.id, nil)
+
+	if !wasInterrupted {
+		t.write(t.prompt())
+	}
+}
+
+// normNewlines converts bare \n to \r\n while leaving \r and \r\n intact.
 func normNewlines(b []byte) string {
 	out := make([]byte, 0, len(b)+64)
 	for i, c := range b {
@@ -869,6 +1010,28 @@ func normNewlines(b []byte) string {
 		out = append(out, c)
 	}
 	return string(out)
+}
+
+// WriteInput forwards raw bytes from the frontend to the active PTY.
+func (t *Terminal) WriteInput(data string) {
+	t.mu.Lock()
+	p := t.runningPty
+	t.mu.Unlock()
+	if p != nil {
+		p.Write([]byte(data)) //nolint:errcheck
+	}
+}
+
+// Resize updates the PTY dimensions (cols × rows) when xterm resizes.
+func (t *Terminal) Resize(cols, rows int) {
+	t.mu.Lock()
+	t.ptyCols = cols
+	t.ptyRows = rows
+	p := t.runningPty
+	t.mu.Unlock()
+	if p != nil {
+		p.Resize(cols, rows) //nolint:errcheck
+	}
 }
 
 // â”€â”€â”€ command-line parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
