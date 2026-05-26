@@ -50,7 +50,7 @@ jobs:
           # all private submodule repos in the Command-IDE org. The default
           # GITHUB_TOKEN is scoped to this repo only and cannot clone private
           # submodules owned by the same organisation.
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
