@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
+<<<<<<< HEAD
 import { getInstalledIds, isInstalled, getLoadedPlugins } from '../plugins/index'
+=======
+>>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
 import { Terminal as XTerm } from '@xterm/xterm'
 import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import type { InstalledPluginCommand } from '../plugins'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
   CreateTerminal,
@@ -18,6 +22,8 @@ import {
   SelectDirectory,
   GetCompletions,
   CtrlClickPath,
+  TerminalInput,
+  ResizeTerminal,
 } from '../../wailsjs/go/main/App'
 import '@xterm/xterm/css/xterm.css'
 
@@ -27,6 +33,7 @@ interface Props {
   xtermTheme: ITheme
   initialCwd?: string
   defaultZoom?: number
+  pluginCommands?: Record<string, InstalledPluginCommand>
   onCwdChange?: (cwd: string) => void
 }
 
@@ -66,6 +73,7 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/help',            desc: 'show all commands' },
 ]
 
+<<<<<<< HEAD
 // Build a command-name → plugin metadata map from currently loaded plugins.
 // Called at command-dispatch time so it always reflects the latest install state.
 function getPluginCommandMap(): Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> {
@@ -93,16 +101,36 @@ function buildSlashCommands(): { cmd: string; desc: string }[] {
       pluginEntries.push({ cmd: `/${cmd.name}`, desc: cmd.description })
     }
   }
+=======
+// Build the full slash command list for autocomplete from installed plugins.
+function buildSlashCommands(pluginCommands: Record<string, InstalledPluginCommand>): { cmd: string; desc: string }[] {
+  const pluginEntries = Object.values(pluginCommands)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(command => ({
+      cmd: `/${command.name}`,
+      desc: command.description,
+    }))
+
+>>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
   return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
 }
 
 
-export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaultZoom = 1, onCwdChange }: Props) {
+export default function Terminal({
+  tabId,
+  active,
+  xtermTheme,
+  initialCwd,
+  defaultZoom = 1,
+  pluginCommands = {},
+  onCwdChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const activeRef = useRef(active)
   useEffect(() => { activeRef.current = active }, [active])
+  const ptyModeRef = useRef(false)
 
   const xtermThemeRef = useRef(xtermTheme)
   useEffect(() => { xtermThemeRef.current = xtermTheme }, [xtermTheme])
@@ -110,12 +138,18 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
+<<<<<<< HEAD
   const cwdRef = useRef('')        // tracks cwd without causing re-renders; read by plugin-tab dispatch
+=======
+  const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
+>>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
   const [, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<MenuState | null>(null)
   useEffect(() => { menuRef.current = menu }, [menu])
+  const pluginCommandsRef = useRef(pluginCommands)
+  useEffect(() => { pluginCommandsRef.current = pluginCommands }, [pluginCommands])
 
   // Refs so JSX handlers can call functions defined inside the main useEffect
   const applyMatchRef = useRef<((match: string) => void) | null>(null)
@@ -312,6 +346,17 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     const outEvent = `terminal:output:${tabId}`
     EventsOn(outEvent, (data: string) => { term.write(data) })
 
+    // PTY mode: switch to raw pass-through when an interactive process is running
+    const ptyStartEvent = `terminal:pty:start:${tabId}`
+    const ptyEndEvent   = `terminal:pty:end:${tabId}`
+    EventsOn(ptyStartEvent, () => { ptyModeRef.current = true  })
+    EventsOn(ptyEndEvent,   () => { ptyModeRef.current = false })
+
+    // Forward xterm resize events to the backend PTY
+    term.onResize(({ cols, rows }) => {
+      ResizeTerminal(tabId, cols, rows).catch(() => {})
+    })
+
     const lineRef = { current: '' }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -367,7 +412,7 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       const line = lineRef.current
       if (!line.startsWith('/') || line.includes(' ')) return false
 
-      const filtered = buildSlashCommands().filter(c => c.cmd.startsWith(line))
+      const filtered = buildSlashCommands(pluginCommandsRef.current).filter(c => c.cmd.startsWith(line))
       if (filtered.length === 0) { setMenu(null); return true }
 
       const { h, w } = cellDims()
@@ -484,6 +529,8 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     }
 
     const onContainerKeyDown = (e: KeyboardEvent) => {
+      if (ptyModeRef.current) return
+
       if (e.key === 'Tab') {
         e.preventDefault()
         e.stopPropagation()
@@ -550,7 +597,12 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       if (!activeRef.current) return
       e.preventDefault()
       const text = e.clipboardData?.getData('text/plain') ?? ''
-      if (text) processPaste(text)
+      if (!text) return
+      if (ptyModeRef.current) {
+        TerminalInput(tabId, text).catch(() => {})
+      } else {
+        processPaste(text)
+      }
     }
     window.addEventListener('paste', onWindowPaste)
 
@@ -559,6 +611,12 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
     const undoStack: string[] = []
 
     term.onData((data: string) => {
+      // PTY mode: raw pass-through — the process drives the display
+      if (ptyModeRef.current) {
+        TerminalInput(tabId, data).catch(() => {})
+        return
+      }
+
       // Enter
       if (data === '\r' || data === '\n') {
         setMenu(null)
@@ -577,21 +635,22 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
         savedInputRef.current = ''
         term.write('\r\n')
 
-        // Intercept plugin slash commands on the frontend so install state
-        // is enforced before anything reaches Go.
+        // Intercept installed plugin slash commands on the frontend so
+        // metadata-driven tabs and command handlers work before reaching Go.
         if (line.startsWith('/')) {
           const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
+<<<<<<< HEAD
           const pluginCmd = getPluginCommandMap()[cmdName]
+=======
+          const pluginCmd = pluginCommandsRef.current[cmdName]
+>>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
           if (pluginCmd) {
-            if (isInstalled(pluginCmd.pluginId)) {
+            if (pluginCmd.handler) {
+              pluginCmd.handler()
+            } else if (pluginCmd.tabType) {
               window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
                 detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
               }))
-            } else {
-              term.write(
-                `\x1b[38;5;203m"/${cmdName}" requires the ${pluginCmd.displayName} plugin.\x1b[0m\r\n` +
-                `\x1b[38;5;246mRun /plugins to open the Plugin Store and install it.\x1b[0m`
-              )
             }
             // Ask Go to re-draw the prompt so the terminal stays usable.
             ExecuteCommand(tabId, '')
@@ -684,7 +743,14 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
 
       // Ctrl+V
       if (data === '\x16') {
-        GetClipboardText().then(text => { if (text) processPaste(text) }).catch(() => {})
+        GetClipboardText().then(text => {
+          if (!text) return
+          if (ptyModeRef.current) {
+            TerminalInput(tabId, text).catch(() => {})
+          } else {
+            processPaste(text)
+          }
+        }).catch(() => {})
         return
       }
 
@@ -724,6 +790,9 @@ export default function Terminal({ tabId, active, xtermTheme, initialCwd, defaul
       window.removeEventListener('paste', onWindowPaste)
       window.removeEventListener('plugin:execute', handlePluginExec)
       EventsOff(outEvent)
+      EventsOff(ptyStartEvent)
+      EventsOff(ptyEndEvent)
+      ptyModeRef.current = false
       CloseTerminal(tabId)
       term.dispose()
       termRef.current = null

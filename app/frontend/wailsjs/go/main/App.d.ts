@@ -20,6 +20,8 @@ export function CtrlClickPath(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteFile(arg1:string):Promise<void>;
 
+export function ExecSilent(arg1:string,arg2:string,arg3:Array<string>):Promise<string>;
+
 export function ExecuteCommand(arg1:string,arg2:string):Promise<void>;
 
 export function ExplorerCreateDir(arg1:string):Promise<void>;
@@ -72,6 +74,8 @@ export function ReadDatabase(arg1:string):Promise<database.DBSchema>;
 
 export function ReadFile(arg1:string):Promise<string>;
 
+export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function SaveAppConfig(arg1:config.Config):Promise<void>;
 
 export function SaveCustomTheme(arg1:Record<string, string>):Promise<void>;
@@ -91,5 +95,7 @@ export function SetTerminalCwd(arg1:string,arg2:string):Promise<void>;
 export function StartPerfMonitor(arg1:string):Promise<void>;
 
 export function StopPerfMonitor(arg1:string):Promise<void>;
+
+export function TerminalInput(arg1:string,arg2:string):Promise<void>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

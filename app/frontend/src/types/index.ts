@@ -1,4 +1,4 @@
-export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'problems' | 'config' | 'ports' | 'perf' | 'plugins' | 'notepad' | 'git' | 'claude' | (string & {})
+export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'problems' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
 
 export interface ProbItem {
   file: string

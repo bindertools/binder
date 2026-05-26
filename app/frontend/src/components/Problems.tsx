@@ -14,30 +14,88 @@ interface Props {
   onOpenFile:  (path: string, line: number, col: number) => void
 }
 
+// ── SVG Icons ──────────────────────────────────────────────────────────────────
+
+const IconError = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <circle cx="7" cy="7" r="6.5" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M4.8 4.8L9.2 9.2M9.2 4.8L4.8 9.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconWarning = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M7 1.8L12.4 11.5H1.6L7 1.8Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+    <path d="M7 5.5V8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <circle cx="7" cy="10.2" r="0.7" fill="currentColor"/>
+  </svg>
+)
+
+const IconInfo = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <circle cx="7" cy="7" r="6.5" fill="currentColor" fillOpacity="0.1" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M7 6.5V10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <circle cx="7" cy="4.5" r="0.75" fill="currentColor"/>
+  </svg>
+)
+
+const IconCheck = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <circle cx="7" cy="7" r="6.5" fill="currentColor" fillOpacity="0.1" stroke="currentColor" strokeWidth="1.2"/>
+    <path d="M4 7L6 9.2L10 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconRefresh = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+    <path d="M11 6.5C11 9.04 8.76 11 6 11C3.24 11 1 9.04 1 6.5C1 3.96 3.24 2 6 2C7.6 2 9.02 2.72 9.9 3.86" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path d="M10 1.5V4.5H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconFile = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+    <path d="M2.5 1H7L10 4V10.5C10 10.78 9.78 11 9.5 11H2.5C2.22 11 2 10.78 2 10.5V1.5C2 1.22 2.22 1 2.5 1Z" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1"/>
+    <path d="M7 1V4.5H10" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconGoto = () => (
+  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+    <path d="M2 9L9 2M9 2H5.5M9 2V5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconProblems = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+    <path d="M6.5 1.2L12.2 11.5H0.8L6.5 1.2Z" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M6.5 5V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <circle cx="6.5" cy="10" r="0.7" fill="currentColor"/>
+  </svg>
+)
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function relPath(cwd: string, file: string): string {
-  const norm  = file.replace(/\\/g, '/')
-  const base  = cwd.replace(/\\/g, '/').replace(/\/?$/, '/')
-  if (norm.startsWith(base)) return norm.slice(base.length)
-  // Fallback: show last 3 segments
-  return norm.split('/').slice(-3).join('/')
+function splitPath(cwd: string, file: string): { dir: string; name: string } {
+  const norm = file.replace(/\\/g, '/')
+  const base = cwd.replace(/\\/g, '/').replace(/\/?$/, '/')
+  const rel  = norm.startsWith(base)
+    ? norm.slice(base.length)
+    : norm.split('/').slice(-3).join('/')
+  const sep = rel.lastIndexOf('/')
+  return sep === -1
+    ? { dir: '', name: rel }
+    : { dir: rel.slice(0, sep + 1), name: rel.slice(sep + 1) }
 }
 
-/** Identify root-cause and cascade info for items in one file (sorted by line). */
 function rootCauseLabel(groupItems: ProbItem[], idx: number): string | null {
   const errors = groupItems.filter(i => i.sev === 0)
-  if (errors.length < 2) return null          // single error → no label needed
-
+  if (errors.length < 2) return null
   const item = groupItems[idx]
-  if (item.sev !== 0) return null             // only label errors
-
-  if (item === errors[0]) return 'root cause' // first error = likely origin
-
-  // Look for explicit back-reference in the message ("at line N")
+  if (item.sev !== 0) return null
+  if (item === errors[0]) return 'root cause'
   const ref = item.msg.match(/at line (\d+)/)
   if (ref) return `cascades from line ${ref[1]}`
-
   return `may cascade from line ${errors[0].line}`
 }
 
@@ -55,7 +113,6 @@ export default function Problems({ tabId, cwd, sources, items, scanning, onResca
     return items
   }, [items, filter])
 
-  /** Group filtered items by file, each group sorted by line then col. */
   const groups = useMemo(() => {
     const map = new Map<string, ProbItem[]>()
     for (const item of filtered) {
@@ -63,50 +120,62 @@ export default function Problems({ tabId, cwd, sources, items, scanning, onResca
       arr.push(item)
       map.set(item.file, arr)
     }
-    return Array.from(map.entries())
-      .map(([file, its]) => ({
-        file,
-        items: [...its].sort((a, b) => a.line - b.line || a.col - b.col),
-      }))
+    return Array.from(map.entries()).map(([file, its]) => ({
+      file,
+      items: [...its].sort((a, b) => a.line - b.line || a.col - b.col),
+    }))
   }, [filtered])
 
   const handleItemClick = useCallback((file: string, line: number, col: number) => {
     onOpenFile(file, line, col)
   }, [onOpenFile])
 
-  // ── summary label ────────────────────────────────────────────────────────────
-  let summaryEl: React.ReactNode
-  if (scanning) {
-    summaryEl = <span className="prob-count-dim">scanning…</span>
-  } else if (items.length === 0) {
-    summaryEl = <span className="prob-count-ok">✓ no problems</span>
-  } else {
-    summaryEl = (
-      <>
-        {errCount  > 0 && <span className="prob-count-err">{errCount} error{errCount  !== 1 ? 's' : ''}</span>}
-        {warnCount > 0 && <span className="prob-count-warn">{warnCount} warning{warnCount !== 1 ? 's' : ''}</span>}
-      </>
-    )
-  }
-
   return (
     <div className="prob-pane">
 
       {/* ── header ────────────────────────────────────────────────────────── */}
       <div className="prob-header">
-        <span className="prob-title">⚠ Problems</span>
+        <span className="prob-header-icon"><IconProblems /></span>
+        <span className="prob-title">Problems</span>
         {sources.length > 0 && (
           <span className="prob-sources">{sources.join(' · ')}</span>
         )}
         <div className="prob-spacer" />
-        <div className="prob-summary">{summaryEl}</div>
+
+        <div className="prob-summary">
+          {scanning ? (
+            <span className="prob-count-dim">scanning…</span>
+          ) : items.length === 0 ? (
+            <span className="prob-count-ok">
+              <span className="prob-count-icon"><IconCheck /></span>
+              No problems
+            </span>
+          ) : (
+            <>
+              {errCount > 0 && (
+                <span className="prob-count-err">
+                  <span className="prob-count-icon"><IconError /></span>
+                  {errCount} error{errCount !== 1 ? 's' : ''}
+                </span>
+              )}
+              {warnCount > 0 && (
+                <span className="prob-count-warn">
+                  <span className="prob-count-icon"><IconWarning /></span>
+                  {warnCount} warning{warnCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
         <button
-          className={`prob-rescan${scanning ? ' spinning' : ''}`}
+          className={`prob-rescan${scanning ? ' scanning' : ''}`}
           onClick={() => onRescan(tabId, cwd)}
           disabled={scanning}
           title="Re-scan project"
         >
-          ↺ Rescan
+          <span className="prob-rescan-icon"><IconRefresh /></span>
+          Rescan
         </button>
       </div>
 
@@ -117,9 +186,11 @@ export default function Problems({ tabId, cwd, sources, items, scanning, onResca
           return (
             <button
               key={f}
-              className={`prob-filter${filter === f ? ' active' : ''}`}
+              className={`prob-filter${filter === f ? ' active' : ''} ${f}`}
               onClick={() => setFilter(f)}
             >
+              {f === 'errors'   && <span className="prob-filter-icon err"><IconError /></span>}
+              {f === 'warnings' && <span className="prob-filter-icon warn"><IconWarning /></span>}
               {f.charAt(0).toUpperCase() + f.slice(1)}
               <span className="prob-filter-count">{count}</span>
             </button>
@@ -135,48 +206,86 @@ export default function Problems({ tabId, cwd, sources, items, scanning, onResca
 
         {groups.length === 0 && !scanning && (
           <div className="prob-empty">
-            {items.length === 0
-              ? '✓  No problems found in this project'
-              : 'No problems match the current filter'}
+            <span className={`prob-empty-icon ${items.length === 0 ? 'ok' : 'info'}`}>
+              {items.length === 0 ? <IconCheck /> : <IconInfo />}
+            </span>
+            <span>
+              {items.length === 0
+                ? 'No problems found in this project'
+                : 'No problems match the current filter'}
+            </span>
           </div>
         )}
 
         {groups.map(({ file, items: gItems }) => {
-          const hasErr = gItems.some(i => i.sev === 0)
+          const { dir, name } = splitPath(cwd, file)
+          const gErrCount  = gItems.filter(i => i.sev === 0).length
+          const gWarnCount = gItems.filter(i => i.sev === 1).length
+
           return (
             <div key={file} className="prob-group">
 
               {/* file header */}
               <div className="prob-file-header">
-                <span className="prob-file-path" title={file}>{relPath(cwd, file)}</span>
-                <span className={`prob-file-badge ${hasErr ? 'err' : 'warn'}`}>{gItems.length}</span>
+                <span className="prob-file-icon"><IconFile /></span>
+                <span className="prob-file-path" title={file}>
+                  {dir && <span className="prob-file-dir">{dir}</span>}
+                  <span className="prob-file-name">{name}</span>
+                </span>
+                <div className="prob-file-counts">
+                  {gErrCount  > 0 && (
+                    <span className="prob-file-badge err">
+                      <IconError />{gErrCount}
+                    </span>
+                  )}
+                  {gWarnCount > 0 && (
+                    <span className="prob-file-badge warn">
+                      <IconWarning />{gWarnCount}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* items */}
               <div className="prob-file-items">
                 {gItems.map((item, idx) => {
-                  const rcLabel = rootCauseLabel(gItems, idx)
-                  const isRoot  = rcLabel === 'root cause'
-                  const cascade = rcLabel && !isRoot ? rcLabel : null
+                  const rcLabel  = rootCauseLabel(gItems, idx)
+                  const isRoot   = rcLabel === 'root cause'
+                  const cascade  = rcLabel && !isRoot ? rcLabel : null
+                  const sevClass = item.sev === 0 ? 'err' : item.sev === 1 ? 'warn' : 'info'
 
                   return (
                     <div
                       key={idx}
-                      className="prob-item"
+                      className={`prob-item ${sevClass}`}
                       onClick={() => handleItemClick(item.file, item.line, item.col)}
-                      title={`${relPath(cwd, item.file)} · line ${item.line}`}
+                      title={`Open ${name} — line ${item.line}, col ${item.col}`}
                     >
                       <div className="prob-item-row">
-                        <span className={`prob-sev-dot ${item.sev === 0 ? 'err' : item.sev === 1 ? 'warn' : 'info'}`}>
-                          {item.sev === 0 ? '●' : item.sev === 1 ? '◐' : '○'}
+                        <span className={`prob-sev-icon ${sevClass}`}>
+                          {item.sev === 0 ? <IconError /> : item.sev === 1 ? <IconWarning /> : <IconInfo />}
                         </span>
-                        <span className="prob-pos">{item.line}:{item.col}</span>
+                        <span className="prob-location">
+                          <span className="prob-location-label">Ln</span>
+                          {item.line}
+                          <span className="prob-location-sep">,</span>
+                          <span className="prob-location-label">Col</span>
+                          {item.col}
+                        </span>
                         {item.code && <span className="prob-code">{item.code}</span>}
                         <span className="prob-msg">{item.msg}</span>
-                        {isRoot && <span className="prob-root-badge">root cause</span>}
+                        <div className="prob-item-end">
+                          {isRoot && <span className="prob-root-badge">root cause</span>}
+                          <span className="prob-goto" aria-label="Go to location">
+                            <IconGoto />
+                          </span>
+                        </div>
                       </div>
                       {cascade && (
-                        <div className="prob-cascade">↳ {cascade}</div>
+                        <div className="prob-cascade">
+                          <span className="prob-cascade-indent" />
+                          {cascade}
+                        </div>
                       )}
                     </div>
                   )
@@ -190,11 +299,25 @@ export default function Problems({ tabId, cwd, sources, items, scanning, onResca
       {/* ── footer ────────────────────────────────────────────────────────── */}
       {items.length > 0 && (
         <div className="prob-footer">
-          {errCount  > 0 && <span className="err">{errCount} error{errCount !== 1 ? 's' : ''}</span>}
-          {errCount  > 0 && warnCount > 0 && <span className="sep">·</span>}
-          {warnCount > 0 && <span className="warn">{warnCount} warning{warnCount !== 1 ? 's' : ''}</span>}
-          <span className="sep">·</span>
-          <span className="dim">{sources.join(', ')}</span>
+          {errCount > 0 && (
+            <span className="err">
+              <span className="prob-footer-icon"><IconError /></span>
+              {errCount} error{errCount !== 1 ? 's' : ''}
+            </span>
+          )}
+          {errCount > 0 && warnCount > 0 && <span className="sep">·</span>}
+          {warnCount > 0 && (
+            <span className="warn">
+              <span className="prob-footer-icon"><IconWarning /></span>
+              {warnCount} warning{warnCount !== 1 ? 's' : ''}
+            </span>
+          )}
+          {sources.length > 0 && (
+            <>
+              <span className="sep">·</span>
+              <span className="dim">{sources.join(', ')}</span>
+            </>
+          )}
         </div>
       )}
 

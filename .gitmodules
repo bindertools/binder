@@ -22,3 +22,6 @@
 [submodule "packages/git"]
 	path = packages/git
 	url = https://github.com/Command-IDE/git
+[submodule "packages/ai-plugin"]
+	path = packages/ai-plugin
+	url = https://github.com/Command-IDE/ai-plugin

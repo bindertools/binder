@@ -336,6 +336,11 @@
   font-size: 12px;
   padding: 4px 0;
   backdrop-filter: blur(12px);
+  scrollbar-width: none; 
+}
+
+.completion-menu::-webkit-scrollbar {
+  display: none;
 }
 
 .completion-item {

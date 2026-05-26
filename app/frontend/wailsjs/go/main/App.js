@@ -22,6 +22,10 @@ export function DeleteFile(arg1) {
   return window['go']['main']['App']['DeleteFile'](arg1);
 }
 
+export function ExecSilent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExecSilent'](arg1, arg2, arg3);
+}
+
 export function ExecuteCommand(arg1, arg2) {
   return window['go']['main']['App']['ExecuteCommand'](arg1, arg2);
 }
@@ -126,6 +130,10 @@ export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
 }
 
+export function ResizeTerminal(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
+}
+
 export function SaveAppConfig(arg1) {
   return window['go']['main']['App']['SaveAppConfig'](arg1);
 }
@@ -164,6 +172,10 @@ export function StartPerfMonitor(arg1) {
 
 export function StopPerfMonitor(arg1) {
   return window['go']['main']['App']['StopPerfMonitor'](arg1);
+}
+
+export function TerminalInput(arg1, arg2) {
+  return window['go']['main']['App']['TerminalInput'](arg1, arg2);
 }
 
 export function WriteFile(arg1, arg2) {
