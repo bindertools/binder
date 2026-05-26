@@ -11,9 +11,9 @@ func detectLanguage(path string) string {
 	m := map[string]string{
 		".js": "javascript", ".mjs": "javascript", ".cjs": "javascript",
 		".jsx": "javascriptreact",
-		".ts": "typescript", ".mts": "typescript",
+		".ts":  "typescript", ".mts": "typescript",
 		".tsx": "typescriptreact",
-		".py": "python", ".go": "go", ".rs": "rust",
+		".py":  "python", ".go": "go", ".rs": "rust",
 		".java": "java", ".kt": "kotlin", ".scala": "scala",
 		".c": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".h": "cpp", ".hpp": "cpp",
 		".cs": "csharp", ".vb": "vb",
