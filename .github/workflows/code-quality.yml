@@ -32,6 +32,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          # GH_PAT must be a PAT (classic or fine-grained) with read access to
+          # all private submodule repos in the Command-IDE org. The default
+          # GITHUB_TOKEN is scoped to this repo only and cannot clone private
+          # submodules owned by the same organisation.
+          token: ${{ secrets.GH_PAT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
