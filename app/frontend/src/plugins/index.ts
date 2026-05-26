@@ -65,29 +65,7 @@ export function removeExternalPlugin(id: string): void {
   localStorage.setItem(KEY_EXTERNAL, JSON.stringify(getExternalPlugins().filter(p => p.id !== id)))
 }
 
-// ── Loaded plugin cache ───────────────────────────────────────────────────────
-// Populated by App.tsx after loadInstalledPlugins() resolves so that Terminal
-// can dynamically build its slash-command list from plugin.commands arrays.
-let _loadedPlugins: Plugin[] = []
-
-export function getLoadedPlugins(): Plugin[] { return _loadedPlugins }
-export function setLoadedPlugins(plugins: Plugin[]): void { _loadedPlugins = plugins }
-
 // ── Async plugin loader ───────────────────────────────────────────────────────
-<<<<<<< HEAD
-// Plugins may be built in two formats:
-//
-//   IIFE  — bundle assigns itself to window.__cmdide_plugin__ and reads React
-//            from window.React (set in main.tsx). Executed via new Function()
-//            so no blob-URL / CSP restrictions apply.
-//
-//   ESM   — legacy ES-module format loaded via a blob-URL dynamic import.
-//            Kept for backward compatibility with older plugin builds.
-//
-// The loader auto-detects the format by checking for ES-module export syntax.
-const PLUGIN_GLOBAL = '__cmdide_plugin__'
-
-=======
 // Two bundle formats are supported:
 //
 //   IIFE  — assigns to window.__cmdide_plugin__, loaded with new Function().
@@ -98,7 +76,6 @@ const PLUGIN_GLOBAL = '__cmdide_plugin__'
 //               Legacy plugins (e.g. the bundled AI plugin).
 //
 // Format is auto-detected; the loop is sequential to avoid global-key races.
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
 export async function loadInstalledPlugins(): Promise<Plugin[]> {
   const ids = getInstalledIds()
   const plugins: Plugin[] = []
@@ -110,20 +87,6 @@ export async function loadInstalledPlugins(): Promise<Plugin[]> {
       if (!ext?.code) continue
 
       const code = ext.code
-<<<<<<< HEAD
-      const isIIFE = !(/\bexport\s*\{/.test(code) || /\bexport\s+default\b/.test(code))
-
-      if (isIIFE) {
-        // IIFE bundle: evaluate it so window.__cmdide_plugin__ is assigned.
-        ;(window as any)[PLUGIN_GLOBAL] = undefined
-        // eslint-disable-next-line no-new-func
-        new Function(code)()
-        const plugin = (window as any)[PLUGIN_GLOBAL]
-        ;(window as any)[PLUGIN_GLOBAL] = undefined
-        if (plugin?.id) plugins.push(plugin as Plugin)
-      } else {
-        // ESM bundle: load via blob URL.
-=======
 
       // If the bundle has no ES-module export syntax it's an IIFE bundle.
       const isIIFE = !(/\bexport\s*\{/.test(code) || /\bexport\s+default\b/.test(code))
@@ -139,7 +102,6 @@ export async function loadInstalledPlugins(): Promise<Plugin[]> {
         if (plugin?.id) plugins.push(plugin as Plugin)
       } else {
         // ES-module bundles are loaded via blob-URL dynamic import.
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
         const blob = new Blob([code], { type: 'text/javascript' })
         const url  = URL.createObjectURL(blob)
         const mod  = await import(/* @vite-ignore */ url)

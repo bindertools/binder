@@ -1,9 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-<<<<<<< HEAD
-import { getInstalledIds, isInstalled, getLoadedPlugins } from '../plugins/index'
-=======
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
 import { Terminal as XTerm } from '@xterm/xterm'
 import type { ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -73,35 +69,6 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/help',            desc: 'show all commands' },
 ]
 
-<<<<<<< HEAD
-// Build a command-name → plugin metadata map from currently loaded plugins.
-// Called at command-dispatch time so it always reflects the latest install state.
-function getPluginCommandMap(): Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> {
-  const map: Record<string, { pluginId: string; tabType: string; title: string; displayName: string }> = {}
-  for (const plugin of getLoadedPlugins()) {
-    for (const cmd of plugin.commands ?? []) {
-      map[cmd.name.toLowerCase()] = {
-        pluginId:    plugin.id,
-        tabType:     plugin.tabType ?? plugin.id,
-        title:       plugin.tabTitle ?? plugin.id,
-        displayName: plugin.name,
-      }
-    }
-  }
-  return map
-}
-
-// Build the full slash command list for autocomplete, filtered by installed plugins.
-function buildSlashCommands(): { cmd: string; desc: string }[] {
-  const installed = new Set(getInstalledIds())
-  const pluginEntries: { cmd: string; desc: string }[] = []
-  for (const plugin of getLoadedPlugins()) {
-    if (!installed.has(plugin.id)) continue
-    for (const cmd of plugin.commands ?? []) {
-      pluginEntries.push({ cmd: `/${cmd.name}`, desc: cmd.description })
-    }
-  }
-=======
 // Build the full slash command list for autocomplete from installed plugins.
 function buildSlashCommands(pluginCommands: Record<string, InstalledPluginCommand>): { cmd: string; desc: string }[] {
   const pluginEntries = Object.values(pluginCommands)
@@ -111,7 +78,7 @@ function buildSlashCommands(pluginCommands: Record<string, InstalledPluginComman
       desc: command.description,
     }))
 
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
+
   return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
 }
 
@@ -138,11 +105,7 @@ export default function Terminal({
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
-<<<<<<< HEAD
-  const cwdRef = useRef('')        // tracks cwd without causing re-renders; read by plugin-tab dispatch
-=======
   const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
   const [, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -639,11 +602,7 @@ export default function Terminal({
         // metadata-driven tabs and command handlers work before reaching Go.
         if (line.startsWith('/')) {
           const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
-<<<<<<< HEAD
-          const pluginCmd = getPluginCommandMap()[cmdName]
-=======
           const pluginCmd = pluginCommandsRef.current[cmdName]
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
           if (pluginCmd) {
             if (pluginCmd.handler) {
               pluginCmd.handler()

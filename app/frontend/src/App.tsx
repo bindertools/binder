@@ -12,13 +12,8 @@ import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-<<<<<<< HEAD
-import { loadInstalledPlugins, setLoadedPlugins } from './plugins'
-import type { Plugin, PluginContext } from './plugins'
-=======
 import { buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins } from './plugins'
 import type { InstalledPluginCommand, Plugin, PluginContext } from './plugins'
->>>>>>> c8338c3e022b1e71f23599c3befa0c7b9668ff31
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
@@ -326,7 +321,6 @@ export default function App() {
     if (!__PLUGINS__) return
     bootstrapBuiltins()
     const loaded = await loadInstalledPlugins().catch(() => [] as Plugin[])
-    setLoadedPlugins(loaded)
     const map: Record<string, Plugin> = {}
     for (const p of loaded) {
       if (p.tabType) map[p.tabType] = p
