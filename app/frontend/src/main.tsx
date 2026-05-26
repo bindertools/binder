@@ -11,6 +11,11 @@ import App from './App'
 import './App.scss'
 import '../../themes/index.scss'
 
+// Expose React globally so plugin IIFE bundles can reference the host's React
+// instance rather than bundling their own. This prevents "Invalid hook call"
+// errors that occur when two separate React copies are in the same page.
+;(window as any).React = React
+
 // Configure Monaco to use local workers (no CDN — required for offline Wails app)
 self.MonacoEnvironment = {
   getWorker(_: unknown, label: string) {

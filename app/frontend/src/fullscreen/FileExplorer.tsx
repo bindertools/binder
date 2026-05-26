@@ -18,6 +18,8 @@ interface Props {
   selectedPath: string
   onSelect: (node: FileNode) => void
   onRefresh: () => void
+  gitStatus?: Record<string, string>
+  onAddToGitIgnore?: (node: FileNode) => void
 }
 
 type CtxKind = 'file' | 'area'
@@ -30,7 +32,20 @@ interface CtxState {
 }
 
 
-export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }: Props) {
+function gitBadge(code: string | undefined): React.ReactNode {
+  if (!code || code === '!') return null
+  if (code === 'dirty') return <span className="fe-git-badge fe-git-badge--dirty" />
+  const [label, mod] =
+    code === 'M' || code === 'T' || code === 'C' || code === 'R' ? ['M', 'modified'] :
+    code === 'A'   ? ['A', 'added']     :
+    code === '?'   ? ['U', 'untracked'] :
+    code === 'D'   ? ['D', 'deleted']   :
+    code === 'submodule' ? ['S', 'submodule'] :
+    [code, 'modified']
+  return <span className={`fe-git-badge fe-git-badge--${mod}`}>{label}</span>
+}
+
+export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, gitStatus, onAddToGitIgnore }: Props) {
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
   const [ctx,          setCtx]          = useState<CtxState | null>(null)
   const [renaming,     setRenaming]     = useState<string | null>(null)
@@ -124,15 +139,20 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
   }, [])
 
   // ── File-node context menu — no icons ──────────────────────────────────────
-  const buildFileMenu = useCallback((node: FileNode): ContextMenuItem[] => [
-    { label: 'New File',   action: () => handleNewFile(node) },
-    { label: 'New Folder', action: () => handleNewFolder(node) },
-    { divider: true },
-    { label: 'Rename',     action: () => startRename(node) },
-    { label: 'Copy Path',  action: () => handleCopyPath(node) },
-    { divider: true },
-    { label: 'Delete',     danger: true, action: () => handleDelete(node) },
-  ], [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete])
+  const buildFileMenu = useCallback((node: FileNode): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      { label: 'New File',   action: () => handleNewFile(node) },
+      { label: 'New Folder', action: () => handleNewFolder(node) },
+      { divider: true },
+      { label: 'Rename',     action: () => startRename(node) },
+      { label: 'Copy Path',  action: () => handleCopyPath(node) },
+    ]
+    if (onAddToGitIgnore) {
+      items.push({ label: 'Add to .gitignore', action: () => onAddToGitIgnore(node) })
+    }
+    items.push({ divider: true }, { label: 'Delete', danger: true, action: () => handleDelete(node) })
+    return items
+  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete, onAddToGitIgnore])
 
   // ── Empty-area context menu — acts on root dir ─────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [
@@ -175,6 +195,8 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
     const isSelected    = node.path === selectedPath
     const isDragTarget  = dragOver === node.path
     const isRenamingThis = renaming === node.path
+    const gitCode       = gitStatus?.[node.path]
+    const isIgnored     = gitCode === '!'
 
     return (
       <div key={node.path}>
@@ -183,6 +205,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
             'fe-node',
             isSelected   ? 'fe-node--selected' : '',
             isDragTarget ? 'fe-node--dragover'  : '',
+            isIgnored    ? 'fe-node--git-ignored' : '',
           ].join(' ')}
           style={{ paddingLeft: `${depth * 14 + 8}px` }}
           onClick={() => {
@@ -226,6 +249,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
           ) : (
             <span className="fe-node__name">{node.name}</span>
           )}
+          {gitBadge(gitCode)}
         </div>
 
         {node.isDir && isOpen && node.children?.map(child => renderNode(child, depth + 1))}
@@ -248,9 +272,6 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh }
         className="fe-header"
         onContextMenu={e => openAreaCtx(e, root)}
       >
-        <span className="fe-header__icon">
-          <FileIcon name={root.name} ext="" isDir={true} isOpen={true} />
-        </span>
         <span className="fe-header__name">{root.name.toUpperCase()}</span>
       </div>
 

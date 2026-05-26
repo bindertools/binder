@@ -2,7 +2,7 @@ import React from 'react'
 
 interface Props { name: string; ext: string; isDir: boolean; isOpen?: boolean }
 
-// Doom-one / VS Code icon theme colors
+// ── Color palettes — kept intact for future theme use ────────────────────────
 const EXT_COLORS: Record<string, string> = {
   ts: '#3178c6', tsx: '#3178c6',
   js: '#e8c84a', jsx: '#e8c84a', mjs: '#e8c84a', cjs: '#e8c84a',
@@ -61,7 +61,7 @@ const FOLDER_COLORS: Record<string, string> = {
   config: '#6d8086', configs: '#6d8086', configuration: '#6d8086',
   scripts: '#4eaa25',
   docs: '#519aba', doc: '#519aba', documentation: '#519aba',
-  node_modules: '#8c8c8c',
+  node_modules: '#e8ae4a',
   '.git': '#f54d27',
   '.github': '#888888',
   frontend: '#61afef', backend: '#75beff',
@@ -72,42 +72,55 @@ const FOLDER_COLORS: Record<string, string> = {
 function iconColor(name: string, ext: string): string {
   const lower = name.toLowerCase()
   if (NAMED_FILE_COLORS[lower]) return NAMED_FILE_COLORS[lower]
-  return EXT_COLORS[ext] ?? '#8b9bba'
+  return EXT_COLORS[ext] ?? '#7a8899'
 }
 
 function folderColor(name: string): string {
-  return FOLDER_COLORS[name.toLowerCase()] ?? '#51afef'
+  return FOLDER_COLORS[name.toLowerCase()] ?? '#7a8899'
 }
 
-// File document SVG — clean minimal document with folded corner
-function FileDoc({ color }: { color: string }) {
+// ── Folder: outlined shape, stroke = theme color, barely-there fill tint ─────
+function FolderShape({ color, open }: { color: string; open: boolean }) {
+  if (open) {
+    return (
+      <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
+        {/* back panel */}
+        <path
+          d="M1 4h14v7.5c0 .83-.67 1.5-1.5 1.5h-11C1.67 13 1 12.33 1 11.5V4z"
+          fill={color + '20'} stroke={color} strokeWidth="1"
+        />
+        {/* tab */}
+        <path
+          d="M1 4V3.5C1 2.67 1.67 2 2.5 2H5.8l1.4 2H1z"
+          fill={color + '30'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
   return (
-    <svg width="14" height="16" viewBox="0 0 14 16" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M2 1h7l3 3v11H2V1z" fill={color} fillOpacity="0.15" stroke={color} strokeWidth="1.1" strokeLinejoin="round"/>
-      <path d="M9 1v3h3" fill="none" stroke={color} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M1 3.5C1 2.67 1.67 2 2.5 2H5.8l1.4 2H13.5c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5h-11C1.67 12 1 11.33 1 10.5v-7z"
+        fill={color + '20'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+      />
     </svg>
   )
 }
 
-// Folder SVG — classic folder shape
-function FolderShape({ color, open }: { color: string; open: boolean }) {
-  return open ? (
-    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M1 3.5C1 2.67 1.67 2 2.5 2H6l1.5 2H13.5c.83 0 1.5.67 1.5 1.5V4H1V3.5z" fill={color}/>
-      <path d="M1 4h14L13.2 11.6c-.15.5-.6.9-1.1.9H2.9c-.5 0-.95-.4-1.1-.9L1 4z" fill={color} fillOpacity="0.85"/>
-    </svg>
-  ) : (
-    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M1 3.5C1 2.67 1.67 2 2.5 2H6l1.5 2H13.5c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5h-11C1.67 12 1 11.33 1 10.5v-7z" fill={color} fillOpacity="0.85"/>
+// ── File: compact outlined document, corner fold, minimal fill ───────────────
+function FileDoc({ color }: { color: string }) {
+  return (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M2 1h7l3 3v10H2V1z"
+        fill={color + '18'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+      />
+      <path d="M9 1v3h3" fill="none" stroke={color} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
 
 export default function FileIcon({ name, ext, isDir, isOpen = false }: Props) {
-  if (isDir) {
-    const color = folderColor(name)
-    return <FolderShape color={color} open={isOpen} />
-  }
-  const color = iconColor(name, ext)
-  return <FileDoc color={color} />
+  if (isDir) return <FolderShape color={folderColor(name)} open={isOpen} />
+  return <FileDoc color={iconColor(name, ext)} />
 }
