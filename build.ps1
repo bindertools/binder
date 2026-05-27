@@ -252,6 +252,43 @@ function New-MacDmg {
     Ok "DMG       -> app/build/bin/$dmgName"
 }
 
+function Build-CppBackend {
+    # Builds cpp/build/Release/cmdide-backend.exe via CMake + vcpkg.
+    # Skips with a warning if vcpkg is not found (set VCPKG_ROOT to override).
+    $cppDir   = Join-Path $root 'cpp'
+    $cppBuild = Join-Path $cppDir 'build'
+
+    $vcpkgRoot = $env:VCPKG_ROOT
+    if (-not $vcpkgRoot) {
+        foreach ($c in @('C:\vcpkg', 'C:\src\vcpkg', "$env:USERPROFILE\vcpkg")) {
+            if (Test-Path (Join-Path $c 'scripts\buildsystems\vcpkg.cmake')) {
+                $vcpkgRoot = $c; break
+            }
+        }
+    }
+    if (-not $vcpkgRoot) {
+        Warn "vcpkg not found (set VCPKG_ROOT) — skipping C++ backend build"
+        return
+    }
+
+    $toolchain = Join-Path $vcpkgRoot 'scripts\buildsystems\vcpkg.cmake'
+
+    if (-not (Test-Path (Join-Path $cppBuild 'CMakeCache.txt'))) {
+        & cmake -B $cppBuild -S $cppDir "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+        if ($LASTEXITCODE -ne 0) { Fail "C++ cmake configure failed" }
+    }
+
+    & cmake --build $cppBuild --config Release
+    if ($LASTEXITCODE -ne 0) { Fail "C++ cmake build failed" }
+
+    $cppExe = Join-Path $cppBuild 'Release\cmdide-backend.exe'
+    if (Test-Path $cppExe) {
+        Ok "Binary    -> cpp/build/Release/cmdide-backend.exe"
+    } else {
+        Warn "cmdide-backend.exe not found after build (check cmake output)"
+    }
+}
+
 function Invoke-Wails {
     param([string]$dir, [string[]]$flags, [hashtable]$envVars = @{}, [string]$label = 'Build')
     Push-Location $dir
@@ -365,6 +402,12 @@ if (-not $InstallerOnly) {
         New-Archive  (Join-Path $binDir $pluginsName) $pluginsArchive
         Ok "Binary    -> app/build/bin/$pluginsName"
     }
+}
+
+# -- C++ backend (Windows only) ------------------------------------------------
+if ($goOs -eq 'windows' -and -not $InstallerOnly) {
+    Step "C++ backend (cmdide-backend.exe)"
+    Build-CppBackend
 }
 
 if ($AppOnly) {
