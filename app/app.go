@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 	"sync"
 
 	"terminal-ide/config"
+	"terminal-ide/cppbridge"
 	"terminal-ide/database"
 	"terminal-ide/fullscreen"
 	"terminal-ide/perf"
@@ -23,11 +26,14 @@ import (
 )
 
 type App struct {
-	ctx         context.Context
-	terminals   map[string]*Terminal
-	mu          sync.Mutex
-	perfCancels map[string]context.CancelFunc
-	explorer    *fullscreen.Manager
+	ctx           context.Context
+	terminals     map[string]*Terminal
+	mu            sync.Mutex
+	perfCancels   map[string]context.CancelFunc
+	explorer      *fullscreen.Manager
+	cpp           *cppbridge.Bridge
+	UseCppBackend bool
+	cppErr        string
 }
 
 func NewApp() *App {
@@ -43,6 +49,39 @@ func (a *App) startup(ctx context.Context) {
 	config.Init()
 	a.explorer.SetContext(ctx)
 	go cleanupAfterUpdate() // remove .old / .update left by the rename-based updater
+
+	if a.UseCppBackend {
+		exePath, err := resolveCppBackend()
+		if err != nil {
+			log.Printf("cppbridge: cannot locate backend: %v", err)
+			a.cppErr = err.Error()
+			a.UseCppBackend = false
+		} else {
+			a.cpp = cppbridge.New()
+			if err := a.cpp.Start(exePath); err != nil {
+				log.Printf("cppbridge: Start failed: %v", err)
+				a.cppErr = err.Error()
+				a.cpp = nil
+				a.UseCppBackend = false
+			} else {
+				log.Printf("cppbridge: started (%s)", exePath)
+			}
+		}
+	}
+}
+
+// resolveCppBackend returns the path to cmdide-backend.exe, expected to sit
+// alongside the app executable.
+func resolveCppBackend() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Join(filepath.Dir(exe), "cmdide-backend.exe")
+	if _, err := os.Stat(candidate); err != nil {
+		return "", fmt.Errorf("not found at %s", candidate)
+	}
+	return candidate, nil
 }
 
 func (a *App) domReady(ctx context.Context) {
@@ -61,6 +100,9 @@ func (a *App) domReady(ctx context.Context) {
 }
 
 func (a *App) shutdown(_ context.Context) {
+	if a.cpp != nil {
+		a.cpp.Stop()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for id, t := range a.terminals {
@@ -71,6 +113,17 @@ func (a *App) shutdown(_ context.Context) {
 		cancel()
 	}
 	a.explorer.Close()
+}
+
+// GetCppBackendStatus returns "enabled", "disabled", or "error: <msg>" for the debug info panel.
+func (a *App) GetCppBackendStatus() string {
+	if a.cppErr != "" {
+		return "error: " + a.cppErr
+	}
+	if !a.UseCppBackend {
+		return "disabled"
+	}
+	return "enabled"
 }
 
 // ─── Fullscreen Explorer ──────────────────────────────────────────────────────
