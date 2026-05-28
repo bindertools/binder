@@ -11,6 +11,8 @@ add_executable(cmdide-backend
     src/main.cpp
     src/ipc.cpp
     src/terminal.cpp
+    src/fileops.cpp
+    src/config.cpp
 )
 
 target_link_libraries(cmdide-backend PRIVATE

@@ -1,5 +1,7 @@
 #include "ipc.hpp"
 #include "terminal.hpp"
+#include "fileops.hpp"
+#include "config.hpp"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -68,6 +70,9 @@ int main(int argc, char* argv[]) {
     spdlog::info("Connected to named pipe");
 
     g_ipc = &ipc;
+
+    // ─── Startup: load config from disk ──────────────────────────────────────
+    Config::instance().load();
 
     // ─── Terminal registry ────────────────────────────────────────────────────
     std::unordered_map<std::string, std::unique_ptr<Terminal>> terminals;
@@ -151,7 +156,14 @@ int main(int argc, char* argv[]) {
                 if (t) t->Stop();
 
             } else {
-                spdlog::debug("Unknown message type: {}", type);
+                // Try file-ops and config dispatch before giving up.
+                nlohmann::json dispatched_resp;
+                if (fileops::dispatch(type, msg, id, dispatched_resp) ||
+                    config_dispatch(type, msg, id, dispatched_resp)) {
+                    ipc_write(dispatched_resp);
+                } else {
+                    spdlog::debug("Unknown message type: {}", type);
+                }
             }
 
         } catch (const json::parse_error& e) {
