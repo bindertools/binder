@@ -6,6 +6,10 @@ export function CloseInstaller() {
   return window['go']['main']['App']['CloseInstaller']();
 }
 
+export function GetChannel() {
+  return window['go']['main']['App']['GetChannel']();
+}
+
 export function GetInstallDir() {
   return window['go']['main']['App']['GetInstallDir']();
 }
