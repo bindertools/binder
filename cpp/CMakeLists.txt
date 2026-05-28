@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(httplib CONFIG REQUIRED)
+find_package(cmark CONFIG REQUIRED)
 
 add_executable(cmdide-backend
     src/main.cpp
@@ -15,11 +17,14 @@ add_executable(cmdide-backend
     src/config.cpp
     src/search.cpp
     src/sysinfo.cpp
+    src/preview.cpp
 )
 
 target_link_libraries(cmdide-backend PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    httplib::httplib
+    cmark::cmark
     iphlpapi  # GetExtendedTcpTable, GetExtendedUdpTable, GetIfTable
     psapi     # EnumProcesses, GetProcessMemoryInfo, GetModuleFileNameExW
 )

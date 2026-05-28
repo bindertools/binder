@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "dependencies": [
     "nlohmann-json",
-    "spdlog"
+    "spdlog",
+    "cpp-httplib",
+    "cmark"
   ]
 }
