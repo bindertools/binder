@@ -1,3 +1,9 @@
+// Removed in Phase 5: all UseCppBackend else-branches (Go fallback paths for
+// ExplorerOpen/GetTree/GetFile/SaveFile/CreateFile/CreateDir/Rename/Delete/Move,
+// ReadFile, WriteFile, DeleteFile, SearchFiles, GetCompletions, SaveSession,
+// LoadSession, GetAppConfig, SaveCustomTheme, SaveAppConfig, GetSystemPorts,
+// GetSystemPerf, StartPerfMonitor)
+
 package main
 
 import (
@@ -224,146 +230,119 @@ func (a *App) GetCppBackendStatus() string {
 // ─── Fullscreen Explorer ──────────────────────────────────────────────────────
 
 func (a *App) ExplorerOpen(dir string) (fullscreen.FileNode, error) {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.tree", "id": a.cppID(), "path": dir}, 30000)
-		if err != nil {
-			return fullscreen.FileNode{}, err
-		}
-		a.mu.Lock()
-		a.cppRootDir = dir
-		a.mu.Unlock()
-		return respToFileNode(resp)
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.tree", "id": a.cppID(), "path": dir}, 30000)
+	if err != nil {
+		return fullscreen.FileNode{}, err
 	}
-	return a.explorer.OpenDirectory(dir)
+	a.mu.Lock()
+	a.cppRootDir = dir
+	a.mu.Unlock()
+	return respToFileNode(resp)
 }
 
 func (a *App) ExplorerGetTree() (fullscreen.FileNode, error) {
-	if a.UseCppBackend {
-		a.mu.Lock()
-		rootDir := a.cppRootDir
-		a.mu.Unlock()
-		if rootDir == "" {
-			return fullscreen.FileNode{}, nil
-		}
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.tree", "id": a.cppID(), "path": rootDir}, 30000)
-		if err != nil {
-			return fullscreen.FileNode{}, err
-		}
-		return respToFileNode(resp)
+	a.mu.Lock()
+	rootDir := a.cppRootDir
+	a.mu.Unlock()
+	if rootDir == "" {
+		return fullscreen.FileNode{}, nil
 	}
-	return a.explorer.GetTree()
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.tree", "id": a.cppID(), "path": rootDir}, 30000)
+	if err != nil {
+		return fullscreen.FileNode{}, err
+	}
+	return respToFileNode(resp)
 }
 
 func (a *App) ExplorerGetFile(path string) (string, error) {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
-		if err != nil {
-			return "", err
-		}
-		return decodeB64Resp(resp)
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
+	if err != nil {
+		return "", err
 	}
-	return a.explorer.GetFileContent(path)
+	return decodeB64Resp(resp)
 }
 
 func (a *App) ExplorerSaveFile(path string, content string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type":    "fs.writefile",
-			"id":      a.cppID(),
-			"path":    path,
-			"content": base64.StdEncoding.EncodeToString([]byte(content)),
-		}, 10000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.writefile failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type":    "fs.writefile",
+		"id":      a.cppID(),
+		"path":    path,
+		"content": base64.StdEncoding.EncodeToString([]byte(content)),
+	}, 10000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.SaveFile(path, content)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.writefile failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerCreateFile(path string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.create", "id": a.cppID(), "path": path}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.create failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.create", "id": a.cppID(), "path": path}, 5000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.CreateFile(path)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.create failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerCreateDir(path string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.mkdir", "id": a.cppID(), "path": path}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.mkdir failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.mkdir", "id": a.cppID(), "path": path}, 5000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.CreateDirectory(path)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.mkdir failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerRename(oldPath string, newPath string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "fs.rename", "id": a.cppID(),
-			"from": oldPath, "to": newPath,
-		}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.rename failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "fs.rename", "id": a.cppID(),
+		"from": oldPath, "to": newPath,
+	}, 5000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.Rename(oldPath, newPath)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.rename failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerDelete(path string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.delete failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.Delete(path)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.delete failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerMove(src string, dest string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "fs.rename", "id": a.cppID(),
-			"from": src, "to": dest,
-		}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.rename failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "fs.rename", "id": a.cppID(),
+		"from": src, "to": dest,
+	}, 5000)
+	if err != nil {
+		return err
 	}
-	return a.explorer.MoveFile(src, dest)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.rename failed")
+	}
+	return nil
 }
 
 func (a *App) ExplorerReveal(path string) error {
@@ -460,53 +439,40 @@ func (a *App) ResizeTerminal(id string, cols int, rows int) {
 // ─── File & editor ────────────────────────────────────────────────────────────
 
 func (a *App) ReadFile(path string) (string, error) {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
-		if err != nil {
-			return "", err
-		}
-		return decodeB64Resp(resp)
-	}
-	data, err := os.ReadFile(path)
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+	return decodeB64Resp(resp)
 }
 
 func (a *App) WriteFile(path string, content string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type":    "fs.writefile",
-			"id":      a.cppID(),
-			"path":    path,
-			"content": base64.StdEncoding.EncodeToString([]byte(content)),
-		}, 10000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.writefile failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type":    "fs.writefile",
+		"id":      a.cppID(),
+		"path":    path,
+		"content": base64.StdEncoding.EncodeToString([]byte(content)),
+	}, 10000)
+	if err != nil {
+		return err
 	}
-	return os.WriteFile(path, []byte(content), 0644)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.writefile failed")
+	}
+	return nil
 }
 
 func (a *App) DeleteFile(path string) error {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("fs.delete failed")
-		}
-		return nil
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
+	if err != nil {
+		return err
 	}
-	return os.Remove(path)
+	if !respOK(resp) {
+		return fmt.Errorf("fs.delete failed")
+	}
+	return nil
 }
 
 func (a *App) GetFileLanguage(path string) string { return detectLanguage(path) }
@@ -591,23 +557,20 @@ func (a *App) SearchFiles(id string, query string) []search.Result {
 	if !ok {
 		return nil
 	}
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "search.query", "id": a.cppID(),
-			"path": t.cwd, "query": query, "maxResults": 100,
-		}, 30000)
-		if err != nil {
-			return search.Files(t.cwd, query)
-		}
-		raw, _ := resp["results"]
-		b, _ := json.Marshal(raw)
-		var results []search.Result
-		if json.Unmarshal(b, &results) == nil {
-			return results
-		}
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "search.query", "id": a.cppID(),
+		"path": t.cwd, "query": query, "maxResults": 100,
+	}, 30000)
+	if err != nil {
 		return nil
 	}
-	return search.Files(t.cwd, query)
+	raw, _ := resp["results"]
+	b, _ := json.Marshal(raw)
+	var results []search.Result
+	if json.Unmarshal(b, &results) == nil {
+		return results
+	}
+	return nil
 }
 
 func (a *App) GetCompletions(id string, dir string, partial string) []string {
@@ -617,57 +580,49 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 	if !ok {
 		return nil
 	}
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "complete.path", "id": a.cppID(),
-			"cwd": t.cwd, "dir": dir, "prefix": partial,
-		}, 5000)
-		if err != nil {
-			return search.Completions(t.cwd, dir, partial)
-		}
-		raw, _ := resp["completions"]
-		b, _ := json.Marshal(raw)
-		var completions []string
-		if json.Unmarshal(b, &completions) == nil {
-			return completions
-		}
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "complete.path", "id": a.cppID(),
+		"cwd": t.cwd, "dir": dir, "prefix": partial,
+	}, 5000)
+	if err != nil {
 		return nil
 	}
-	return search.Completions(t.cwd, dir, partial)
+	raw, _ := resp["completions"]
+	b, _ := json.Marshal(raw)
+	var completions []string
+	if json.Unmarshal(b, &completions) == nil {
+		return completions
+	}
+	return nil
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 func (a *App) SaveSession(tabs []session.Tab) {
-	if a.UseCppBackend {
-		b, _ := json.Marshal(tabs)
-		a.cpp.RoundTrip(map[string]any{ //nolint:errcheck
-			"type": "session.save", "id": a.cppID(),
-			"sessionId": "default", "name": "", "tabs": json.RawMessage(b),
-		}, 5000)
-		return
-	}
-	session.Save(tabs)
+	b, _ := json.Marshal(tabs)
+	a.cpp.RoundTrip(map[string]any{ //nolint:errcheck
+		"type": "session.save", "id": a.cppID(),
+		"sessionId": "default", "name": "", "tabs": json.RawMessage(b),
+	}, 5000)
 }
 
 func (a *App) LoadSession() []session.Tab {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "session.load", "id": a.cppID(), "sessionId": "default",
-		}, 5000)
-		if err == nil {
-			if s, ok := resp["session"].(map[string]any); ok {
-				if raw, ok2 := s["tabs"]; ok2 {
-					b, _ := json.Marshal(raw)
-					var tabs []session.Tab
-					if json.Unmarshal(b, &tabs) == nil {
-						return tabs
-					}
-				}
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "session.load", "id": a.cppID(), "sessionId": "default",
+	}, 5000)
+	if err != nil {
+		return nil
+	}
+	if s, ok := resp["session"].(map[string]any); ok {
+		if raw, ok2 := s["tabs"]; ok2 {
+			b, _ := json.Marshal(raw)
+			var tabs []session.Tab
+			if json.Unmarshal(b, &tabs) == nil {
+				return tabs
 			}
 		}
 	}
-	return session.Load()
+	return nil
 }
 
 // ─── Database ─────────────────────────────────────────────────────────────────
@@ -690,73 +645,54 @@ func (a *App) SetClipboardText(text string) {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 func (a *App) GetAppConfig() config.Config {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "config.get", "id": a.cppID()}, 5000)
-		if err != nil {
-			return config.Get()
-		}
-		b, _ := json.Marshal(resp)
-		var c config.Config
-		if err := json.Unmarshal(b, &c); err != nil {
-			return config.Get()
-		}
-		config.SetGlobal(c)
-		return c
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "config.get", "id": a.cppID()}, 5000)
+	if err != nil {
+		return config.Config{}
 	}
-	return config.Get()
+	b, _ := json.Marshal(resp)
+	var c config.Config
+	if err := json.Unmarshal(b, &c); err != nil {
+		return config.Config{}
+	}
+	config.SetGlobal(c)
+	return c
 }
 
 func (a *App) SaveCustomTheme(colors map[string]string) error {
-	if a.UseCppBackend {
-		cur := config.Get()
-		cur.CustomTheme = colors
-		cur.Theme = "custom"
-		b, _ := json.Marshal(cur)
-		var configMap map[string]any
-		json.Unmarshal(b, &configMap) //nolint:errcheck
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("config.setall failed")
-		}
-		config.SetGlobal(cur)
-		wailsruntime.EventsEmit(a.ctx, "app:config", cur)
-		return nil
-	}
-	c, err := config.ApplyCustomTheme(colors)
+	cur := config.Get()
+	cur.CustomTheme = colors
+	cur.Theme = "custom"
+	b, _ := json.Marshal(cur)
+	var configMap map[string]any
+	json.Unmarshal(b, &configMap) //nolint:errcheck
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
 	if err != nil {
 		return err
 	}
-	wailsruntime.EventsEmit(a.ctx, "app:config", c)
+	if !respOK(resp) {
+		return fmt.Errorf("config.setall failed")
+	}
+	config.SetGlobal(cur)
+	wailsruntime.EventsEmit(a.ctx, "app:config", cur)
 	return nil
 }
 
 func (a *App) SaveAppConfig(incoming config.Config) error {
-	if a.UseCppBackend {
-		b, _ := json.Marshal(incoming)
-		var configMap map[string]any
-		json.Unmarshal(b, &configMap) //nolint:errcheck
-		resp, err := a.cpp.RoundTrip(
-			map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
-		if err != nil {
-			return err
-		}
-		if !respOK(resp) {
-			return fmt.Errorf("config.setall failed")
-		}
-		config.SetGlobal(incoming)
-		wailsruntime.EventsEmit(a.ctx, "app:config", incoming)
-		return nil
-	}
-	c, err := config.Apply(incoming)
+	b, _ := json.Marshal(incoming)
+	var configMap map[string]any
+	json.Unmarshal(b, &configMap) //nolint:errcheck
+	resp, err := a.cpp.RoundTrip(
+		map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
 	if err != nil {
 		return err
 	}
-	wailsruntime.EventsEmit(a.ctx, "app:config", c)
+	if !respOK(resp) {
+		return fmt.Errorf("config.setall failed")
+	}
+	config.SetGlobal(incoming)
+	wailsruntime.EventsEmit(a.ctx, "app:config", incoming)
 	return nil
 }
 
@@ -769,21 +705,19 @@ func (a *App) FetchExternalPlugin(githubURL string) (plugins.ExternalPluginInfo,
 // ─── Ports ────────────────────────────────────────────────────────────────────
 
 func (a *App) GetSystemPorts() []ports.PortInfo {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "sysinfo.ports", "id": a.cppID(),
-		}, 10000)
-		if err != nil {
-			return ports.GetActivePorts()
-		}
-		raw, _ := resp["ports"]
-		b, _ := json.Marshal(raw)
-		var result []ports.PortInfo
-		if json.Unmarshal(b, &result) == nil {
-			return result
-		}
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "sysinfo.ports", "id": a.cppID(),
+	}, 10000)
+	if err != nil {
+		return nil
 	}
-	return ports.GetActivePorts()
+	raw, _ := resp["ports"]
+	b, _ := json.Marshal(raw)
+	var result []ports.PortInfo
+	if json.Unmarshal(b, &result) == nil {
+		return result
+	}
+	return nil
 }
 
 func (a *App) KillPort(port string) (string, error) { return ports.KillPortProcess(port) }
@@ -791,21 +725,19 @@ func (a *App) KillPort(port string) (string, error) { return ports.KillPortProce
 // ─── Performance ──────────────────────────────────────────────────────────────
 
 func (a *App) GetSystemPerf() perf.PerfData {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "sysinfo.perf", "id": a.cppID(),
-		}, 10000)
-		if err != nil {
-			return perf.CollectData()
-		}
-		raw, _ := resp["perf"]
-		b, _ := json.Marshal(raw)
-		var result perf.PerfData
-		if json.Unmarshal(b, &result) == nil {
-			return result
-		}
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type": "sysinfo.perf", "id": a.cppID(),
+	}, 10000)
+	if err != nil {
+		return perf.PerfData{}
 	}
-	return perf.CollectData()
+	raw, _ := resp["perf"]
+	b, _ := json.Marshal(raw)
+	var result perf.PerfData
+	if json.Unmarshal(b, &result) == nil {
+		return result
+	}
+	return perf.PerfData{}
 }
 
 func (a *App) StartPerfMonitor(tabId string) {
@@ -816,26 +748,21 @@ func (a *App) StartPerfMonitor(tabId string) {
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.perfCancels[tabId] = cancel
 	a.mu.Unlock()
-	if a.UseCppBackend {
-		// Drive the monitor loop ourselves, delegating each snapshot to C++.
-		go func() {
-			event := "perf:data:" + tabId
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					wailsruntime.EventsEmit(a.ctx, event, a.GetSystemPerf())
-				}
+
+	// Drive the monitor loop ourselves, delegating each snapshot to C++.
+	go func() {
+		event := "perf:data:" + tabId
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				wailsruntime.EventsEmit(a.ctx, event, a.GetSystemPerf())
 			}
-		}()
-		return
-	}
-	perf.StartMonitor(ctx, tabId, func(event string, data perf.PerfData) {
-		wailsruntime.EventsEmit(a.ctx, event, data)
-	})
+		}
+	}()
 }
 
 func (a *App) StopPerfMonitor(tabId string) {
