@@ -33,39 +33,103 @@ func (a *App) GetInstallDir() string {
 	return filepath.Join(local, "Programs", "cmdIDE")
 }
 
-// ReleaseInfo describes a single GitHub release entry.
-type ReleaseInfo struct {
-	Tag        string `json:"tag"`
-	Prerelease bool   `json:"prerelease"`
+// GetChannel returns "dev" for development-channel builds, "stable" otherwise.
+func (a *App) GetChannel() string {
+	if IncludePrerelease {
+		return "dev"
+	}
+	return "stable"
 }
 
-func (a *App) GetReleases() []ReleaseInfo {
+// Release describes a single GitHub release.
+type Release struct {
+	Version      string `json:"version"`
+	Name         string `json:"name"`
+	PublishedAt  string `json:"publishedAt"`
+	Prerelease   bool   `json:"prerelease"`
+	DownloadURL  string `json:"downloadURL"`
+	ReleaseNotes string `json:"releaseNotes"`
+}
+
+// GetReleases fetches releases from GitHub, filtering by the build-time channel.
+// On network or API errors it emits "installer:error" and returns nil.
+func (a *App) GetReleases() []Release {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases", githubRepo)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
+		wailsruntime.EventsEmit(a.ctx, "installer:error", "Failed to build request: "+err.Error())
 		return nil
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "cmdIDE-installer")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
+		wailsruntime.EventsEmit(a.ctx, "installer:error", "Network error: "+err.Error())
 		return nil
 	}
 	defer resp.Body.Close()
 
-	var raw []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if resp.StatusCode != http.StatusOK {
+		wailsruntime.EventsEmit(a.ctx, "installer:error",
+			fmt.Sprintf("GitHub API returned %d", resp.StatusCode))
 		return nil
 	}
 
-	result := make([]ReleaseInfo, 0, len(raw))
+	var raw []struct {
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		PublishedAt string `json:"published_at"`
+		Prerelease  bool   `json:"prerelease"`
+		Body        string `json:"body"`
+		Assets      []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		wailsruntime.EventsEmit(a.ctx, "installer:error", "Failed to parse releases: "+err.Error())
+		return nil
+	}
+
+	result := make([]Release, 0, len(raw))
 	for _, r := range raw {
-		result = append(result, ReleaseInfo{Tag: r.TagName, Prerelease: r.Prerelease})
+		// Skip pre-releases when the channel does not include them.
+		if r.Prerelease && !IncludePrerelease {
+			continue
+		}
+
+		// Find the Windows installer asset (without plugins).
+		downloadURL := ""
+		for _, asset := range r.Assets {
+			if asset.Name == "cmdIDE-windows-amd64.exe" {
+				downloadURL = asset.BrowserDownloadURL
+				break
+			}
+		}
+		// Fall back to the standard release URL pattern.
+		if downloadURL == "" {
+			downloadURL = fmt.Sprintf(
+				"https://github.com/%s/releases/download/%s/cmdIDE-windows-amd64.exe",
+				githubRepo, r.TagName,
+			)
+		}
+
+		// Format the published date as YYYY-MM-DD.
+		publishedAt := r.PublishedAt
+		if len(publishedAt) >= 10 {
+			publishedAt = publishedAt[:10]
+		}
+
+		result = append(result, Release{
+			Version:      r.TagName,
+			Name:         r.Name,
+			PublishedAt:  publishedAt,
+			Prerelease:   r.Prerelease,
+			DownloadURL:  downloadURL,
+			ReleaseNotes: r.Body,
+		})
 	}
 	return result
 }
@@ -89,6 +153,9 @@ func (a *App) Install(version string, createDesktop bool, installPlugins bool) e
 		wailsruntime.EventsEmit(a.ctx, "install:progress", pct, msg)
 		time.Sleep(80 * time.Millisecond)
 	}
+	emitError := func(msg string) {
+		wailsruntime.EventsEmit(a.ctx, "installer:error", msg)
+	}
 
 	emit(5, "Preparing…")
 	installDir := a.GetInstallDir()
@@ -96,30 +163,33 @@ func (a *App) Install(version string, createDesktop bool, installPlugins bool) e
 
 	emit(10, "Fetching release…")
 	data, err := downloadWithProgress(url, func(pct int) {
-		wailsruntime.EventsEmit(a.ctx, "install:progress", 10+pct*70/100, "Downloading…")
+		// Map download progress (0–100) into the 15–90 % band.
+		wailsruntime.EventsEmit(a.ctx, "install:progress", 15+pct*75/100, "Downloading…")
 	})
 	if err != nil {
+		emitError("Download failed: " + err.Error())
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	emit(82, "Creating install directory…")
+	emit(92, "Creating install directory…")
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		emitError("Could not create install directory: " + err.Error())
 		return fmt.Errorf("could not create directory: %w", err)
 	}
 
-	emit(88, "Installing…")
+	emit(95, "Installing…")
 	dest := filepath.Join(installDir, binaryName)
 	if err := os.WriteFile(dest, data, 0o755); err != nil {
+		emitError("Could not write executable: " + err.Error())
 		return fmt.Errorf("could not write executable: %w", err)
 	}
 
-	emit(91, "Registering application…")
+	emit(98, "Registering application…")
 	if err := registerWithWindows(installDir, dest, version); err != nil {
 		// Non-fatal — app still works without registry entries.
 		_ = err
 	}
 
-	emit(94, "Creating shortcuts…")
 	// Start Menu shortcut — always created so the app appears in the Start Menu.
 	_ = createShortcut(dest, installDir, "StartMenu")
 	// Desktop shortcut — optional.
