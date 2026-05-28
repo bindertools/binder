@@ -14,12 +14,14 @@ add_executable(cmdide-backend
     src/fileops.cpp
     src/config.cpp
     src/search.cpp
+    src/sysinfo.cpp
 )
 
 target_link_libraries(cmdide-backend PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
-    iphlpapi  # for IP helper / port-to-PID lookups (Phase 1.2)
+    iphlpapi  # GetExtendedTcpTable, GetExtendedUdpTable, GetIfTable
+    psapi     # EnumProcesses, GetProcessMemoryInfo, GetModuleFileNameExW
 )
 
 if(WIN32)
