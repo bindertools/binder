@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"terminal-ide/config"
 	"terminal-ide/cppbridge"
@@ -683,13 +684,45 @@ func (a *App) FetchExternalPlugin(githubURL string) (plugins.ExternalPluginInfo,
 
 // ─── Ports ────────────────────────────────────────────────────────────────────
 
-func (a *App) GetSystemPorts() []ports.PortInfo { return ports.GetActivePorts() }
+func (a *App) GetSystemPorts() []ports.PortInfo {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "sysinfo.ports", "id": a.cppID(),
+		}, 10000)
+		if err != nil {
+			return ports.GetActivePorts()
+		}
+		raw, _ := resp["ports"]
+		b, _ := json.Marshal(raw)
+		var result []ports.PortInfo
+		if json.Unmarshal(b, &result) == nil {
+			return result
+		}
+	}
+	return ports.GetActivePorts()
+}
 
 func (a *App) KillPort(port string) (string, error) { return ports.KillPortProcess(port) }
 
 // ─── Performance ──────────────────────────────────────────────────────────────
 
-func (a *App) GetSystemPerf() perf.PerfData { return perf.CollectData() }
+func (a *App) GetSystemPerf() perf.PerfData {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "sysinfo.perf", "id": a.cppID(),
+		}, 10000)
+		if err != nil {
+			return perf.CollectData()
+		}
+		raw, _ := resp["perf"]
+		b, _ := json.Marshal(raw)
+		var result perf.PerfData
+		if json.Unmarshal(b, &result) == nil {
+			return result
+		}
+	}
+	return perf.CollectData()
+}
 
 func (a *App) StartPerfMonitor(tabId string) {
 	a.mu.Lock()
@@ -699,6 +732,23 @@ func (a *App) StartPerfMonitor(tabId string) {
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.perfCancels[tabId] = cancel
 	a.mu.Unlock()
+	if a.UseCppBackend {
+		// Drive the monitor loop ourselves, delegating each snapshot to C++.
+		go func() {
+			event := "perf:data:" + tabId
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					wailsruntime.EventsEmit(a.ctx, event, a.GetSystemPerf())
+				}
+			}
+		}()
+		return
+	}
 	perf.StartMonitor(ctx, tabId, func(event string, data perf.PerfData) {
 		wailsruntime.EventsEmit(a.ctx, event, data)
 	})
