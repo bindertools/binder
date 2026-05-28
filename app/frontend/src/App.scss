@@ -105,6 +105,16 @@
   --t-base: 180ms ease;
 }
 
+/* ── Utility: hide scrollbar cross-browser ──────────────────────────────────── */
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* ── Focused pane overlay ───────────────────────────────────────────────────── */
 /* Pseudo-element inset ring; kept in CSS because Tailwind after: requires content in class string */
 .pane--focused::after {
@@ -116,21 +126,7 @@
   z-index: 5;
 }
 
-/* ── Terminal pane ──────────────────────────────────────────────────────────── */
-.terminal-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.terminal-container {
-  flex: 1;
-  padding: 6px 8px;
-  background: var(--app-bg);
-  overflow: hidden;
-}
-
+/* ── xterm.js internals (target xterm's own DOM — cannot use Tailwind utilities) */
 .xterm { height: 100%; }
 .xterm-viewport {
   background: var(--app-bg) !important;
@@ -139,67 +135,3 @@
 }
 .xterm-viewport::-webkit-scrollbar { display: none !important; }
 .xterm-scroll-area { visibility: hidden; }
-
-/* ── Completion dropdown ────────────────────────────────────────────────────── */
-.completion-menu {
-  position: fixed;
-  z-index: 9999;
-  background: var(--info-bar-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--r-md);
-  overflow-y: auto;
-  max-height: 220px;
-  min-width: 180px;
-  box-shadow: var(--shadow-lg);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 4px 0;
-  backdrop-filter: blur(12px);
-  scrollbar-width: none; 
-}
-
-.completion-menu::-webkit-scrollbar {
-  display: none;
-}
-
-.completion-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 5px 12px;
-  cursor: pointer;
-  color: var(--info-bar-hover-color);
-  white-space: nowrap;
-  line-height: 1.4;
-  transition: background var(--t-fast);
-}
-.completion-item:hover    { background: var(--surface-raised); }
-.completion-item.selected { background: var(--surface-overlay); color: #fff; }
-.completion-item.applied  { background: var(--surface-selected); color: var(--accent-hover); }
-.completion-item__name    { flex-shrink: 0; }
-.completion-item__desc    { color: var(--info-bar-color); font-size: 11px; flex-shrink: 0; }
-
-/* ── Editor pane ────────────────────────────────────────────────────────────── */
-.editor-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--app-bg);
-  overflow: hidden;
-}
-
-.editor-filepath {
-  padding: 0 14px;
-  font-size: 11px;
-  color: var(--info-bar-color);
-  background: var(--info-bar-bg);
-  border-bottom: 1px solid var(--border-color);
-  font-family: var(--font-mono);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
-  height: 26px;
-  line-height: 26px;
-}

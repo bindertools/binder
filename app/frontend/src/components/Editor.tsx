@@ -179,8 +179,8 @@ export default function Editor({
   }, [filePath])
 
   return (
-    <div className="editor-container">
-      <div className="editor-filepath">{filePath}</div>
+    <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
+      <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px]">{filePath}</div>
       <MonacoEditor
         height="calc(100% - 24px)"
         language={language}

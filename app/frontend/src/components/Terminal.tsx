@@ -768,26 +768,26 @@ export default function Terminal({
   }, [active])
 
   return (
-    <div className="terminal-pane">
-      <div ref={containerRef} className="terminal-container" />
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div ref={containerRef} className="flex-1 px-2 py-1.5 bg-[var(--app-bg)] overflow-hidden" />
 
       {menu && ReactDOM.createPortal(
         <div
-          className="completion-menu"
+          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-y-auto max-h-[220px] min-w-[180px] shadow-lg font-mono text-[12px] py-1 backdrop-blur-[12px] no-scrollbar"
           style={{ top: menu.top, left: menu.left }}
         >
           {menu.matches.map((m, i) => (
             <div
               key={m + i}
-              className={`completion-item${i === menu.selectedIdx && menu.applied ? ' applied' : ''}${i === menu.selectedIdx ? ' selected' : ''}`}
+              className={`flex items-center justify-between gap-4 px-3 py-[5px] cursor-pointer text-[var(--info-bar-hover-color)] whitespace-nowrap leading-[1.4] transition-[background] duration-[100ms]${i === menu.selectedIdx && menu.applied ? ' bg-surface-selected text-accent-hover' : i === menu.selectedIdx ? ' bg-surface-overlay text-white' : ' hover:bg-surface-raised'}`}
               onMouseDown={e => {
                 e.preventDefault() // keep terminal focus
                 applyMatchRef.current?.(m)
               }}
             >
-              <span className="completion-item__name">{m}</span>
+              <span className="shrink-0">{m}</span>
               {menu.descriptions?.[i] && (
-                <span className="completion-item__desc">{menu.descriptions[i]}</span>
+                <span className="text-[var(--info-bar-color)] text-[11px] shrink-0">{menu.descriptions[i]}</span>
               )}
             </div>
           ))}
