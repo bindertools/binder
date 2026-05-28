@@ -106,7 +106,8 @@ jobs:
           $expected = @(
             'app\build\bin\cmdIDE-windows-amd64.exe',
             'app\build\bin\cmdIDE-plugins-windows-amd64.exe',
-            'app\build\bin\cmdIDE-installer-windows.exe'
+            'app\build\bin\cmdIDE-installer-windows.exe',
+            'app\build\bin\cmdIDE-installer-dev-windows.exe'
           )
 
           foreach ($path in $expected) {
