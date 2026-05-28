@@ -10,11 +10,13 @@ find_package(spdlog CONFIG REQUIRED)
 add_executable(cmdide-backend
     src/main.cpp
     src/ipc.cpp
+    src/terminal.cpp
 )
 
 target_link_libraries(cmdide-backend PRIVATE
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    iphlpapi  # for IP helper / port-to-PID lookups (Phase 1.2)
 )
 
 if(WIN32)
