@@ -1,9 +1,11 @@
+// Removed in Phase 5: execExternal, execExternalWindows, execExternalPTY,
+// normNewlines, shouldUsePTY, windowsShellPath
+
 package main
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +22,6 @@ import (
 	"terminal-ide/problems"
 
 	term "github.com/Command-IDE/terminal/src"
-	gopty "github.com/aymanbagabas/go-pty"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -30,17 +31,10 @@ import (
 var cppPackFunc func(sourcePath, outputPath string) (int, float64, error)
 
 type Terminal struct {
-	id           string
-	cwd          string
-	ctx          context.Context
-	mu           sync.Mutex
-	runningCmd   *exec.Cmd      // line-oriented external command (Windows default path)
-	runningIn    io.WriteCloser // stdin for runningCmd when it accepts line input
-	runningPty   gopty.Pty      // active PTY (nil when idle)
-	runningGoCmd *gopty.Cmd     // command attached to the PTY
-	ptyCols      int            // last known terminal width
-	ptyRows      int            // last known terminal height
-	once         sync.Once
+	id  string
+	cwd string
+	ctx context.Context
+	mu  sync.Mutex
 }
 
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
@@ -146,21 +140,9 @@ func (t *Terminal) prompt() string {
 }
 
 // ExecuteCommand is called from the frontend when the user presses Enter.
-// PTY-backed apps receive raw bytes via TerminalInput; line-oriented commands
-// receive whole lines through runningIn.
+// Built-in commands (cd, ls, /pack, /config, etc.) are handled in Go.
+// External commands are handled by the C++ terminal backend.
 func (t *Terminal) ExecuteCommand(line string) {
-	t.mu.Lock()
-	runIn := t.runningIn
-	ptyRunning := t.runningPty != nil
-	t.mu.Unlock()
-	if runIn != nil {
-		runIn.Write([]byte(line + "\n")) //nolint:errcheck
-		return
-	}
-	if ptyRunning {
-		return
-	}
-
 	line = strings.TrimSpace(line)
 	if line == "" {
 		t.write(t.prompt())
@@ -253,45 +235,24 @@ func (t *Terminal) ExecuteCommand(line string) {
 			})
 			t.write("\r\n\x1b[38;5;246mopening explorer\x1b[0m")
 			t.write(t.prompt())
-		default:
-			t.execExternal(line)
 		}
-		return
 	}
-
-	t.execExternal(line)
+	// Non-built-in commands are handled by the C++ terminal backend (no-op here).
 }
 
-// Interrupt kills the active PTY process (user pressed Ctrl+C or force-kill).
-func (t *Terminal) Interrupt() {
-	t.mu.Lock()
-	cmd := t.runningCmd
-	goCmd := t.runningGoCmd
-	ptyInst := t.runningPty
-	t.runningCmd = nil
-	t.runningIn = nil
-	t.runningGoCmd = nil
-	t.runningPty = nil // signals execExternal goroutine that we interrupted
-	t.mu.Unlock()
+// Interrupt is a no-op — the C++ terminal backend manages the PTY lifecycle.
+func (t *Terminal) Interrupt() {}
 
-	if cmd != nil && cmd.Process != nil {
-		cmd.Process.Kill()
-		t.write(t.prompt())
-	}
-	if goCmd != nil && goCmd.Process != nil {
-		goCmd.Process.Kill()
-	}
-	if ptyInst != nil {
-		ptyInst.Close() // unblocks the PTY read loop
-	}
-}
+// Close is a no-op — the C++ terminal backend manages session cleanup.
+func (t *Terminal) Close() {}
 
-// Close cleans up the terminal session.
-func (t *Terminal) Close() {
-	t.once.Do(t.Interrupt)
-}
+// WriteInput is a no-op — the C++ terminal backend handles PTY input directly.
+func (t *Terminal) WriteInput(_ string) {}
 
-// â”€â”€â”€ built-in commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Resize is a no-op — the C++ terminal backend handles PTY resize directly.
+func (t *Terminal) Resize(_, _ int) {}
+
+// ─── built-in commands ────────────────────────────────────────────────────────
 
 func (t *Terminal) builtinCD(args []string) {
 	var target string
@@ -607,9 +568,9 @@ func (t *Terminal) builtinExplorer() {
 func (t *Terminal) builtinPack(args []string) {
 	dryrun := len(args) > 0 && args[0] == "--dryrun"
 
-	// Delegate actual zip creation to C++ when available; dryrun stays Go
-	// (it only reads the filesystem — no zip is created).
-	if cppPackFunc != nil && !dryrun {
+	// Actual zip creation always delegates to the C++ libzip backend.
+	// Dryrun stays Go (it only reads the filesystem — no zip is created).
+	if !dryrun {
 		dirName := filepath.Base(t.cwd)
 		zipName := dirName + ".zip"
 		zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
@@ -625,6 +586,7 @@ func (t *Terminal) builtinPack(args []string) {
 		return
 	}
 
+	// --dryrun: list files that would be packed without creating the zip.
 	entries, err := pack.CollectEntries(t.cwd)
 	if err != nil {
 		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
@@ -632,37 +594,18 @@ func (t *Terminal) builtinPack(args []string) {
 		return
 	}
 
-	if dryrun || len(entries) == 0 {
-		var total int64
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview — %d files\x1b[0m\r\n\r\n", len(entries)))
-		for _, e := range entries {
-			total += e.Size
-			sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%s\x1b[0m  %s\r\n", pack.FormatBytes(e.Size), e.RelPath))
-		}
-		sb.WriteString(fmt.Sprintf("\r\n  \x1b[38;5;75mTotal: %s\x1b[0m\r\n", pack.FormatBytes(total)))
-		if !dryrun {
-			sb.WriteString("\r\n\x1b[38;5;246mno files to pack\x1b[0m")
-		}
-		t.write(sb.String())
-		t.write(t.prompt())
-		return
+	var total int64
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\r\n\x1b[38;5;75mPack preview — %d files\x1b[0m\r\n\r\n", len(entries)))
+	for _, e := range entries {
+		total += e.Size
+		sb.WriteString(fmt.Sprintf("  \x1b[38;5;246m%s\x1b[0m  %s\r\n", pack.FormatBytes(e.Size), e.RelPath))
 	}
-
-	dirName := filepath.Base(t.cwd)
-	zipName := dirName + ".zip"
-	zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
-
-	t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %d files into %s…\x1b[0m", len(entries), zipName))
-	if err := pack.CreateZip(t.cwd, zipPath, entries); err != nil {
-		t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
-	} else {
-		if info, err2 := os.Stat(zipPath); err2 == nil {
-			t.write(fmt.Sprintf("\r\n\x1b[38;5;75mcreated %s (%s)\x1b[0m", zipPath, pack.FormatBytes(info.Size())))
-		} else {
-			t.write(fmt.Sprintf("\r\n\x1b[38;5;75mcreated %s\x1b[0m", zipPath))
-		}
+	sb.WriteString(fmt.Sprintf("\r\n  \x1b[38;5;75mTotal: %s\x1b[0m\r\n", pack.FormatBytes(total)))
+	if len(entries) == 0 {
+		sb.WriteString("\r\n\x1b[38;5;246mno files to pack\x1b[0m")
 	}
+	t.write(sb.String())
 	t.write(t.prompt())
 }
 
@@ -718,7 +661,7 @@ func (t *Terminal) builtinProblems() {
 	if len(result.Sources) == 0 {
 		t.write("\r\n" + probDim +
 			"  No source files found.\r\n" +
-			"  Scans: Go (.go) Â· TypeScript/JS (.ts .tsx .js .jsx)\r\n" + probReset)
+			"  Scans: Go (.go) · TypeScript/JS (.ts .tsx .js .jsx)\r\n" + probReset)
 		t.write(t.prompt())
 		return
 	}
@@ -792,8 +735,7 @@ func (t *Terminal) builtinPreview(args []string) {
 		})
 
 	case ".html", ".htm":
-		// HTML: serve via a local file server so relative CSS/JS/image links resolve
-		// correctly — the same behaviour as VS Code's Live Server.
+		// HTML: serve via a local file server so relative CSS/JS/image links resolve.
 		url := localFileURL(path)
 		if url == "" {
 			t.write("\r\n\x1b[31mpreview: could not start local file server\x1b[0m")
@@ -803,8 +745,8 @@ func (t *Terminal) builtinPreview(args []string) {
 		t.write("\r\n\x1b[38;5;246mopening preview: " + filepath.Base(path) + "\x1b[0m")
 		wailsruntime.EventsEmit(t.ctx, "app:open-preview", map[string]string{
 			"type":       "html",
-			"path":       path, // full path used as dedup key
-			"url":        url,  // local server URL rendered in the iframe
+			"path":       path,
+			"url":        url,
 			"terminalId": t.id,
 		})
 
@@ -835,228 +777,7 @@ func isPreviewURL(s string) bool {
 	return false
 }
 
-// â”€â”€â”€ external command execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-func windowsShellPath() string {
-	const shellName = "powershell.exe"
-
-	// go-pty resolves bare executable names against Cmd.Dir on Windows, so we
-	// must pass an absolute shell path before attaching the PTY in another cwd.
-	path, err := exec.LookPath(shellName)
-	if err != nil {
-		return shellName
-	}
-	return path
-}
-
-func shouldUsePTY(line string) bool {
-	if goruntime.GOOS != "windows" {
-		return true
-	}
-
-	parts := parseArgs(strings.TrimSpace(line))
-	if len(parts) == 0 {
-		return false
-	}
-
-	name := strings.ToLower(filepath.Base(parts[0]))
-	switch name {
-	case "claude", "claude.exe", "cmd", "cmd.exe", "codex", "codex.exe",
-		"fzf", "less", "more", "nvim", "powershell", "powershell.exe",
-		"pwsh", "pwsh.exe", "ssh", "sftp", "top", "vim":
-		return true
-	default:
-		return false
-	}
-}
-
-func (t *Terminal) execExternal(line string) {
-	if !shouldUsePTY(line) {
-		t.execExternalWindows(line)
-		return
-	}
-
-	t.execExternalPTY(line)
-}
-
-func (t *Terminal) execExternalWindows(line string) {
-	cmd := exec.Command(windowsShellPath(),
-		"-NoProfile", "-ExecutionPolicy", "Bypass",
-		"-Command", line)
-	cmd.Dir = t.cwd
-	cmd.Env = append(liveEnv(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-		"FORCE_COLOR=1",
-		"CLICOLOR_FORCE=1",
-	)
-
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-	stdin, _ := cmd.StdinPipe()
-
-	t.mu.Lock()
-	t.runningCmd = cmd
-	t.runningIn = stdin
-	t.mu.Unlock()
-
-	term.NoWindow(cmd)
-
-	if err := cmd.Start(); err != nil {
-		t.write("\r\n\x1b[31m" + err.Error() + "\x1b[0m")
-		t.mu.Lock()
-		t.runningCmd = nil
-		t.runningIn = nil
-		t.mu.Unlock()
-		t.write(t.prompt())
-		return
-	}
-
-	stream := func(r io.Reader, wg *sync.WaitGroup) {
-		defer wg.Done()
-		buf := make([]byte, 4096)
-		for {
-			n, err := r.Read(buf)
-			if n > 0 {
-				t.write(normNewlines(buf[:n]))
-			}
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go stream(stdout, &wg)
-	go stream(stderr, &wg)
-	wg.Wait()
-	cmd.Wait() //nolint:errcheck
-
-	t.mu.Lock()
-	wasInterrupted := t.runningCmd == nil
-	t.runningCmd = nil
-	t.runningIn = nil
-	t.mu.Unlock()
-
-	if !wasInterrupted {
-		t.write(t.prompt())
-	}
-}
-
-func (t *Terminal) execExternalPTY(line string) {
-	p, err := gopty.New()
-	if err != nil {
-		t.write("\r\n\x1b[31mpty: " + err.Error() + "\x1b[0m")
-		t.write(t.prompt())
-		return
-	}
-
-	t.mu.Lock()
-	cols, rows := t.ptyCols, t.ptyRows
-	t.mu.Unlock()
-	if cols == 0 {
-		cols = 80
-	}
-	if rows == 0 {
-		rows = 24
-	}
-	p.Resize(cols, rows) //nolint:errcheck
-
-	var c *gopty.Cmd
-	switch goruntime.GOOS {
-	case "windows":
-		c = p.Command(windowsShellPath(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", line)
-	default:
-		shell := config.Get().PreferredShell
-		if shell == "" {
-			shell = "bash"
-		}
-		c = p.Command(shell, "-c", line)
-	}
-	c.Dir = t.cwd
-	c.Env = append(liveEnv(),
-		"TERM=xterm-256color",
-		"COLORTERM=truecolor",
-		"FORCE_COLOR=1",
-		"CLICOLOR_FORCE=1",
-	)
-
-	if err := c.Start(); err != nil {
-		p.Close()
-		t.write("\r\n\x1b[31m" + err.Error() + "\x1b[0m")
-		t.write(t.prompt())
-		return
-	}
-
-	t.mu.Lock()
-	t.runningPty = p
-	t.runningGoCmd = c
-	t.mu.Unlock()
-
-	wailsruntime.EventsEmit(t.ctx, "terminal:pty:start:"+t.id, nil)
-
-	buf := make([]byte, 4096)
-	for {
-		n, err := p.Read(buf)
-		if n > 0 {
-			t.write(string(buf[:n]))
-		}
-		if err != nil {
-			break
-		}
-	}
-	c.Wait()  //nolint:errcheck
-	p.Close() //nolint:errcheck
-
-	t.mu.Lock()
-	wasInterrupted := t.runningPty == nil // Interrupt() already cleared it
-	t.runningPty = nil
-	t.runningGoCmd = nil
-	t.mu.Unlock()
-
-	wailsruntime.EventsEmit(t.ctx, "terminal:pty:end:"+t.id, nil)
-
-	if !wasInterrupted {
-		t.write(t.prompt())
-	}
-}
-
-// normNewlines converts bare \n to \r\n while leaving \r and \r\n intact.
-func normNewlines(b []byte) string {
-	out := make([]byte, 0, len(b)+64)
-	for i, c := range b {
-		if c == '\n' && (i == 0 || b[i-1] != '\r') {
-			out = append(out, '\r')
-		}
-		out = append(out, c)
-	}
-	return string(out)
-}
-
-// WriteInput forwards raw bytes from the frontend to the active PTY.
-func (t *Terminal) WriteInput(data string) {
-	t.mu.Lock()
-	p := t.runningPty
-	t.mu.Unlock()
-	if p != nil {
-		p.Write([]byte(data)) //nolint:errcheck
-	}
-}
-
-// Resize updates the PTY dimensions (cols × rows) when xterm resizes.
-func (t *Terminal) Resize(cols, rows int) {
-	t.mu.Lock()
-	t.ptyCols = cols
-	t.ptyRows = rows
-	p := t.runningPty
-	t.mu.Unlock()
-	if p != nil {
-		p.Resize(cols, rows) //nolint:errcheck
-	}
-}
-
-// â”€â”€â”€ command-line parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── command-line parser ──────────────────────────────────────────────────────
 
 func parseArgs(line string) []string {
 	var args []string
