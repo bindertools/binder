@@ -104,6 +104,7 @@ func (a *App) startup(ctx context.Context) {
 				a.UseCppBackend = false
 			} else {
 				log.Printf("cppbridge: started (%s)", exePath)
+				a.initCppPreview()
 			}
 		}
 	}
@@ -136,6 +137,36 @@ func (a *App) domReady(ctx context.Context) {
 			}, true);
 		})();
 	`)
+}
+
+// initCppPreview wires cppPreviewURLFunc so that localFileURL() delegates to
+// the C++ cpp-httplib server. The server is started lazily on first use and
+// the port is cached after that — no round-trip on every file open.
+func (a *App) initCppPreview() {
+	var (
+		baseURL string
+		once    sync.Once
+	)
+	cppPreviewURLFunc = func(absPath string) string {
+		once.Do(func() {
+			resp, err := a.cpp.RoundTrip(map[string]any{
+				"type": "preview.start", "id": a.cppID(),
+			}, 5000)
+			if err == nil {
+				baseURL, _ = resp["url"].(string)
+			}
+		})
+		if baseURL == "" {
+			return ""
+		}
+		// Construct the file URL the same way Go's localFileURL does:
+		//   Windows: C:\Users\x\file.html → /C:/Users/x/file.html
+		slashed := filepath.ToSlash(absPath)
+		if runtime.GOOS == "windows" {
+			slashed = "/" + slashed
+		}
+		return baseURL + slashed
+	}
 }
 
 func (a *App) shutdown(_ context.Context) {

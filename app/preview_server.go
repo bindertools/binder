@@ -16,6 +16,10 @@ var (
 	previewServerOnce sync.Once
 )
 
+// cppPreviewURLFunc, when non-nil, overrides localFileURL to use the C++
+// preview server instead of the built-in Go HTTP server.
+var cppPreviewURLFunc func(absPath string) string
+
 // startPreviewServer starts a local HTTP file server on a random 127.0.0.1 port
 // and returns the port number. Subsequent calls are no-ops that return the same
 // port. The server serves arbitrary absolute filesystem paths, which lets the
@@ -114,6 +118,9 @@ func previewFileHandler(w http.ResponseWriter, r *http.Request) {
 //	Windows: C:\Users\x\project\index.html → http://127.0.0.1:PORT/C:/Users/x/project/index.html
 //	Unix:    /home/x/project/index.html    → http://127.0.0.1:PORT/home/x/project/index.html
 func localFileURL(absPath string) string {
+	if cppPreviewURLFunc != nil {
+		return cppPreviewURLFunc(absPath)
+	}
 	port := startPreviewServer()
 	if port == 0 {
 		return ""
