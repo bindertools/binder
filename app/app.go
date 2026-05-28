@@ -534,6 +534,22 @@ func (a *App) SearchFiles(id string, query string) []search.Result {
 	if !ok {
 		return nil
 	}
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "search.query", "id": a.cppID(),
+			"path": t.cwd, "query": query, "maxResults": 100,
+		}, 30000)
+		if err != nil {
+			return search.Files(t.cwd, query)
+		}
+		raw, _ := resp["results"]
+		b, _ := json.Marshal(raw)
+		var results []search.Result
+		if json.Unmarshal(b, &results) == nil {
+			return results
+		}
+		return nil
+	}
 	return search.Files(t.cwd, query)
 }
 
@@ -542,6 +558,22 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 	t, ok := a.terminals[id]
 	a.mu.Unlock()
 	if !ok {
+		return nil
+	}
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "complete.path", "id": a.cppID(),
+			"cwd": t.cwd, "dir": dir, "prefix": partial,
+		}, 5000)
+		if err != nil {
+			return search.Completions(t.cwd, dir, partial)
+		}
+		raw, _ := resp["completions"]
+		b, _ := json.Marshal(raw)
+		var completions []string
+		if json.Unmarshal(b, &completions) == nil {
+			return completions
+		}
 		return nil
 	}
 	return search.Completions(t.cwd, dir, partial)
