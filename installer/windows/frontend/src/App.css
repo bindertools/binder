@@ -54,15 +54,17 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   padding: 32px 40px 20px;
+  overflow: hidden;
 }
 
 /* ── brand ────────────────────────────────────────────────────────────── */
 .brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
   margin-bottom: 2px;
 }
 
@@ -73,16 +75,67 @@ body {
   pointer-events: none;
 }
 
-/* ── ready phase ──────────────────────────────────────────────────────── */
-.ready {
+/* ── developer channel badge ──────────────────────────────────────────── */
+.channel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.28);
+  color: #e8a444;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── error banner ─────────────────────────────────────────────────────── */
+.error-banner {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 8px;
   width: 100%;
+  max-width: 360px;
+  padding: 8px 12px;
+  background: rgba(224, 80, 80, 0.1);
+  border: 1px solid rgba(224, 80, 80, 0.28);
+  border-radius: 6px;
+  color: #e08080;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.error-banner span { flex: 1; }
+.error-banner-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #a05050;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.12s;
+}
+.error-banner-dismiss:hover { color: #e08080; }
+
+/* ── SCREEN 1: ready ──────────────────────────────────────────────────── */
+.screen-ready {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
 }
 
-.install-dir-label {
+.install-dir-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.field-label {
   font-size: 10px;
   color: #444;
   text-transform: uppercase;
@@ -109,15 +162,7 @@ body {
   justify-content: center;
   gap: 10px;
   width: 100%;
-  margin-top: 4px;
-}
-
-.version-label {
-  font-size: 10px;
-  color: #444;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 /* ── custom version select ────────────────────────────────────────────── */
@@ -138,15 +183,24 @@ body {
   padding: 5px 10px 5px 12px;
   cursor: pointer;
   outline: none;
-  min-width: 130px;
+  min-width: 160px;
   justify-content: space-between;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-.vsel-btn:hover,
+.vsel-btn:disabled { opacity: 0.5; cursor: default; }
+.vsel-btn:not(:disabled):hover,
 .vsel-btn[data-open="true"] {
   border-color: rgba(77, 158, 255, 0.4);
   background: rgba(255,255,255,0.06);
   color: #ccc;
+}
+
+.vsel-btn-label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vsel-chevron {
@@ -164,11 +218,12 @@ body {
   top: calc(100% + 5px);
   left: 0;
   right: 0;
+  min-width: 220px;
   background: #141416;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 6px;
   z-index: 200;
-  max-height: 148px;
+  max-height: 180px;
   overflow-y: auto;
   box-shadow: 0 12px 32px rgba(0,0,0,0.55);
 }
@@ -177,6 +232,10 @@ body {
 .vsel-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 .vsel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 7px 12px;
   font-size: 12px;
   color: #888;
@@ -187,24 +246,31 @@ body {
   background: rgba(77,158,255,0.08);
   color: #ddd;
 }
-.vsel-item.active {
-  color: #4d9eff;
-}
-.vsel-item {
+.vsel-item.active { color: #4d9eff; }
+.vsel-item--pre   { color: #999; }
+
+.vsel-item-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.vsel-item--pre {
-  color: #999;
+
+.vsel-date {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #4a4a4a;
 }
+
 .vsel-badge {
+  flex-shrink: 0;
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 3px;
   background: rgba(255, 165, 0, 0.15);
   color: #e8a444;
-  flex-shrink: 0;
 }
 .vsel-snapshot {
   font-size: 10px;
@@ -212,7 +278,7 @@ body {
   margin-left: 4px;
 }
 
-/* ── options (checkboxes) — inline centered ───────────────────────────── */
+/* ── options (checkboxes) ─────────────────────────────────────────────── */
 .options {
   display: flex;
   flex-direction: row;
@@ -258,28 +324,82 @@ body {
 .btn-install:hover  { background: #6aadff; }
 .btn-install:active { background: #3a8aee; }
 
-/* ── status text ──────────────────────────────────────────────────────── */
-.status-msg {
-  font-size: 12px;
-  color: #888;
-  text-align: center;
-}
-.status-msg.success { color: #7ec98f; }
-.status-msg.error   { color: #e07070; }
-
-/* ── done / action buttons ────────────────────────────────────────────── */
-.done {
+/* ── SCREEN 2: installing ─────────────────────────────────────────────── */
+.screen-installing {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
 }
 
-.actions {
+.installing-msg {
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+  min-height: 1.4em;
+}
+
+.progress-bar-large {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-large-fill {
+  height: 100%;
+  background: #4d9eff;
+  border-radius: 2px;
+}
+
+.progress-pct {
+  font-size: 11px;
+  color: #555;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/* ── SCREEN 3: done ───────────────────────────────────────────────────── */
+.screen-done {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
 }
 
+.done-checkmark {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(48, 209, 88, 0.12);
+  border: 1.5px solid rgba(48, 209, 88, 0.35);
+  color: #30d158;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.done-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ddd;
+}
+
+.done-sub {
+  font-size: 12px;
+  color: #555;
+}
+
+.done-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ── shared action buttons ────────────────────────────────────────────── */
 .btn-action {
   padding: 7px 18px;
   background: transparent;
@@ -288,6 +408,7 @@ body {
   color: #c0c0c0;
   font-size: 12px;
   cursor: pointer;
+  font-family: inherit;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 .btn-action:hover {
@@ -306,15 +427,7 @@ body {
   color: #6aadff;
 }
 
-/* ── error block ──────────────────────────────────────────────────────── */
-.error-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
-/* ── progress bar ─────────────────────────────────────────────────────── */
+/* ── bottom progress strip ────────────────────────────────────────────── */
 .progress-track {
   height: 2px;
   width: 100%;
