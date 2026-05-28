@@ -1,11 +1,11 @@
+// Removed in Phase 5: downloadUpdateFile (Go net/http download fallback)
+
 //go:build windows
 
 package main
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"syscall"
@@ -13,9 +13,9 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// PerformUpdate downloads the requested version, atomically replaces the
-// running exe using Go file renames (no child process, no PowerShell), then
-// launches the new binary and quits.
+// PerformUpdate downloads the requested version via the C++ WinHTTP backend,
+// atomically replaces the running exe using Go file renames (no child process,
+// no PowerShell), then launches the new binary and quits.
 //
 // Windows allows renaming a running exe; the file stays open by handle while
 // the process runs, so the rename succeeds and the new exe can take the name.
@@ -44,22 +44,17 @@ func (a *App) PerformUpdate(version string) error {
 	// Use a non-exe extension so Defender doesn't quarantine it on write.
 	tmpPath := exePath + ".update"
 
-	if a.UseCppBackend {
-		// Delegate the download to C++ (WinHTTP, supports HTTPS natively).
-		resp, cerr := a.cpp.RoundTrip(map[string]any{
-			"type": "updater.download", "id": a.cppID(),
-			"url": downloadURL, "destPath": tmpPath,
-		}, 300000) // 5-minute timeout for large downloads
-		if cerr != nil {
-			return fmt.Errorf("cpp download: %w", cerr)
-		}
-		if ok, _ := resp["ok"].(bool); !ok {
-			errStr, _ := resp["error"].(string)
-			return fmt.Errorf("download failed: %s", errStr)
-		}
-	} else if err := downloadUpdateFile(downloadURL, tmpPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("download failed: %w", err)
+	// Delegate the download to C++ (WinHTTP, supports HTTPS natively).
+	resp, cerr := a.cpp.RoundTrip(map[string]any{
+		"type": "updater.download", "id": a.cppID(),
+		"url": downloadURL, "destPath": tmpPath,
+	}, 300000) // 5-minute timeout for large downloads
+	if cerr != nil {
+		return fmt.Errorf("cpp download: %w", cerr)
+	}
+	if ok, _ := resp["ok"].(bool); !ok {
+		errStr, _ := resp["error"].(string)
+		return fmt.Errorf("download failed: %s", errStr)
 	}
 
 	// Rename current exe → .old (freeing the name), new file → current name.
@@ -97,22 +92,4 @@ func cleanupAfterUpdate() {
 	}
 	_ = os.Remove(exe + ".old")
 	_ = os.Remove(exe + ".update") // remove any interrupted download
-}
-
-func downloadUpdateFile(url, dest string) error {
-	resp, err := http.Get(url) //nolint:noctx
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	f, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
-	return err
 }

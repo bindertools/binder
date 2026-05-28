@@ -1,10 +1,6 @@
-package main
+// Removed in Phase 5: Go HTTP-based update check (net/http fetch + JSON parse)
 
-import (
-	"encoding/json"
-	"net/http"
-	"time"
-)
+package main
 
 // AppVersion is injected at build time via:
 //
@@ -15,54 +11,20 @@ var AppVersion = "dev"
 
 const githubUpdateRepo = "Command-IDE/cmd-ide"
 
-// CheckForUpdate fetches GitHub releases, finds the newest stable (non-prerelease)
-// release, and returns its tag if it differs from AppVersion. Returns "" when
-// already up-to-date or when the check fails.
+// CheckForUpdate asks the C++ backend to check the GitHub releases API.
+// Returns the latest stable tag if newer than AppVersion, or "" if up-to-date.
 func (a *App) CheckForUpdate() string {
-	if a.UseCppBackend {
-		resp, err := a.cpp.RoundTrip(map[string]any{
-			"type": "updater.check", "id": a.cppID(),
-			"appVersion": AppVersion,
-		}, 12000)
-		if err == nil {
-			if avail, _ := resp["updateAvailable"].(bool); avail {
-				if v, ok := resp["latestVersion"].(string); ok {
-					return v
-				}
-			}
-			return ""
-		}
-		// Fall through to Go implementation on C++ error.
-	}
-	url := "https://api.github.com/repos/" + githubUpdateRepo + "/releases"
-	client := &http.Client{Timeout: 8 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	resp, err := a.cpp.RoundTrip(map[string]any{
+		"type":       "updater.check",
+		"id":         a.cppID(),
+		"appVersion": AppVersion,
+	}, 12000)
 	if err != nil {
 		return ""
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "cmdIDE-app")
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	defer resp.Body.Close()
-
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return ""
-	}
-
-	// GitHub returns newest-first; find the first stable release.
-	for _, r := range releases {
-		if !r.Prerelease {
-			if r.TagName != AppVersion {
-				return r.TagName
-			}
-			return ""
+	if avail, _ := resp["updateAvailable"].(bool); avail {
+		if v, ok := resp["latestVersion"].(string); ok {
+			return v
 		}
 	}
 	return ""
