@@ -260,31 +260,15 @@ class PluginErrorBoundary extends React.Component<PluginErrorBoundaryProps, Plug
   render() {
     if (this.state.error) {
       return (
-        <div style={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 24,
-          background: 'var(--app-bg)',
-        }}>
-          <div style={{
-            maxWidth: 720,
-            width: '100%',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 18,
-            padding: 20,
-            background: 'rgba(255,255,255,0.03)',
-            color: 'var(--tab-color)',
-            fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
-          }}>
-            <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 8 }}>
+        <div className="h-full flex items-center justify-center p-6 bg-[var(--app-bg)]">
+          <div className="max-w-[720px] w-full border border-sep rounded-[18px] p-5 bg-[rgba(255,255,255,0.03)] text-[var(--tab-color)] font-mono">
+            <div className="text-[12px] tracking-[0.12em] uppercase opacity-60 mb-2">
               Plugin Error
             </div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+            <div className="text-[18px] font-bold mb-2.5">
               {this.props.pluginName} failed to render
             </div>
-            <div style={{ fontSize: 12, lineHeight: 1.7, opacity: 0.82, whiteSpace: 'pre-wrap' }}>
+            <div className="text-[12px] leading-[1.7] opacity-[0.82] whitespace-pre-wrap">
               {this.state.error.message}
             </div>
           </div>
@@ -841,18 +825,20 @@ export default function App() {
   }, [focusedPanel, activeId, rightActiveId, tabs])
 
   // ── render ────────────────────────────────────────────────────────────────────
+  const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+
   return (
-    <div className="app">
+    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui">
 
       {/* ── App header (draggable title bar) ──────────────────────────────────── */}
       <div
-        className="app__header"
+        className="flex items-center h-[42px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden pr-1.5"
         style={{ ['--wails-draggable' as any]: 'drag' }}
         onDoubleClick={WindowToggleMaximise}
       >
         {/* Left panel tab bar */}
         <div
-          className="app__header-panel"
+          className="flex items-center overflow-hidden min-w-0 shrink h-full"
           style={splitEnabled
             ? { width: `calc(${splitRatio * 100}% - 2px)` }
             : { flex: 1, minWidth: 0 }
@@ -876,8 +862,8 @@ export default function App() {
 
         {splitEnabled && (
           <>
-            <div className="app__header-sep" />
-            <div className="app__header-panel" style={{ flex: 1, minWidth: 0 }}>
+            <div className="w-px h-5 bg-sep shrink-0 mx-0.5" />
+            <div className="flex items-center overflow-hidden min-w-0 shrink h-full" style={{ flex: 1, minWidth: 0 }}>
               <TabBar
                 panel="right"
                 tabs={rightTabs}
@@ -897,10 +883,10 @@ export default function App() {
         )}
 
         {/* Search bar + window controls */}
-        <div className="app__header-controls" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+        <div className="flex items-center shrink-0 gap-0.5 ml-auto pl-2" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           {updateTag && (
             <button
-              className="app__update-btn"
+              className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
               title={`Update available: ${updateTag} — click to install`}
               onClick={() => PerformUpdate(updateTag).catch(() => {})}
               aria-label="Update available"
@@ -912,7 +898,7 @@ export default function App() {
             </button>
           )}
           <button
-            className="app__search-bar"
+            className="flex items-center gap-1.5 h-[26px] min-w-[160px] max-w-[220px] px-2.5 rounded-md border border-sep-strong bg-surface-raised cursor-pointer text-[var(--tab-color)] font-ui text-[11.5px] transition-[background,color,border-color] duration-[100ms] shrink-0 whitespace-nowrap select-none hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-accent-border"
             onClick={() => setSearchOpen(true)}
             title="Search files and tabs (Ctrl+K)"
           >
@@ -920,22 +906,22 @@ export default function App() {
               <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
               <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            <span className="app__search-bar-label">Search...</span>
-            <span className="app__search-bar-kbd">Ctrl K</span>
+            <span className="flex-1 text-left overflow-hidden text-ellipsis">Search...</span>
+            <span className="text-[10px] opacity-45 tracking-normal font-ui">Ctrl K</span>
           </button>
-          <div className="app__wincontrols">
-            <button className="wc-btn wc-min" onClick={WindowMinimise} aria-label="Minimise">
+          <div className="flex items-center gap-0.5">
+            <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
               <svg width="10" height="2" viewBox="0 0 10 2">
                 <path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
-            <button className="wc-btn wc-max" onClick={WindowToggleMaximise} aria-label="Maximise">
+            <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise">
               <svg width="10" height="10" viewBox="0 0 10 10">
                 <rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5"
                   stroke="currentColor" strokeWidth="1.5" fill="none"/>
               </svg>
             </button>
-            <button className="wc-btn wc-close" onClick={handleQuit} aria-label="Close">
+            <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
               <svg width="10" height="10" viewBox="0 0 10 10">
                 <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
@@ -962,7 +948,7 @@ export default function App() {
       />
 
       {/* ── Content area ──────────────────────────────────────────────────────── */}
-      <div className="app__content" ref={contentRef}>
+      <div className="flex-1 overflow-hidden relative" ref={contentRef}>
         {tabs.map(tab => {
           const panel    = tabPanels[tab.id] ?? 'left'
           const isLeft   = panel === 'left'
@@ -993,7 +979,7 @@ export default function App() {
           return (
             <div
               key={tab.id}
-              className={`app__pane${isFocused ? ' app__pane--focused' : ''}`}
+              className={`absolute top-0 bottom-0 flex flex-col overflow-hidden${isFocused ? ' pane--focused' : ''}`}
               style={style}
               onMouseDown={() => setFocusedPanel(isLeft ? 'left' : 'right')}
             >
@@ -1004,7 +990,7 @@ export default function App() {
 
         {splitEnabled && (
           <div
-            className="app__divider"
+            className="absolute top-0 bottom-0 w-[4px] cursor-col-resize bg-[var(--border-color)] z-20 transition-[background] duration-[180ms] hover:bg-[rgba(10,132,255,0.5)] active:bg-[rgba(10,132,255,0.5)]"
             style={{ left: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)` }}
             onMouseDown={handleDividerMouseDown}
           />
@@ -1012,11 +998,11 @@ export default function App() {
       </div>
 
       {/* ── Status bar ────────────────────────────────────────────────────────── */}
-      <div className="app__statusbar">
+      <div className="flex items-center h-[22px] shrink-0 bg-[var(--info-bar-bg)] border-t border-[var(--border-color)] font-ui text-[11px] text-[var(--info-bar-color)] select-none overflow-hidden px-1.5 gap-1">
         {activeTerminalId && terminalCwds[activeTerminalId] && (
           <>
             <button
-              className="app__statusbar-cwd"
+              className="flex items-center gap-[5px] py-px px-[7px] rounded-xs bg-transparent border-0 cursor-pointer text-[var(--info-bar-color)] font-ui text-[11px] whitespace-nowrap overflow-hidden text-ellipsis max-w-[400px] transition-[background,color] duration-[100ms] hover:bg-surface-raised hover:text-[var(--info-bar-hover-color)]"
               onClick={() => window.dispatchEvent(new CustomEvent('terminal:select-dir', { detail: { terminalId: activeTerminalId } }))}
               title="Click to change directory"
             >
@@ -1024,12 +1010,12 @@ export default function App() {
                 <path d="M1 4.5A1.5 1.5 0 012.5 3h3.086a1.5 1.5 0 011.06.44l.915.914A1.5 1.5 0 008.62 4.5H13.5A1.5 1.5 0 0115 6v6a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12V4.5z"
                   stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
               </svg>
-              <span>{terminalCwds[activeTerminalId].replace(/\\/g, '/')}</span>
+              <span className="overflow-hidden text-ellipsis font-mono">{terminalCwds[activeTerminalId].replace(/\\/g, '/')}</span>
             </button>
-            <div className="app__statusbar-sep" />
+            <div className="w-px h-3 bg-sep shrink-0" />
           </>
         )}
-        <div className="app__statusbar-right">
+        <div className="ml-auto flex items-center gap-2 opacity-40 text-[10.5px]">
           <span>cmdIDE</span>
         </div>
       </div>
