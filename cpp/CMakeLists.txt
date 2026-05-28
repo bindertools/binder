@@ -13,6 +13,7 @@ add_executable(cmdide-backend
     src/terminal.cpp
     src/fileops.cpp
     src/config.cpp
+    src/search.cpp
 )
 
 target_link_libraries(cmdide-backend PRIVATE

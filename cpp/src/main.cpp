@@ -2,6 +2,7 @@
 #include "terminal.hpp"
 #include "fileops.hpp"
 #include "config.hpp"
+#include "search.hpp"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -159,7 +160,8 @@ int main(int argc, char* argv[]) {
                 // Try file-ops and config dispatch before giving up.
                 nlohmann::json dispatched_resp;
                 if (fileops::dispatch(type, msg, id, dispatched_resp) ||
-                    config_dispatch(type, msg, id, dispatched_resp)) {
+                    config_dispatch(type, msg, id, dispatched_resp) ||
+                    search_ops::dispatch(type, msg, id, dispatched_resp)) {
                     ipc_write(dispatched_resp);
                 } else {
                     spdlog::debug("Unknown message type: {}", type);
