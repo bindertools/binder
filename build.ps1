@@ -76,13 +76,15 @@ if ($appTagStr) { $instFlags += @('-tags', $appTagStr) }
 $baseName         = "cmdIDE-$goOs-$goArch$binExt"
 $pluginsName      = "cmdIDE-plugins-$goOs-$goArch$binExt"
 $installerName    = "cmdIDE-installer$installerSfx$binExt"
+$installerDevName = "cmdIDE-installer-dev$installerSfx$binExt"
 
 # macOS ships the main app as a drag-to-Applications DMG; the installer and
 # all other platforms continue to use zip / tar.gz.
-$appArchExt       = if ($goOs -eq 'darwin') { '.dmg' } else { $archExt }
-$baseArchive      = "cmdIDE-$goOs-$goArch$appArchExt"
-$pluginsArchive   = "cmdIDE-plugins-$goOs-$goArch$appArchExt"
-$installerArchive = "cmdIDE-installer$installerSfx$archExt"
+$appArchExt          = if ($goOs -eq 'darwin') { '.dmg' } else { $archExt }
+$baseArchive         = "cmdIDE-$goOs-$goArch$appArchExt"
+$pluginsArchive      = "cmdIDE-plugins-$goOs-$goArch$appArchExt"
+$installerArchive    = "cmdIDE-installer$installerSfx$archExt"
+$installerDevArchive = "cmdIDE-installer-dev$installerSfx$archExt"
 
 $appDir  = Join-Path $root 'app'
 $instDir = Join-Path (Join-Path $root 'installer') $installerDir
@@ -455,6 +457,39 @@ if ($goOs -eq 'darwin' -and (Test-Path $instApp)) {
 }
 
 Ok "Binary    -> app/build/bin/$installerArchive"
+
+# -- Dev installer (Windows only — stable + pre-release channel) ---------------
+if ($goOs -eq 'windows') {
+    Step "    Dev installer ($installerDir)"
+
+    # Combine any platform tags with the 'dev' build tag.
+    $instDevTagStr = if ($appTagStr) { "$appTagStr,dev" } else { 'dev' }
+    $instDevFlags  = @('build', '-trimpath', '-ldflags', '-s -w',
+                       '-tags', $instDevTagStr,
+                       '-o', "cmdIDE-installer-dev$binExt")
+
+    Push-Location $instDir
+    & wails @instDevFlags 2>&1 | ForEach-Object { Write-Host $_ }
+    $code = $LASTEXITCODE
+    Pop-Location
+    if ($code -ne 0) { Write-Host ''; Fail "Dev installer build failed (exit code $code)." }
+
+    $instDevBin  = Join-Path $instBinDir "cmdIDE-installer-dev$binExt"
+    $instDevDest = Join-Path $binDir $installerDevName
+
+    if (Test-Path $instDevBin) {
+        if (Test-Path $instDevDest) {
+            if (-not (Remove-WithRetry $instDevDest)) {
+                Fail "Cannot remove old $installerDevName - file is locked."
+            }
+        }
+        Copy-Item -Force $instDevBin $instDevDest
+        New-Archive (Join-Path $binDir $installerDevName) $installerDevArchive
+        Ok "Binary    -> app/build/bin/$installerDevArchive"
+    } else {
+        Fail "Dev installer binary not found in $instBinDir"
+    }
+}
 
 Write-Host ''
 Write-Host '  Build complete.' -ForegroundColor Green
