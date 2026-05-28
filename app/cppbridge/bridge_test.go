@@ -20,6 +20,9 @@ func findBackendExe() string {
 }
 
 func TestPingPong(t *testing.T) {
+	if os.Getenv("CMDIDE_INTEGRATION") == "" {
+		t.Skip("set CMDIDE_INTEGRATION=1 to run C++ bridge integration tests")
+	}
 	exePath := findBackendExe()
 	if _, err := os.Stat(exePath); os.IsNotExist(err) {
 		t.Skipf("cmdide-backend.exe not found at %s; build cpp/ first", exePath)
