@@ -134,25 +134,16 @@ const CloseIcon = () => (
 
 // Span-based badge — CSS text rendering is far crisper than SVG <text> at small sizes
 const LangBadge = ({ letters, bg, active }: { letters: string; bg: string; active: boolean }) => (
-  <span style={{
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    padding: '0 3.5px',
-    minWidth: letters.length > 2 ? 24 : 19,
-    height: 15,
-    borderRadius: 3,
-    background: bg,
-    color: '#fff',
-    fontSize: letters.length > 2 ? 8 : 9,
-    fontWeight: 800,
-    fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
-    letterSpacing: letters.length > 2 ? '-0.5px' : '0.1px',
-    opacity: active ? 1 : 0.5,
-    lineHeight: 1,
-    userSelect: 'none',
-  }}>
+  <span
+    className={`inline-flex items-center justify-center shrink-0 h-[15px] rounded-[3px] text-white font-[800] leading-none select-none px-[3.5px]${active ? '' : ' opacity-50'}`}
+    style={{
+      background: bg,
+      minWidth: letters.length > 2 ? 24 : 19,
+      fontSize: letters.length > 2 ? 8 : 9,
+      letterSpacing: letters.length > 2 ? '-0.5px' : '0.1px',
+      fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
+    }}
+  >
     {letters}
   </span>
 )
@@ -302,9 +293,14 @@ export default function TabBar({
     setCtxMenu({ tabId: tab.id, tab, x, y })
   }
 
+  const tabBase = "flex items-center gap-[5px] px-[10px] py-[4px] rounded-sm cursor-pointer text-[12px] font-ui whitespace-nowrap shrink-0 text-[var(--tab-color)] transition-[background,color,box-shadow] duration-[100ms] select-none tracking-[0.01em] relative group/tab active:opacity-50 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]"
+  const tabActive = " is-active text-[var(--tab-color-hover)] bg-[var(--tab-active-bg,var(--surface-overlay))] shadow-[0_0_0_1px_var(--tab-active-ring,var(--sep-strong))]"
+  const closeBtn = "flex items-center justify-center w-[14px] h-[14px] bg-transparent border-0 rounded-xs cursor-pointer text-inherit p-0 shrink-0 opacity-0 transition-[opacity,background] duration-[100ms] ml-px group-hover/tab:opacity-40 group-[.is-active]/tab:opacity-40 hover:opacity-100! hover:bg-surface-overlay"
+  const ctxItemBase = "flex items-center w-full px-[14px] py-[7px] bg-transparent border-0 cursor-pointer text-[var(--info-bar-hover-color)] text-left transition-[background] duration-[100ms] whitespace-nowrap font-ui text-[12.5px] hover:bg-surface-raised hover:text-white"
+
   return (
     <div
-      className={`tabbar${focused ? ' tabbar--focused' : ''}${dragOver ? ' tabbar--dragover' : ''}`}
+      className={`flex items-center bg-[var(--app-bg)] h-full shrink-0 select-none overflow-hidden${dragOver ? ' tabbar--dragover' : ''}`}
       onDragEnter={e => { e.preventDefault(); dragCounter.current++; setDragOver(true) }}
       onDragLeave={() => { dragCounter.current--; if (dragCounter.current <= 0) { dragCounter.current = 0; setDragOver(false) } }}
       onDragOver={e => e.preventDefault()}
@@ -316,16 +312,16 @@ export default function TabBar({
         if (id) onDrop(id)
       }}
     >
-      <div className="tabbar__strip" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+      <div className="tabbar__strip flex items-center overflow-x-auto overflow-y-hidden flex-1 min-w-0 px-1 py-1 gap-px" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
 
         {groups.map((group, gi) => {
           const firstTermId = group.terminals[0]?.id
           return (
             <React.Fragment key={firstTermId ?? `g${gi}`}>
 
-              {gi > 0 && <div className="tabbar__sep" />}
+              {gi > 0 && <div className="w-px h-4 mx-1 bg-sep shrink-0" />}
 
-              <div className="tabbar__group">
+              <div className="flex items-center shrink-0 gap-px group/tabgroup">
 
                 {group.terminals.map(term => {
                   const isActive = term.id === activeId
@@ -336,7 +332,7 @@ export default function TabBar({
                   return (
                     <div
                       key={term.id}
-                      className={`tabbar__tab${isActive ? ' is-active' : ''}`}
+                      className={tabBase + (isActive ? tabActive : '')}
                       style={activeStyle}
                       draggable
                       onDragStart={e => { e.dataTransfer.setData('tabId', term.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -345,12 +341,8 @@ export default function TabBar({
                       title={term.title}
                     >
                       <TerminalIcon color={isActive ? group.color : rgba(group.color, 0.45)} />
-                      <span className="tabbar__tab-title">{term.title}</span>
-                      <button
-                        className="tabbar__close"
-                        onClick={e => { e.stopPropagation(); onClose(term.id) }}
-                        aria-label="Close"
-                      >
+                      <span className="max-w-[130px] overflow-hidden text-ellipsis whitespace-nowrap shrink">{term.title}</span>
+                      <button className={closeBtn} onClick={e => { e.stopPropagation(); onClose(term.id) }} aria-label="Close">
                         <CloseIcon />
                       </button>
                     </div>
@@ -359,7 +351,7 @@ export default function TabBar({
 
                 {firstTermId && (
                   <button
-                    className="tabbar__sib-add"
+                    className="flex items-center justify-center w-5 h-5 rounded-xs bg-transparent border-0 cursor-pointer p-0 shrink-0 opacity-0 transition-[opacity,background] duration-[100ms] group-hover/tabgroup:opacity-[0.35] hover:opacity-100! hover:bg-surface-raised"
                     style={{ color: group.color }}
                     onClick={() => onAddSiblingTerminal(firstTermId)}
                     title="New terminal in this group"
@@ -380,7 +372,7 @@ export default function TabBar({
                   return (
                     <div
                       key={tab.id}
-                      className={`tabbar__tab tabbar__tab--file${isActive ? ' is-active' : ''}`}
+                      className={tabBase + (isActive ? tabActive : '')}
                       style={activeStyle}
                       draggable
                       onDragStart={e => { e.dataTransfer.setData('tabId', tab.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -389,12 +381,8 @@ export default function TabBar({
                       title={tab.filePath ?? tab.title}
                     >
                       {tabIcon(tab, iconColor, isActive)}
-                      <span className="tabbar__tab-title">{tab.title}</span>
-                      <button
-                        className="tabbar__close"
-                        onClick={e => { e.stopPropagation(); onClose(tab.id) }}
-                        aria-label="Close"
-                      >
+                      <span className="max-w-[130px] overflow-hidden text-ellipsis whitespace-nowrap shrink">{tab.title}</span>
+                      <button className={closeBtn} onClick={e => { e.stopPropagation(); onClose(tab.id) }} aria-label="Close">
                         <CloseIcon />
                       </button>
                     </div>
@@ -407,7 +395,11 @@ export default function TabBar({
           )
         })}
 
-        <button className="tabbar__new-term" onClick={onNewTerminal} title="New terminal">
+        <button
+          className="flex items-center justify-center w-[26px] h-[26px] rounded-xs bg-transparent border-0 cursor-pointer text-[var(--tab-color)] shrink-0 opacity-40 ml-0.5 transition-[opacity,background] duration-[100ms] hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]"
+          onClick={onNewTerminal}
+          title="New terminal"
+        >
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
             <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
@@ -418,22 +410,14 @@ export default function TabBar({
       {ctxMenu && ReactDOM.createPortal(
         <div
           ref={ctxRef}
-          className="tab-ctx-menu"
+          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 min-w-[170px] shadow-overlay font-ui text-[12.5px] backdrop-blur-[16px]"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
         >
-          <button className="tab-ctx-item" onClick={() => { onMoveLeft(ctxMenu.tabId); setCtxMenu(null) }}>
-            Move Left
-          </button>
-          <button className="tab-ctx-item" onClick={() => { onMoveRight(ctxMenu.tabId); setCtxMenu(null) }}>
-            Move Right
-          </button>
-          <div className="tab-ctx-sep" />
-          <button className="tab-ctx-item" onClick={() => { onClose(ctxMenu.tabId); setCtxMenu(null) }}>
-            Close Tab
-          </button>
-          <button className="tab-ctx-item" onClick={() => { onCloseOthers(ctxMenu.tabId); setCtxMenu(null) }}>
-            Close Others
-          </button>
+          <button className={ctxItemBase} onClick={() => { onMoveLeft(ctxMenu.tabId); setCtxMenu(null) }}>Move Left</button>
+          <button className={ctxItemBase} onClick={() => { onMoveRight(ctxMenu.tabId); setCtxMenu(null) }}>Move Right</button>
+          <div className="h-px bg-sep my-[3px]" />
+          <button className={ctxItemBase} onClick={() => { onClose(ctxMenu.tabId); setCtxMenu(null) }}>Close Tab</button>
+          <button className={ctxItemBase} onClick={() => { onCloseOthers(ctxMenu.tabId); setCtxMenu(null) }}>Close Others</button>
         </div>,
         document.body
       )}
