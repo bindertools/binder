@@ -19,6 +19,21 @@ const githubUpdateRepo = "Command-IDE/cmd-ide"
 // release, and returns its tag if it differs from AppVersion. Returns "" when
 // already up-to-date or when the check fails.
 func (a *App) CheckForUpdate() string {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "updater.check", "id": a.cppID(),
+			"appVersion": AppVersion,
+		}, 12000)
+		if err == nil {
+			if avail, _ := resp["updateAvailable"].(bool); avail {
+				if v, ok := resp["latestVersion"].(string); ok {
+					return v
+				}
+			}
+			return ""
+		}
+		// Fall through to Go implementation on C++ error.
+	}
 	url := "https://api.github.com/repos/" + githubUpdateRepo + "/releases"
 	client := &http.Client{Timeout: 8 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, url, nil)

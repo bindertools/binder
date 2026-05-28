@@ -5,6 +5,9 @@
 #include "search.hpp"
 #include "sysinfo.hpp"
 #include "preview.hpp"
+#include "session.hpp"
+#include "pack.hpp"
+#include "updater.hpp"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -165,7 +168,10 @@ int main(int argc, char* argv[]) {
                     config_dispatch(type, msg, id, dispatched_resp) ||
                     search_ops::dispatch(type, msg, id, dispatched_resp) ||
                     sysinfo_ops::dispatch(type, msg, id, dispatched_resp) ||
-                    preview_ops::dispatch(type, msg, id, dispatched_resp)) {
+                    preview_ops::dispatch(type, msg, id, dispatched_resp) ||
+                    session_ops::dispatch(type, msg, id, dispatched_resp) ||
+                    pack_ops::dispatch(type, msg, id, dispatched_resp) ||
+                    updater_ops::dispatch(type, msg, id, dispatched_resp)) {
                     ipc_write(dispatched_resp);
                 } else {
                     spdlog::debug("Unknown message type: {}", type);

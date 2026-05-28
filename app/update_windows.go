@@ -43,7 +43,21 @@ func (a *App) PerformUpdate(version string) error {
 	// Download alongside the exe (same volume = rename is always atomic).
 	// Use a non-exe extension so Defender doesn't quarantine it on write.
 	tmpPath := exePath + ".update"
-	if err := downloadUpdateFile(downloadURL, tmpPath); err != nil {
+
+	if a.UseCppBackend {
+		// Delegate the download to C++ (WinHTTP, supports HTTPS natively).
+		resp, cerr := a.cpp.RoundTrip(map[string]any{
+			"type": "updater.download", "id": a.cppID(),
+			"url": downloadURL, "destPath": tmpPath,
+		}, 300000) // 5-minute timeout for large downloads
+		if cerr != nil {
+			return fmt.Errorf("cpp download: %w", cerr)
+		}
+		if ok, _ := resp["ok"].(bool); !ok {
+			errStr, _ := resp["error"].(string)
+			return fmt.Errorf("download failed: %s", errStr)
+		}
+	} else if err := downloadUpdateFile(downloadURL, tmpPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("download failed: %w", err)
 	}

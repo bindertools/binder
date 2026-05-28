@@ -25,6 +25,10 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// cppPackFunc, when non-nil, delegates zip creation to the C++ backend.
+// Receives (sourcePath, outputPath); returns (fileCount, sizeMB, error).
+var cppPackFunc func(sourcePath, outputPath string) (int, float64, error)
+
 type Terminal struct {
 	id           string
 	cwd          string
@@ -602,6 +606,24 @@ func (t *Terminal) builtinExplorer() {
 
 func (t *Terminal) builtinPack(args []string) {
 	dryrun := len(args) > 0 && args[0] == "--dryrun"
+
+	// Delegate actual zip creation to C++ when available; dryrun stays Go
+	// (it only reads the filesystem — no zip is created).
+	if cppPackFunc != nil && !dryrun {
+		dirName := filepath.Base(t.cwd)
+		zipName := dirName + ".zip"
+		zipPath := filepath.Join(filepath.Dir(t.cwd), zipName)
+		t.write(fmt.Sprintf("\r\n\x1b[38;5;246mpacking %s…\x1b[0m", zipName))
+		fileCount, sizeMB, err := cppPackFunc(t.cwd, zipPath)
+		if err != nil {
+			t.write("\r\n\x1b[31mpack: " + err.Error() + "\x1b[0m")
+		} else {
+			t.write(fmt.Sprintf("\r\n\x1b[38;5;75mcreated %s (%.1f MB, %d files)\x1b[0m",
+				zipPath, sizeMB, fileCount))
+		}
+		t.write(t.prompt())
+		return
+	}
 
 	entries, err := pack.CollectEntries(t.cwd)
 	if err != nil {

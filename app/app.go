@@ -105,6 +105,7 @@ func (a *App) startup(ctx context.Context) {
 			} else {
 				log.Printf("cppbridge: started (%s)", exePath)
 				a.initCppPreview()
+				a.initCppPack()
 			}
 		}
 	}
@@ -166,6 +167,30 @@ func (a *App) initCppPreview() {
 			slashed = "/" + slashed
 		}
 		return baseURL + slashed
+	}
+}
+
+// initCppPack wires cppPackFunc so that builtinPack() delegates zip creation
+// to the C++ libzip backend when UseCppBackend is true.
+func (a *App) initCppPack() {
+	cppPackFunc = func(sourcePath, outputPath string) (int, float64, error) {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type":       "pack.create",
+			"id":         a.cppID(),
+			"sourcePath": sourcePath,
+			"outputPath": outputPath,
+			"exclude":    []string{},
+		}, 120000) // 2-minute timeout for large directories
+		if err != nil {
+			return 0, 0, err
+		}
+		if ok, _ := resp["ok"].(bool); !ok {
+			errStr, _ := resp["error"].(string)
+			return 0, 0, fmt.Errorf("%s", errStr)
+		}
+		fileCount, _ := resp["fileCount"].(float64)
+		sizeMB, _ := resp["sizeMB"].(float64)
+		return int(fileCount), sizeMB, nil
 	}
 }
 
@@ -613,9 +638,37 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 
 // ─── Session ─────────────────────────────────────────────────────────────────
 
-func (a *App) SaveSession(tabs []session.Tab) { session.Save(tabs) }
+func (a *App) SaveSession(tabs []session.Tab) {
+	if a.UseCppBackend {
+		b, _ := json.Marshal(tabs)
+		a.cpp.RoundTrip(map[string]any{ //nolint:errcheck
+			"type": "session.save", "id": a.cppID(),
+			"sessionId": "default", "name": "", "tabs": json.RawMessage(b),
+		}, 5000)
+		return
+	}
+	session.Save(tabs)
+}
 
-func (a *App) LoadSession() []session.Tab { return session.Load() }
+func (a *App) LoadSession() []session.Tab {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "session.load", "id": a.cppID(), "sessionId": "default",
+		}, 5000)
+		if err == nil {
+			if s, ok := resp["session"].(map[string]any); ok {
+				if raw, ok2 := s["tabs"]; ok2 {
+					b, _ := json.Marshal(raw)
+					var tabs []session.Tab
+					if json.Unmarshal(b, &tabs) == nil {
+						return tabs
+					}
+				}
+			}
+		}
+	}
+	return session.Load()
+}
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 
