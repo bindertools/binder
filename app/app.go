@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"terminal-ide/config"
 	"terminal-ide/cppbridge"
@@ -25,6 +28,8 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+var cppSeq int64
+
 type App struct {
 	ctx           context.Context
 	terminals     map[string]*Terminal
@@ -34,6 +39,39 @@ type App struct {
 	cpp           *cppbridge.Bridge
 	UseCppBackend bool
 	cppErr        string
+	cppRootDir    string // remembered for ExplorerGetTree delegation
+}
+
+func (a *App) cppID() string {
+	return fmt.Sprintf("g%d", atomic.AddInt64(&cppSeq, 1))
+}
+
+// decodeB64Resp extracts the "content" field from a C++ IPC response and
+// base64-decodes it back to a plain string for the frontend.
+func decodeB64Resp(resp map[string]any) (string, error) {
+	b64, _ := resp["content"].(string)
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// respToFileNode converts a C++ IPC response map into a fullscreen.FileNode
+// by round-tripping through JSON (unknown fields such as "type"/"id" are ignored).
+func respToFileNode(resp map[string]any) (fullscreen.FileNode, error) {
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return fullscreen.FileNode{}, err
+	}
+	var node fullscreen.FileNode
+	return node, json.Unmarshal(b, &node)
+}
+
+// respOK returns the "ok" bool from a C++ IPC response.
+func respOK(resp map[string]any) bool {
+	ok, _ := resp["ok"].(bool)
+	return ok
 }
 
 func NewApp() *App {
@@ -129,38 +167,145 @@ func (a *App) GetCppBackendStatus() string {
 // ─── Fullscreen Explorer ──────────────────────────────────────────────────────
 
 func (a *App) ExplorerOpen(dir string) (fullscreen.FileNode, error) {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.tree", "id": a.cppID(), "path": dir}, 30000)
+		if err != nil {
+			return fullscreen.FileNode{}, err
+		}
+		a.mu.Lock()
+		a.cppRootDir = dir
+		a.mu.Unlock()
+		return respToFileNode(resp)
+	}
 	return a.explorer.OpenDirectory(dir)
 }
 
 func (a *App) ExplorerGetTree() (fullscreen.FileNode, error) {
+	if a.UseCppBackend {
+		a.mu.Lock()
+		rootDir := a.cppRootDir
+		a.mu.Unlock()
+		if rootDir == "" {
+			return fullscreen.FileNode{}, nil
+		}
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.tree", "id": a.cppID(), "path": rootDir}, 30000)
+		if err != nil {
+			return fullscreen.FileNode{}, err
+		}
+		return respToFileNode(resp)
+	}
 	return a.explorer.GetTree()
 }
 
 func (a *App) ExplorerGetFile(path string) (string, error) {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
+		if err != nil {
+			return "", err
+		}
+		return decodeB64Resp(resp)
+	}
 	return a.explorer.GetFileContent(path)
 }
 
 func (a *App) ExplorerSaveFile(path string, content string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type":    "fs.writefile",
+			"id":      a.cppID(),
+			"path":    path,
+			"content": base64.StdEncoding.EncodeToString([]byte(content)),
+		}, 10000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.writefile failed")
+		}
+		return nil
+	}
 	return a.explorer.SaveFile(path, content)
 }
 
 func (a *App) ExplorerCreateFile(path string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.create", "id": a.cppID(), "path": path}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.create failed")
+		}
+		return nil
+	}
 	return a.explorer.CreateFile(path)
 }
 
 func (a *App) ExplorerCreateDir(path string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.mkdir", "id": a.cppID(), "path": path}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.mkdir failed")
+		}
+		return nil
+	}
 	return a.explorer.CreateDirectory(path)
 }
 
 func (a *App) ExplorerRename(oldPath string, newPath string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "fs.rename", "id": a.cppID(),
+			"from": oldPath, "to": newPath,
+		}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.rename failed")
+		}
+		return nil
+	}
 	return a.explorer.Rename(oldPath, newPath)
 }
 
 func (a *App) ExplorerDelete(path string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.delete failed")
+		}
+		return nil
+	}
 	return a.explorer.Delete(path)
 }
 
 func (a *App) ExplorerMove(src string, dest string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type": "fs.rename", "id": a.cppID(),
+			"from": src, "to": dest,
+		}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.rename failed")
+		}
+		return nil
+	}
 	return a.explorer.MoveFile(src, dest)
 }
 
@@ -258,6 +403,14 @@ func (a *App) ResizeTerminal(id string, cols int, rows int) {
 // ─── File & editor ────────────────────────────────────────────────────────────
 
 func (a *App) ReadFile(path string) (string, error) {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
+		if err != nil {
+			return "", err
+		}
+		return decodeB64Resp(resp)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
@@ -266,10 +419,38 @@ func (a *App) ReadFile(path string) (string, error) {
 }
 
 func (a *App) WriteFile(path string, content string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(map[string]any{
+			"type":    "fs.writefile",
+			"id":      a.cppID(),
+			"path":    path,
+			"content": base64.StdEncoding.EncodeToString([]byte(content)),
+		}, 10000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.writefile failed")
+		}
+		return nil
+	}
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
-func (a *App) DeleteFile(path string) error { return os.Remove(path) }
+func (a *App) DeleteFile(path string) error {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("fs.delete failed")
+		}
+		return nil
+	}
+	return os.Remove(path)
+}
 
 func (a *App) GetFileLanguage(path string) string { return detectLanguage(path) }
 
@@ -391,9 +572,44 @@ func (a *App) SetClipboardText(text string) {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-func (a *App) GetAppConfig() config.Config { return config.Get() }
+func (a *App) GetAppConfig() config.Config {
+	if a.UseCppBackend {
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "config.get", "id": a.cppID()}, 5000)
+		if err != nil {
+			return config.Get()
+		}
+		b, _ := json.Marshal(resp)
+		var c config.Config
+		if err := json.Unmarshal(b, &c); err != nil {
+			return config.Get()
+		}
+		config.SetGlobal(c)
+		return c
+	}
+	return config.Get()
+}
 
 func (a *App) SaveCustomTheme(colors map[string]string) error {
+	if a.UseCppBackend {
+		cur := config.Get()
+		cur.CustomTheme = colors
+		cur.Theme = "custom"
+		b, _ := json.Marshal(cur)
+		var configMap map[string]any
+		json.Unmarshal(b, &configMap) //nolint:errcheck
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("config.setall failed")
+		}
+		config.SetGlobal(cur)
+		wailsruntime.EventsEmit(a.ctx, "app:config", cur)
+		return nil
+	}
 	c, err := config.ApplyCustomTheme(colors)
 	if err != nil {
 		return err
@@ -403,6 +619,22 @@ func (a *App) SaveCustomTheme(colors map[string]string) error {
 }
 
 func (a *App) SaveAppConfig(incoming config.Config) error {
+	if a.UseCppBackend {
+		b, _ := json.Marshal(incoming)
+		var configMap map[string]any
+		json.Unmarshal(b, &configMap) //nolint:errcheck
+		resp, err := a.cpp.RoundTrip(
+			map[string]any{"type": "config.setall", "id": a.cppID(), "config": configMap}, 5000)
+		if err != nil {
+			return err
+		}
+		if !respOK(resp) {
+			return fmt.Errorf("config.setall failed")
+		}
+		config.SetGlobal(incoming)
+		wailsruntime.EventsEmit(a.ctx, "app:config", incoming)
+		return nil
+	}
 	c, err := config.Apply(incoming)
 	if err != nil {
 		return err

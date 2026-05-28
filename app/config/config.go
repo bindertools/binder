@@ -132,6 +132,14 @@ func Reload() error {
 	return nil
 }
 
+// SetGlobal updates the in-memory config without writing to disk.
+// Used by the C++ delegation path after C++ has already persisted the file.
+func SetGlobal(c Config) {
+	globalMu.Lock()
+	global = c
+	globalMu.Unlock()
+}
+
 // Reset deletes the config file and recreates it with defaults.
 func Reset() error {
 	path := FilePath()
