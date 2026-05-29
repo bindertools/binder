@@ -419,6 +419,13 @@ export default function Terminal({
         .then((matches: string[]) => {
           if (!matches || matches.length === 0) { setMenu(null); return }
 
+          // For 'cd', only offer directories (C++ marks them with a trailing '/').
+          const cmdWord = prefix.trimStart().split(/\s+/)[0]
+          const filtered = cmdWord === 'cd'
+            ? matches.filter(m => m.endsWith('/'))
+            : matches
+          if (filtered.length === 0) { setMenu(null); return }
+
           const { h, w } = cellDims()
           const rect = container.getBoundingClientRect()
           const cursorRow = term.buffer.active.cursorY
@@ -427,14 +434,14 @@ export default function Terminal({
 
           // Place below the cursor; flip above if it would overflow the viewport
           const ITEM_H = 26
-          const menuH = Math.min(matches.length * ITEM_H + 8, 220)
+          const menuH = Math.min(filtered.length * ITEM_H + 8, 220)
           const below = rect.top + 6 + (cursorRow + 1) * h
           const above = rect.top + 6 + cursorRow * h - menuH
           const top = below + menuH > window.innerHeight - 8 ? above : below
           const left = Math.max(rect.left + 8, rect.left + 8 + partialStartCol * w)
 
           setMenu({
-            matches,
+            matches: filtered,
             selectedIdx: 0,
             applied: false,
             appliedLen: partial.length,

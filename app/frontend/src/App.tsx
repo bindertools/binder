@@ -326,7 +326,12 @@ export default function App() {
 
   // ── app config ───────────────────────────────────────────────────────────────
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
-  const [currentZoom, setCurrentZoom] = useState(defaultConfig.default_zoom)
+  // Read the last saved zoom from localStorage so the terminal starts at the
+  // correct size immediately, without waiting for the async GetAppConfig call.
+  const [currentZoom, setCurrentZoom] = useState(() => {
+    const saved = parseFloat(localStorage.getItem('cmdide_zoom') ?? '')
+    return isFinite(saved) && saved > 0 ? saved : defaultConfig.default_zoom
+  })
   const [liveColors,  setLiveColors]  = useState<Record<string, string> | null>(null)
   const [updateTag,   setUpdateTag]   = useState<string>('')
 
@@ -371,15 +376,19 @@ export default function App() {
 
   useEffect(() => {
     GetAppConfig().then(cfg => {
+      const zoom = (cfg as AppConfig).default_zoom || defaultConfig.default_zoom
       setAppConfig(cfg as AppConfig)
-      setCurrentZoom((cfg as AppConfig).default_zoom)
+      setCurrentZoom(zoom)
+      localStorage.setItem('cmdide_zoom', String(zoom))
     }).catch(() => {})
   }, [])
 
   useEffect(() => {
     EventsOn('app:config', (cfg: AppConfig) => {
+      const zoom = cfg.default_zoom || defaultConfig.default_zoom
       setAppConfig(cfg)
-      setCurrentZoom(cfg.default_zoom)
+      setCurrentZoom(zoom)
+      localStorage.setItem('cmdide_zoom', String(zoom))
       setLiveColors(null)
     })
     return () => EventsOff('app:config')
