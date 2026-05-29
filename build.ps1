@@ -462,8 +462,9 @@ Ok "Binary    -> app/build/bin/$installerArchive"
 if ($goOs -eq 'windows') {
     Step "    Dev installer ($installerDir)"
 
-    # Combine any platform tags with the 'dev' build tag.
-    $instDevTagStr = if ($appTagStr) { "$appTagStr,dev" } else { 'dev' }
+    # Combine any platform tags with the 'devch' build tag.
+    # Note: 'dev' is reserved by Wails internally -- use 'devch' (dev channel).
+    $instDevTagStr = if ($appTagStr) { "$appTagStr,devch" } else { 'devch' }
     $instDevFlags  = @('build', '-trimpath', '-ldflags', '-s -w',
                        '-tags', $instDevTagStr,
                        '-o', "cmdIDE-installer-dev$binExt")
