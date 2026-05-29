@@ -12,7 +12,7 @@ param(
     [switch]$InstallerOnly,
     [switch]$NoUpx,
     [switch]$NoArchive,
-    [string]$Version = ''   # e.g. "v1.2.3" — injected into main.AppVersion at link time
+    [string]$Version = ''   # e.g. "v1.2.3" -- injected into main.AppVersion at link time
 )
 
 $ErrorActionPreference = 'Stop'
@@ -195,7 +195,7 @@ function New-Archive {
 function New-MacDmg {
     # Produces a drag-to-Applications DMG using create-dmg (brew install create-dmg).
     # The DMG mounts as a Finder window showing the .app icon and an Applications
-    # alias — the user drags the icon to install, exactly like draw.io / VS Code.
+    # alias -- the user drags the icon to install, exactly like draw.io / VS Code.
     param([string]$appPath, [string]$dmgName, [string]$volName)
     $dmgPath = Join-Path $binDir $dmgName
     if (Test-Path $dmgPath) { Remove-Item -Force $dmgPath }
@@ -205,7 +205,7 @@ function New-MacDmg {
     # helpers inside the bundle are left unsigned, which causes macOS to show the
     # harsh "This software needs to be updated" Gatekeeper error instead of the
     # softer "unidentified developer" message that users can bypass via
-    # System Settings → Privacy & Security → Open Anyway.
+    # System Settings ? Privacy & Security ? Open Anyway.
     & codesign --deep --force --sign '-' $appPath
     if ($LASTEXITCODE -ne 0) { Warn "codesign --deep failed (non-fatal)" }
 
@@ -249,7 +249,7 @@ function New-MacDmg {
     $code = $LASTEXITCODE
     Remove-Item -Recurse -Force $staging
     # create-dmg exits 1 when it can't set icon positions via osascript but still
-    # produces the DMG — only fail if the output file is actually missing.
+    # produces the DMG -- only fail if the output file is actually missing.
     if ($code -ne 0 -and -not (Test-Path $dmgPath)) { Fail "create-dmg failed for $dmgName" }
     Ok "DMG       -> app/build/bin/$dmgName"
 }
@@ -269,7 +269,7 @@ function Build-CppBackend {
         }
     }
     if (-not $vcpkgRoot) {
-        Warn "vcpkg not found (set VCPKG_ROOT) — skipping C++ backend build"
+        Warn "vcpkg not found (set VCPKG_ROOT) -- skipping C++ backend build"
         return
     }
 
@@ -353,7 +353,7 @@ if ($goOs -eq 'windows' -and -not $InstallerOnly) {
 # -- Purge stale cross-platform npm lockfile (non-Windows) --------------------
 # package-lock.json is committed from Windows and only contains the Windows
 # Rollup native binary (@rollup/rollup-win32-x64-msvc).  On macOS/Linux, npm
-# honours the lockfile but silently skips optional deps that aren't listed —
+# honours the lockfile but silently skips optional deps that aren't listed --
 # Vite 7 then fails because it can't find the platform-specific native build.
 # Deleting the lockfile here lets Wails' "npm install" re-resolve it fresh and
 # pull in the correct @rollup/rollup-<platform> package automatically.
@@ -440,7 +440,7 @@ $instApp    = Join-Path $instBinDir 'cmdIDE-installer.app'
 $instDest   = Join-Path $binDir $installerName
 
 if ($goOs -eq 'darwin' -and (Test-Path $instApp)) {
-    # Archive directly from the Wails build dir — ditto preserves the .app
+    # Archive directly from the Wails build dir -- ditto preserves the .app
     # bundle structure so the zip contains a working cmdIDE-installer.app.
     # We do NOT copy to binDir first; only the zip needs to land there.
     New-Archive $instApp $installerArchive
@@ -458,7 +458,7 @@ if ($goOs -eq 'darwin' -and (Test-Path $instApp)) {
 
 Ok "Binary    -> app/build/bin/$installerArchive"
 
-# -- Dev installer (Windows only — stable + pre-release channel) ---------------
+# -- Dev installer (Windows only -- stable + pre-release channel) ---------------
 if ($goOs -eq 'windows') {
     Step "    Dev installer ($installerDir)"
 
