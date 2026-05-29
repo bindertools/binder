@@ -239,6 +239,10 @@ func (t *Terminal) ExecuteCommand(line string) {
 			})
 			t.write("\r\n\x1b[38;5;246mopening explorer\x1b[0m")
 			t.write(t.prompt())
+		case "uptime":
+			t.builtinUptime()
+		case "lang-map":
+			t.builtinLangMap(parts[1:])
 		}
 	}
 	// Non-built-in commands: run as a subprocess through the system shell.
@@ -324,8 +328,12 @@ func (t *Terminal) execExternalCmd(line string) {
 	// Enter PTY passthrough mode — frontend forwards raw keystrokes via TerminalInput.
 	wailsruntime.EventsEmit(t.ctx, "terminal:pty:start:"+t.id)
 
+	// readerDone is closed when the output goroutine has forwarded every byte.
+	readerDone := make(chan struct{})
+
 	// Forward subprocess output to xterm.
 	go func() {
+		defer close(readerDone)
 		buf := make([]byte, 4096)
 		for {
 			n, err := pr.Read(buf)
@@ -336,12 +344,15 @@ func (t *Terminal) execExternalCmd(line string) {
 				break
 			}
 		}
+		_ = pr.Close()
 	}()
 
-	// Wait for subprocess to exit, then restore normal terminal state.
+	// Wait for subprocess to exit, drain output, then restore terminal state.
 	go func() {
 		_ = cmd.Wait()
-		_ = pw.Close() // EOF → reader goroutine exits
+		_ = pw.Close() // signals EOF → reader goroutine exits
+
+		<-readerDone // ensure every output byte is forwarded before the prompt
 
 		t.mu.Lock()
 		t.process = nil
@@ -355,6 +366,306 @@ func (t *Terminal) execExternalCmd(line string) {
 }
 
 // ─── built-in commands ────────────────────────────────────────────────────────
+
+// ── /uptime ──────────────────────────────────────────────────────────────────
+
+func (t *Terminal) builtinUptime() {
+	d := hostUptime()
+
+	var sb strings.Builder
+	sb.WriteString("\r\n\x1b[38;5;75mSystem Uptime\x1b[0m\r\n\r\n")
+
+	if d == 0 {
+		sb.WriteString("  \x1b[38;5;246munable to determine system uptime\x1b[0m\r\n")
+		t.write(sb.String())
+		t.write(t.prompt())
+		return
+	}
+
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+	secs := int(d.Seconds()) % 60
+
+	plural := func(n int, unit string) string {
+		if n == 1 {
+			return fmt.Sprintf("%d %s", n, unit)
+		}
+		return fmt.Sprintf("%d %ss", n, unit)
+	}
+
+	var parts []string
+	if days > 0 {
+		parts = append(parts, plural(days, "day"))
+	}
+	if days > 0 || hours > 0 {
+		parts = append(parts, plural(hours, "hour"))
+	}
+	if days > 0 || hours > 0 || mins > 0 {
+		parts = append(parts, plural(mins, "minute"))
+	}
+	parts = append(parts, plural(secs, "second"))
+
+	sb.WriteString("  \x1b[38;5;253m" + strings.Join(parts, "  ") + "\x1b[0m\r\n")
+	t.write(sb.String())
+	t.write(t.prompt())
+}
+
+// ── /lang-map ─────────────────────────────────────────────────────────────────
+
+// langExtMap maps file extensions (lowercase) to a human-readable language name.
+var langExtMap = map[string]string{
+	".go":      "Go",
+	".ts":      "TypeScript",
+	".tsx":     "TypeScript",
+	".js":      "JavaScript",
+	".jsx":     "JavaScript",
+	".mjs":     "JavaScript",
+	".cjs":     "JavaScript",
+	".py":      "Python",
+	".rs":      "Rust",
+	".java":    "Java",
+	".cpp":     "C++",
+	".cc":      "C++",
+	".cxx":     "C++",
+	".hpp":     "C++",
+	".c":       "C",
+	".h":       "C",
+	".cs":      "C#",
+	".rb":      "Ruby",
+	".php":     "PHP",
+	".swift":   "Swift",
+	".kt":      "Kotlin",
+	".kts":     "Kotlin",
+	".scala":   "Scala",
+	".sh":      "Shell",
+	".bash":    "Shell",
+	".zsh":     "Shell",
+	".fish":    "Shell",
+	".ps1":     "PowerShell",
+	".sql":     "SQL",
+	".html":    "HTML",
+	".htm":     "HTML",
+	".vue":     "Vue",
+	".svelte":  "Svelte",
+	".css":     "CSS",
+	".scss":    "CSS",
+	".less":    "CSS",
+	".json":    "JSON",
+	".yaml":    "YAML",
+	".yml":     "YAML",
+	".toml":    "TOML",
+	".xml":     "XML",
+	".md":      "Markdown",
+	".mdx":     "Markdown",
+	".lua":     "Lua",
+	".r":       "R",
+	".dart":    "Dart",
+	".ex":      "Elixir",
+	".exs":     "Elixir",
+	".tf":      "HCL",
+	".hcl":     "HCL",
+	".proto":   "Protobuf",
+	".graphql": "GraphQL",
+	".gql":     "GraphQL",
+}
+
+// langColorMap maps language names to approximate GitHub-palette ANSI colors.
+var langColorMap = map[string]string{
+	"Go":          "\x1b[38;5;81m",  // #00ADD8 cyan
+	"TypeScript":  "\x1b[38;5;68m",  // #3178C6 blue
+	"JavaScript":  "\x1b[38;5;220m", // #F7DF1E yellow
+	"Python":      "\x1b[38;5;33m",  // #3572A5 blue
+	"Rust":        "\x1b[38;5;180m", // #DEA584 tan
+	"C":           "\x1b[38;5;240m", // #555555 gray
+	"C++":         "\x1b[38;5;204m", // #F34B7D pink
+	"C#":          "\x1b[38;5;34m",  // #239120 green
+	"Java":        "\x1b[38;5;130m", // #B07219 brown
+	"Ruby":        "\x1b[38;5;124m", // #701516 dark-red
+	"PHP":         "\x1b[38;5;97m",  // #4F5D95 purple
+	"Swift":       "\x1b[38;5;208m", // #FA7343 orange
+	"Kotlin":      "\x1b[38;5;141m", // #A97BFF violet
+	"Scala":       "\x1b[38;5;160m", // #C22D40 red
+	"Shell":       "\x1b[38;5;112m", // #89E051 green
+	"PowerShell":  "\x1b[38;5;68m",  // blue
+	"HTML":        "\x1b[38;5;166m", // #E34C26 orange-red
+	"CSS":         "\x1b[38;5;55m",  // #563D7C purple
+	"Vue":         "\x1b[38;5;71m",  // #42B883 green
+	"Svelte":      "\x1b[38;5;202m", // #FF3E00 red-orange
+	"SQL":         "\x1b[38;5;215m", // peach
+	"Lua":         "\x1b[38;5;18m",  // dark-blue
+	"R":           "\x1b[38;5;26m",  // blue
+	"Dart":        "\x1b[38;5;37m",  // cyan
+	"Elixir":      "\x1b[38;5;97m",  // purple
+	"HCL":         "\x1b[38;5;97m",  // purple
+	"GraphQL":     "\x1b[38;5;205m", // pink
+	"JSON":        "\x1b[38;5;246m", // muted
+	"YAML":        "\x1b[38;5;246m",
+	"TOML":        "\x1b[38;5;246m",
+	"XML":         "\x1b[38;5;246m",
+	"Markdown":    "\x1b[38;5;246m",
+	"Protobuf":    "\x1b[38;5;246m",
+}
+
+// langMapSkip lists directories that should be excluded from the scan.
+var langMapSkip = map[string]bool{
+	"node_modules": true, ".git": true, ".svn": true, ".hg": true,
+	"dist": true, "build": true, ".next": true, "__pycache__": true,
+	"vendor": true, "target": true, ".cache": true, "coverage": true,
+	".angular": true, ".turbo": true, ".gradle": true,
+	"out": true, ".idea": true, ".vscode": true,
+}
+
+func (t *Terminal) builtinLangMap(args []string) {
+	dir := t.cwd
+	if len(args) > 0 {
+		d := args[0]
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(t.cwd, d)
+		}
+		dir = filepath.Clean(d)
+	}
+
+	type stat struct {
+		bytes int64
+		files int
+	}
+	counts := make(map[string]*stat)
+	var total int64
+
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if name == "." {
+				return nil
+			}
+			if name[0] == '.' || langMapSkip[strings.ToLower(name)] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if name[0] == '.' {
+			return nil
+		}
+		lang := langExtMap[strings.ToLower(filepath.Ext(name))]
+		if lang == "" {
+			return nil
+		}
+		info, err2 := d.Info()
+		if err2 != nil {
+			return nil
+		}
+		sz := info.Size()
+		total += sz
+		if counts[lang] == nil {
+			counts[lang] = &stat{}
+		}
+		counts[lang].bytes += sz
+		counts[lang].files++
+		return nil
+	})
+
+	var sb strings.Builder
+
+	if total == 0 {
+		sb.WriteString("\r\n\x1b[38;5;246mNo recognized source files found in ")
+		sb.WriteString(filepath.ToSlash(dir))
+		sb.WriteString("\x1b[0m")
+		t.write(sb.String())
+		t.write(t.prompt())
+		return
+	}
+
+	// Sort descending by byte size.
+	type row struct {
+		lang  string
+		bytes int64
+		files int
+	}
+	var rows []row
+	for lang, s := range counts {
+		rows = append(rows, row{lang, s.bytes, s.files})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].bytes != rows[j].bytes {
+			return rows[i].bytes > rows[j].bytes
+		}
+		return rows[i].lang < rows[j].lang
+	})
+
+	// Shorten directory label (~/... instead of absolute path).
+	home, _ := os.UserHomeDir()
+	label := filepath.ToSlash(dir)
+	if rel, err := filepath.Rel(home, dir); err == nil && !strings.HasPrefix(rel, "..") {
+		label = "~/" + filepath.ToSlash(rel)
+	}
+
+	sb.WriteString("\r\n\x1b[38;5;75mLanguage breakdown\x1b[0m  \x1b[38;5;246m")
+	sb.WriteString(label)
+	sb.WriteString("\x1b[0m\r\n\r\n")
+
+	// Cap at 12 entries; roll the rest into "Other".
+	const maxRows = 12
+	const barW = 26
+
+	shown := rows
+	var otherBytes int64
+	var otherFiles int
+	if len(rows) > maxRows {
+		shown = rows[:maxRows]
+		for _, r := range rows[maxRows:] {
+			otherBytes += r.bytes
+			otherFiles += r.files
+		}
+	}
+
+	// Compute the longest language name for column alignment.
+	maxNameLen := 5 // at least "Other"
+	for _, r := range shown {
+		if len(r.lang) > maxNameLen {
+			maxNameLen = len(r.lang)
+		}
+	}
+
+	writeRow := func(name, color string, bytes, tot int64, files int) {
+		pct := float64(bytes) / float64(tot) * 100
+		filled := int(pct/100*barW + 0.5)
+		if filled < 1 && bytes > 0 {
+			filled = 1
+		}
+		if filled > barW {
+			filled = barW
+		}
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", barW-filled)
+		fileWord := "files"
+		if files == 1 {
+			fileWord = "file"
+		}
+		sb.WriteString(fmt.Sprintf("  %s%-*s\x1b[0m  %s%s\x1b[0m  %5.1f%%  \x1b[38;5;246m%d %s  %s\x1b[0m\r\n",
+			color, maxNameLen, name,
+			color, bar,
+			pct,
+			files, fileWord, pack.FormatBytes(bytes)))
+	}
+
+	for _, r := range shown {
+		color := langColorMap[r.lang]
+		if color == "" {
+			color = "\x1b[38;5;246m"
+		}
+		writeRow(r.lang, color, r.bytes, total, r.files)
+	}
+	if otherBytes > 0 {
+		writeRow("Other", "\x1b[38;5;240m", otherBytes, total, otherFiles)
+	}
+
+	sb.WriteString(fmt.Sprintf("\r\n  \x1b[38;5;246mTotal  %s\x1b[0m\r\n", pack.FormatBytes(total)))
+	t.write(sb.String())
+	t.write(t.prompt())
+}
 
 func (t *Terminal) builtinCD(args []string) {
 	var target string
@@ -494,6 +805,8 @@ func (t *Terminal) builtinHelp() {
 		{"/performance", "open performance monitor tab"},
 		{"/fullscreen", "open fullscreen IDE explorer for current directory"},
 		{"/plugins", "open plugin store"},
+		{"/uptime", "show host-device system uptime"},
+		{"/lang-map [dir]", "language breakdown by file size (GitHub-style)"},
 		{"/version", "show app and runtime version info"},
 		{"/help", "show this help"},
 	}

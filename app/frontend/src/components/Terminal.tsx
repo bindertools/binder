@@ -65,6 +65,9 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/fullscreen',      desc: 'open fullscreen IDE explorer' },
   { cmd: '/fs',              desc: 'open fullscreen IDE explorer (alias)' },
   ...(__PLUGINS__ ? [{ cmd: '/plugins', desc: 'open plugin store' }] : []),
+  { cmd: '/uptime',          desc: 'show host-device system uptime' },
+  { cmd: '/lang-map',        desc: 'language breakdown for current directory' },
+  { cmd: '/lang-map <dir>',  desc: 'language breakdown for a directory' },
   { cmd: '/version',         desc: 'show app version info' },
   { cmd: '/help',            desc: 'show all commands' },
 ]
