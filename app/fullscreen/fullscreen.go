@@ -119,7 +119,15 @@ func (m *Manager) startWatcher(dir string) {
 					_ = w.Add(event.Name)
 				}
 			}
-			// Debounce: rebuild and emit the updated tree.
+			// Notify the frontend when a file's content changes so open tabs
+			// can reload without waiting for the user to reopen the file.
+			if event.Has(fsnotify.Write) {
+				if info, err := os.Stat(event.Name); err == nil && !info.IsDir() {
+					wailsruntime.EventsEmit(m.ctx, "fullscreen:file-changed",
+						filepath.ToSlash(event.Name))
+				}
+			}
+			// Rebuild and emit the updated tree.
 			if tree, err := buildTree(m.rootDir); err == nil {
 				wailsruntime.EventsEmit(m.ctx, "fullscreen:tree", tree)
 			}

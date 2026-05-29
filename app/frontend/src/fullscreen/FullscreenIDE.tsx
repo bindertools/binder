@@ -134,11 +134,13 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const rightActiveRef  = useRef<string | null>(null)
   const focusedPanelRef = useRef<'left' | 'right'>('left')
   const splitModeRef    = useRef(false)
+  const openFilesRef    = useRef<OpenFile[]>([])
 
   useEffect(() => { leftActiveRef.current   = leftActive    }, [leftActive])
   useEffect(() => { rightActiveRef.current  = rightActive   }, [rightActive])
   useEffect(() => { focusedPanelRef.current = focusedPanel  }, [focusedPanel])
   useEffect(() => { splitModeRef.current    = splitMode     }, [splitMode])
+  useEffect(() => { openFilesRef.current    = openFiles     }, [openFiles])
 
   // ── divider drag ref ──────────────────────────────────────────────────────────
   const draggingExplorer = useRef(false)
@@ -208,6 +210,24 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   useEffect(() => {
     EventsOn('fullscreen:tree', (node: FileNode) => setTree(node))
     return () => EventsOff('fullscreen:tree')
+  }, [])
+
+  // Live-reload open file content when the file changes on disk externally.
+  // Dirty files (user has unsaved edits) are intentionally skipped so we
+  // never silently overwrite work in progress.
+  useEffect(() => {
+    EventsOn('fullscreen:file-changed', (changedPath: string) => {
+      const file = openFilesRef.current.find(f => f.path === changedPath)
+      if (!file || file.dirty) return
+      ExplorerGetFile(changedPath)
+        .then(content => {
+          setOpenFiles(prev => prev.map(f =>
+            f.path === changedPath && !f.dirty ? { ...f, content } : f
+          ))
+        })
+        .catch(() => {})
+    })
+    return () => EventsOff('fullscreen:file-changed')
   }, [])
 
   // ── open file (with preview-replacement logic) ────────────────────────────────
