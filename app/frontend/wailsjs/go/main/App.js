@@ -86,6 +86,10 @@ export function GetCompletions(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetCompletions'](arg1, arg2, arg3);
 }
 
+export function GetCppBackendStatus() {
+  return window['go']['main']['App']['GetCppBackendStatus']();
+}
+
 export function GetFileLanguage(arg1) {
   return window['go']['main']['App']['GetFileLanguage'](arg1);
 }

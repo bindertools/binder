@@ -52,6 +52,8 @@ export function GetClipboardText():Promise<string>;
 
 export function GetCompletions(arg1:string,arg2:string,arg3:string):Promise<Array<string>>;
 
+export function GetCppBackendStatus():Promise<string>;
+
 export function GetFileLanguage(arg1:string):Promise<string>;
 
 export function GetSystemPerf():Promise<perf.PerfData>;
