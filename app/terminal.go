@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"terminal-ide/ports"
 	"terminal-ide/problems"
 
+	powershell "github.com/Command-IDE/powershell/src"
 	term "github.com/Command-IDE/terminal/src"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -31,10 +33,12 @@ import (
 var cppPackFunc func(sourcePath, outputPath string) (int, float64, error)
 
 type Terminal struct {
-	id  string
-	cwd string
-	ctx context.Context
-	mu  sync.Mutex
+	id        string
+	cwd       string
+	ctx       context.Context
+	mu        sync.Mutex
+	process   *os.Process    // non-nil while an external command is running
+	stdinPipe io.WriteCloser // subprocess stdin; non-nil when process != nil
 }
 
 func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
@@ -237,20 +241,118 @@ func (t *Terminal) ExecuteCommand(line string) {
 			t.write(t.prompt())
 		}
 	}
-	// Non-built-in commands are handled by the C++ terminal backend (no-op here).
+	// Non-built-in commands: run as a subprocess through the system shell.
+	go t.execExternalCmd(line)
 }
 
-// Interrupt is a no-op — the C++ terminal backend manages the PTY lifecycle.
-func (t *Terminal) Interrupt() {}
+// Interrupt sends SIGINT to the running subprocess and its entire process tree.
+func (t *Terminal) Interrupt() {
+	t.mu.Lock()
+	proc := t.process
+	t.mu.Unlock()
+	if proc != nil {
+		killTree(proc.Pid)
+	}
+}
 
-// Close is a no-op — the C++ terminal backend manages session cleanup.
-func (t *Terminal) Close() {}
+// Close kills any running subprocess when the terminal tab is closed.
+func (t *Terminal) Close() { t.Interrupt() }
 
-// WriteInput is a no-op — the C++ terminal backend handles PTY input directly.
-func (t *Terminal) WriteInput(_ string) {}
+// WriteInput pipes raw bytes to the running subprocess's stdin (e.g. for
+// interactive programs that read from stdin in PTY passthrough mode).
+func (t *Terminal) WriteInput(data string) {
+	t.mu.Lock()
+	pipe := t.stdinPipe
+	t.mu.Unlock()
+	if pipe != nil {
+		_, _ = pipe.Write([]byte(data))
+	}
+}
 
 // Resize is a no-op — the C++ terminal backend handles PTY resize directly.
 func (t *Terminal) Resize(_, _ int) {}
+
+// normNewlines converts bare \n to \r\n so xterm renders output correctly when
+// piping process output without a ConPTY layer in between.
+func normNewlines(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 32)
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' && (i == 0 || s[i-1] != '\r') {
+			b.WriteByte('\r')
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// execExternalCmd runs line through the configured system shell, streaming
+// combined stdout+stderr into xterm and emitting PTY lifecycle events so the
+// frontend enters/exits passthrough mode for the duration of the command.
+func (t *Terminal) execExternalCmd(line string) {
+	cmd := powershell.BuildShellCmdWithPref(line, config.Get().PreferredShell)
+	cmd.Dir = t.cwd
+	cmd.Env = liveEnv()
+	term.NoWindow(cmd)
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		t.write("\r\n\x1b[31merror: " + err.Error() + "\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+
+	// Merge stdout + stderr on a single pipe — read in one goroutine.
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		_ = stdinPipe.Close()
+		_ = pw.Close()
+		_ = pr.Close()
+		t.write("\r\n\x1b[31merror: " + err.Error() + "\x1b[0m")
+		t.write(t.prompt())
+		return
+	}
+
+	t.mu.Lock()
+	t.process = cmd.Process
+	t.stdinPipe = stdinPipe
+	t.mu.Unlock()
+
+	// Enter PTY passthrough mode — frontend forwards raw keystrokes via TerminalInput.
+	wailsruntime.EventsEmit(t.ctx, "terminal:pty:start:"+t.id)
+
+	// Forward subprocess output to xterm.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := pr.Read(buf)
+			if n > 0 {
+				t.write(normNewlines(string(buf[:n])))
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	// Wait for subprocess to exit, then restore normal terminal state.
+	go func() {
+		_ = cmd.Wait()
+		_ = pw.Close() // EOF → reader goroutine exits
+
+		t.mu.Lock()
+		t.process = nil
+		_ = t.stdinPipe.Close()
+		t.stdinPipe = nil
+		t.mu.Unlock()
+
+		wailsruntime.EventsEmit(t.ctx, "terminal:pty:end:"+t.id)
+		t.write(t.prompt())
+	}()
+}
 
 // ─── built-in commands ────────────────────────────────────────────────────────
 

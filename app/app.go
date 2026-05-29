@@ -83,9 +83,10 @@ func respOK(resp map[string]any) bool {
 
 func NewApp() *App {
 	return &App{
-		terminals:   make(map[string]*Terminal),
-		perfCancels: make(map[string]context.CancelFunc),
-		explorer:    fullscreen.New(),
+		terminals:     make(map[string]*Terminal),
+		perfCancels:   make(map[string]context.CancelFunc),
+		explorer:      fullscreen.New(),
+		UseCppBackend: true,
 	}
 }
 
