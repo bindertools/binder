@@ -455,13 +455,6 @@ var langExtMap = map[string]string{
 	".css":     "CSS",
 	".scss":    "CSS",
 	".less":    "CSS",
-	".json":    "JSON",
-	".yaml":    "YAML",
-	".yml":     "YAML",
-	".toml":    "TOML",
-	".xml":     "XML",
-	".md":      "Markdown",
-	".mdx":     "Markdown",
 	".lua":     "Lua",
 	".r":       "R",
 	".dart":    "Dart",
@@ -503,11 +496,6 @@ var langColorMap = map[string]string{
 	"Elixir":      "\x1b[38;5;97m",  // purple
 	"HCL":         "\x1b[38;5;97m",  // purple
 	"GraphQL":     "\x1b[38;5;205m", // pink
-	"JSON":        "\x1b[38;5;246m", // muted
-	"YAML":        "\x1b[38;5;246m",
-	"TOML":        "\x1b[38;5;246m",
-	"XML":         "\x1b[38;5;246m",
-	"Markdown":    "\x1b[38;5;246m",
 	"Protobuf":    "\x1b[38;5;246m",
 }
 
