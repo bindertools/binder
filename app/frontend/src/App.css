@@ -44,13 +44,6 @@
   --ease-base: 180ms ease;
 }
 
-/* ── Reset ──────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 /* ── Global design tokens ────────────────────────────────────────────────────── */
 :root {
   /* Theme-injected vars (overridden by JS) */
