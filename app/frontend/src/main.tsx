@@ -8,7 +8,7 @@ import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App'
-import './App.scss'
+import './App.css'
 import '../../themes/index.scss'
 
 // Expose React globally so plugin IIFE bundles can reference the host's React
