@@ -243,7 +243,11 @@ func (t *Terminal) ExecuteCommand(line string) {
 			t.builtinUptime()
 		case "lang-map":
 			t.builtinLangMap(parts[1:])
+		default:
+			t.write("\r\n\x1b[31m/" + cmd + ": unknown command — try /help\x1b[0m")
+			t.write(t.prompt())
 		}
+		return // slash commands never fall through to subprocess execution
 	}
 	// Non-built-in commands: run as a subprocess through the system shell.
 	go t.execExternalCmd(line)

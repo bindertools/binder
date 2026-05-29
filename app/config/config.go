@@ -176,3 +176,8 @@ func write(c Config) error {
 	}
 	return os.WriteFile(FilePath(), data, 0644)
 }
+
+// Write persists c to the config file without touching the in-memory global.
+// Use SetGlobal before calling Write when you also need the in-memory state
+// to reflect the new values.
+func Write(c Config) error { return write(c) }

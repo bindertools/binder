@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -581,12 +582,15 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 	if !ok {
 		return nil
 	}
+	if a.cpp == nil {
+		return goCompletions(t.cwd, dir, partial)
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type": "complete.path", "id": a.cppID(),
 		"cwd": t.cwd, "dir": dir, "prefix": partial,
 	}, 5000)
 	if err != nil {
-		return nil
+		return goCompletions(t.cwd, dir, partial)
 	}
 	raw, _ := resp["completions"]
 	b, _ := json.Marshal(raw)
@@ -595,6 +599,41 @@ func (a *App) GetCompletions(id string, dir string, partial string) []string {
 		return completions
 	}
 	return nil
+}
+
+// goCompletions is a pure-Go fallback for path completion used when the C++
+// backend is unavailable. It mirrors the behaviour of C++ complete_path_impl:
+// lists non-hidden entries in cwd/dir filtered by prefix, with "/" appended
+// to directory entries.
+func goCompletions(cwd, dir, partial string) []string {
+	look := cwd
+	if dir != "" {
+		d := dir
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(cwd, d)
+		}
+		look = filepath.Clean(d)
+	}
+	entries, err := os.ReadDir(look)
+	if err != nil {
+		return nil
+	}
+	partialLo := strings.ToLower(partial)
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if len(name) > 0 && name[0] == '.' {
+			continue
+		}
+		if partialLo != "" && !strings.HasPrefix(strings.ToLower(name), partialLo) {
+			continue
+		}
+		if e.IsDir() {
+			name += "/"
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────────
@@ -646,15 +685,20 @@ func (a *App) SetClipboardText(text string) {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 func (a *App) GetAppConfig() config.Config {
+	// Go fallback: if the C++ backend isn't running, serve config directly
+	// from Go's own config loader (reads the same config.json on disk).
+	if a.cpp == nil {
+		return config.Get()
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "config.get", "id": a.cppID()}, 5000)
 	if err != nil {
-		return config.Config{}
+		return config.Get()
 	}
 	b, _ := json.Marshal(resp)
 	var c config.Config
 	if err := json.Unmarshal(b, &c); err != nil {
-		return config.Config{}
+		return config.Get()
 	}
 	config.SetGlobal(c)
 	return c
@@ -681,6 +725,15 @@ func (a *App) SaveCustomTheme(colors map[string]string) error {
 }
 
 func (a *App) SaveAppConfig(incoming config.Config) error {
+	// Go fallback: write directly to Go's config file when C++ isn't running.
+	if a.cpp == nil {
+		config.SetGlobal(incoming)
+		if err := config.Write(incoming); err != nil {
+			return err
+		}
+		wailsruntime.EventsEmit(a.ctx, "app:config", incoming)
+		return nil
+	}
 	b, _ := json.Marshal(incoming)
 	var configMap map[string]any
 	json.Unmarshal(b, &configMap) //nolint:errcheck
