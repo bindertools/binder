@@ -143,10 +143,17 @@ export default function Terminal({
 
   // Structured prompt data pushed from Go when alignment is top/bottom.
   const [barPrompt, setBarPrompt] = useState({ path: '', branch: '', ts: '' })
+  // Ref so the submitRef closure always sees the latest bar prompt without going stale.
+  const barPromptRef = useRef({ path: '', branch: '', ts: '' })
+  useEffect(() => { barPromptRef.current = barPrompt }, [barPrompt])
+
   useEffect(() => {
     if (commandAlignment === 'default') return
     const ev = `terminal:bar-prompt:${tabId}`
-    EventsOn(ev, (data: { path: string; branch: string; ts: string }) => setBarPrompt(data))
+    EventsOn(ev, (data: { path: string; branch: string; ts: string }) => {
+      setBarPrompt(data)
+      barPromptRef.current = data
+    })
     return () => EventsOff(ev)
   }, [tabId, commandAlignment])
 
@@ -541,7 +548,19 @@ export default function Terminal({
           return
         }
       }
-      term.write(value + '\r\n')
+      // In bar mode, echo the command with a styled prompt prefix so it looks
+      // identical to the default-mode "prompt + command" line.
+      if (commandAlignmentRef.current !== 'default') {
+        const bp = barPromptRef.current
+        let prefix = ''
+        if (bp.ts)     prefix += `\x1b[38;5;246m(${bp.ts})\x1b[0m `
+        if (bp.path)   prefix += `\x1b[38;5;75m${bp.path}\x1b[0m`
+        if (bp.branch) prefix += ` \x1b[38;5;214m(${bp.branch})\x1b[0m`
+        prefix += ` \x1b[38;5;246m❯\x1b[0m `
+        term.write(prefix + value + '\r\n')
+      } else {
+        term.write(value + '\r\n')
+      }
       ExecuteCommand(tabId, value)
     }
 
