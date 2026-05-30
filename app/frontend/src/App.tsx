@@ -547,16 +547,25 @@ export default function App() {
 
   // ── quit ─────────────────────────────────────────────────────────────────────
   const handleQuit = useCallback(async () => {
-    if (appConfig.soft_close) {
-      const sessionTabs = await Promise.all(tabs.map(async t => {
-        if (t.type === 'terminal') {
-          const cwd = await GetTerminalCwd(t.id).catch(() => '')
-          return { type: t.type, file_path: '', language: '', cwd }
-        }
-        return { type: t.type, file_path: t.filePath ?? '', language: t.language ?? '', cwd: '' }
-      }))
-      await SaveSession(sessionTabs).catch(() => {})
-    }
+    // try/finally guarantees Quit() fires even if session save throws or times out.
+    try {
+      if (appConfig.soft_close) {
+        const sessionTabs = await Promise.all(tabs.map(async t => {
+          if (t.type === 'terminal') {
+            const cwd = await GetTerminalCwd(t.id).catch(() => '')
+            return { type: t.type, file_path: '', language: '', cwd }
+          }
+          return { type: t.type, file_path: t.filePath ?? '', language: t.language ?? '', cwd: '' }
+        }))
+        // Race against a 1.5 s deadline so closing is never blocked by a slow
+        // C++ round-trip — the session save timeout in Go is 5 s which would
+        // make the close button appear frozen.
+        await Promise.race([
+          SaveSession(sessionTabs).catch(() => {}),
+          new Promise<void>(resolve => setTimeout(resolve, 1500)),
+        ])
+      }
+    } catch { /* ignore — we must quit regardless */ }
     Quit()
   }, [appConfig.soft_close, tabs])
 

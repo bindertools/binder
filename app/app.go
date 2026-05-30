@@ -694,6 +694,9 @@ func goCompletions(cwd, dir, partial string) []string {
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 func (a *App) SaveSession(tabs []session.Tab) {
+	if a.cpp == nil {
+		return
+	}
 	b, _ := json.Marshal(tabs)
 	a.cpp.RoundTrip(map[string]any{ //nolint:errcheck
 		"type": "session.save", "id": a.cppID(),
@@ -702,6 +705,9 @@ func (a *App) SaveSession(tabs []session.Tab) {
 }
 
 func (a *App) LoadSession() []session.Tab {
+	if a.cpp == nil {
+		return nil
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type": "session.load", "id": a.cppID(), "sessionId": "default",
 	}, 5000)
