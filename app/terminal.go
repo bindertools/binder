@@ -162,13 +162,13 @@ func (t *Terminal) prompt() string {
 	dir, branch, ts := t.promptComponents()
 
 	// ── Powerline prompt ──────────────────────────────────────────────────────
-	// Each segment flows directly into the next via  (the powerline
-	// right-pointing solid arrow).  The arrow's fg matches the preceding
+	// Each segment flows directly into the next via ▶ (U+25B6, standard
+	// right-pointing triangle in every font).  The arrow's fg matches the preceding
 	// segment's bg, and its bg matches the following segment's bg, creating a
 	// seamless chevron transition identical to image-1 reference design.
-	// Requires a Nerd Font / Powerline-patched font; the font stack in
-	// Terminal.tsx lists CaskaydiaCove NF and Cascadia Code PL first.
-	const pw = "" // U+E0B0 powerline right-solid-arrow
+	// Works with any standard monospace font — no Nerd Font required.
+	
+	const pw = "▶" // U+25B6 BLACK RIGHT-POINTING TRIANGLE (standard font, no Nerd Font needed)
 
 	const tsBg  = "18;48;100"    // deep navy
 	const pathBg = "12;60;18"    // forest green

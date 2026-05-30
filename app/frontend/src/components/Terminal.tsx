@@ -211,9 +211,7 @@ export default function Terminal({
 
     const term = new XTerm({
       theme: xtermThemeRef.current,
-      // Nerd Font / Powerline variants are listed first so the U+E0B0
-      // powerline arrow renders correctly.  Falls back to standard fonts.
-      fontFamily: "'CaskaydiaCove NF', 'Cascadia Code PL', 'CaskaydiaMono NF', 'Cascadia Mono PL', 'Cascadia Code', 'FiraCode Nerd Font', 'Fira Code', 'JetBrainsMono Nerd Font', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
+      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
       fontSize,
       lineHeight: 1.2,
       cursorBlink: true,
