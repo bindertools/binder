@@ -980,17 +980,28 @@ export default function Terminal({
   // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
   const barPath = barPrompt.path || cwdLabel
 
-  // ── Breadcrumb bar — reference HTML/CSS ported exactly ──────────────────────
-  // clip-path polygon values are copied verbatim from the user's reference code.
-  // Arrow width = 34 px, overlap = 34 px (margin-left: -34px on non-first).
-  //   CP1  step-1: right arrow only        (first segment)
-  //   CP2  step-2: right arrow + left notch (middle segment)
-  //   CP3  step-3: left notch only          (last segment)
-  const CP1 = 'polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%)'
-  const CP2 = 'polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%, 34px 50%)'
-  const CP3 = 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 34px 50%)'
+  // ── Breadcrumb bar ─────────────────────────────────────────────────────────
+  // CSS border-triangle technique: each segment is a plain <div> with a solid
+  // background.  An absolutely-positioned child with width:0/height:0 and
+  // transparent top/bottom borders + solid left border creates a right-pointing
+  // triangle that extends OVER the next segment.  Because the triangle's
+  // transparent halves reveal the next segment's background, the join is
+  // seamless — no clip-path, no characters, no gaps.
+  const H  = 36  // bar height px (h-9)
+  const AW = 34  // arrow width  px
   const hasTs = !!barPrompt.ts
   const hasBr = !!barPrompt.branch
+
+  // Inline arrow triangle: extends AW px to the right of its parent,
+  // sits on top of the next segment via the parent's z-index.
+  const tri = (color: string): React.CSSProperties => ({
+    position: 'absolute', top: 0, left: '100%',
+    width: 0, height: 0,
+    borderTop:    `${H / 2}px solid transparent`,
+    borderBottom: `${H / 2}px solid transparent`,
+    borderLeft:   `${AW}px solid ${color}`,
+    zIndex: 1,
+  })
 
   const inputBar = commandAlignment !== 'default' ? (
     <div
@@ -1001,49 +1012,51 @@ export default function Terminal({
       ].join(' ')}
     >
       {!isPtyActive && (
-        <div className="flex items-stretch shrink-0">
+        <div className="flex items-stretch shrink-0" style={{ overflow: 'visible' }}>
 
-          {/* Segment 1 — timestamp  (step-1: right arrow only) */}
+          {/* Segment 1 — timestamp */}
           {hasTs && (
-            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
-                 style={{
-                   background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-                   clipPath: CP1,
-                   paddingLeft: 12, paddingRight: 48,
-                   position: 'relative', zIndex: 3,
-                 }}>
-              {barPrompt.ts}
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 3 }}>
+              <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
+                   style={{ background: 'rgb(18,48,100)', color: 'rgb(110,190,255)', height: H, paddingLeft: 14, paddingRight: 14 }}>
+                {barPrompt.ts}
+              </div>
+              {/* Arrow extends right over the path segment */}
+              <div style={tri('rgb(18,48,100)')} />
             </div>
           )}
 
-          {/* Segment 2 — path  (clip-path depends on neighbours) */}
-          <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
-               style={{
-                 background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-                 clipPath: !hasTs && !hasBr ? undefined
-                         : !hasTs &&  hasBr ? CP1
-                         :  hasTs && !hasBr ? CP3
-                         :                    CP2,
-                 paddingLeft: hasTs ? 48 : 12,
-                 paddingRight: hasBr ? 48 : 14,
-                 marginLeft: hasTs ? -34 : 0,
-                 position: 'relative', zIndex: 2,
-                 maxWidth: 240, overflow: 'hidden',
-               }}>
-            {barPath}
+          {/* Segment 2 — path */}
+          <div style={{ position: 'relative', flexShrink: 0, zIndex: 2 }}>
+            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
+                 style={{
+                   background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
+                   height: H,
+                   paddingLeft: hasTs ? AW + 14 : 14,
+                   paddingRight: 14,
+                   maxWidth: 260, overflow: 'hidden',
+                 }}>
+              {barPath}
+            </div>
+            {/* Arrow extends right over the branch segment (if exists) */}
+            {hasBr && <div style={tri('rgb(12,60,18)')} />}
           </div>
 
-          {/* Segment 3 — branch  (step-3: left notch only) */}
+          {/* Segment 3 — branch */}
           {hasBr && (
-            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
-                 style={{
-                   background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
-                   clipPath: CP3,
-                   paddingLeft: 48, paddingRight: 14,
-                   marginLeft: -34,
-                   position: 'relative', zIndex: 1,
-                 }}>
-              {barPrompt.branch}
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1 }}>
+              <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
+                   style={{ background: 'rgb(80,38,0)', color: 'rgb(255,175,50)', height: H, paddingLeft: AW + 14, paddingRight: 14 }}>
+                {barPrompt.branch}
+              </div>
+              {/* Tail arrow — transparent halves show bar background */}
+              <div style={tri('rgb(80,38,0)')} />
+            </div>
+          )}
+          {/* Tail arrow when branch is absent */}
+          {!hasBr && (
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1 }}>
+              <div style={tri('rgb(12,60,18)')} />
             </div>
           )}
         </div>
