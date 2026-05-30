@@ -10,8 +10,12 @@ export function CloseTerminal(arg1) {
   return window['go']['main']['App']['CloseTerminal'](arg1);
 }
 
-export function CreateTerminal(arg1, arg2) {
-  return window['go']['main']['App']['CreateTerminal'](arg1, arg2);
+export function CreateTerminal(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateTerminal'](arg1, arg2, arg3);
+}
+
+export function SetTerminalAlignment(arg1, arg2) {
+  return window['go']['main']['App']['SetTerminalAlignment'](arg1, arg2);
 }
 
 export function CtrlClickPath(arg1, arg2) {

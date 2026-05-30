@@ -39,18 +39,31 @@ type Terminal struct {
 	mu        sync.Mutex
 	process   *os.Process    // non-nil while an external command is running
 	stdinPipe io.WriteCloser // subprocess stdin; non-nil when process != nil
+	alignment string         // "default" | "top" | "bottom" — mirrors the frontend setting
 }
 
-func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
+func NewTerminal(ctx context.Context, id string, initialCwd string, alignment string) *Terminal {
 	dir := term.DefaultDir(config.Get().DefaultDirectory)
 	if initialCwd != "" {
 		if info, err := os.Stat(initialCwd); err == nil && info.IsDir() {
 			dir = initialCwd
 		}
 	}
-	t := &Terminal{id: id, cwd: dir, ctx: ctx}
-	go t.write(t.prompt())
+	t := &Terminal{id: id, cwd: dir, ctx: ctx, alignment: alignment}
+	go t.write(t.prompt()) // prompt() suppresses xterm output in bar mode
 	return t
+}
+
+// SetAlignment updates the terminal's command-line alignment at runtime so that
+// subsequent prompt() calls are routed correctly without restarting the session.
+func (t *Terminal) SetAlignment(alignment string) {
+	t.mu.Lock()
+	t.alignment = alignment
+	t.mu.Unlock()
+	// Immediately push the current prompt data to the bar if switching into bar mode.
+	if alignment != "" && alignment != "default" {
+		go t.emitBarPrompt()
+	}
 }
 
 // emitCwd broadcasts the current working directory to the frontend bar.
@@ -95,18 +108,19 @@ func (t *Terminal) getGitBranch() string {
 	return strings.TrimSpace(string(out))
 }
 
-// prompt builds the styled prompt, optionally prefixing a timestamp and/or
-// appending the current git branch, based on the active config.
-func (t *Terminal) prompt() string {
+// promptComponents returns the three display elements of the prompt — formatted
+// directory path, git branch (empty when disabled), and timestamp string
+// (empty when disabled) — applying all active config settings. Shared between
+// prompt() for xterm output and emitBarPrompt() for the input-bar event.
+func (t *Terminal) promptComponents() (dir, branch, ts string) {
 	cfg := config.Get()
 	home, _ := os.UserHomeDir()
-	dir := t.cwd
+	dir = t.cwd
 	if rel, err := filepath.Rel(home, dir); err == nil && !strings.HasPrefix(rel, "..") {
 		dir = "~/" + rel
 	}
 	dir = filepath.ToSlash(dir)
 
-	// minimal_pwd: keep only the last 2 path segments for a cleaner prompt.
 	if cfg.MinimalPwd {
 		parts := strings.Split(dir, "/")
 		var segs []string
@@ -120,23 +134,55 @@ func (t *Terminal) prompt() string {
 		}
 	}
 
+	if cfg.GitRecognition.ShowGitBranch {
+		branch = t.getGitBranch()
+	}
+
+	if cfg.ShowTimestamps {
+		now := time.Now()
+		ts = fmt.Sprintf("%02d:%02d:%02d", now.Hour(), now.Minute(), now.Second())
+	}
+	return
+}
+
+// emitBarPrompt fires a terminal:bar-prompt:{id} Wails event carrying the
+// structured prompt data so the frontend input bar can render it with the same
+// path / git-branch / timestamp that Go would otherwise write to xterm.
+func (t *Terminal) emitBarPrompt() {
+	path, branch, ts := t.promptComponents()
+	wailsruntime.EventsEmit(t.ctx, "terminal:bar-prompt:"+t.id, map[string]string{
+		"path":   path,
+		"branch": branch,
+		"ts":     ts,
+	})
+}
+
+// prompt builds the ANSI-formatted prompt string for xterm.
+// In top/bottom alignment mode it returns "" (no xterm output) and instead
+// fires emitBarPrompt so the frontend input bar updates its display.
+func (t *Terminal) prompt() string {
+	t.mu.Lock()
+	alignment := t.alignment
+	t.mu.Unlock()
+
+	if alignment != "" && alignment != "default" {
+		go t.emitBarPrompt()
+		return ""
+	}
+
+	dir, branch, ts := t.promptComponents()
+
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	// Optional timestamp — (hh:mm:ss)
-	if cfg.ShowTimestamps {
-		now := time.Now()
-		sb.WriteString(fmt.Sprintf("\x1b[38;5;246m(%02d:%02d:%02d)\x1b[0m ", now.Hour(), now.Minute(), now.Second()))
+	if ts != "" {
+		sb.WriteString(fmt.Sprintf("\x1b[38;5;246m(%s)\x1b[0m ", ts))
 	}
 
-	// Current directory
 	sb.WriteString("\x1b[38;5;75m" + dir + "\x1b[0m")
 
-	// Optional git branch — (branch-name) in orange
-	if cfg.GitRecognition.ShowGitBranch {
-		if branch := t.getGitBranch(); branch != "" {
-			sb.WriteString(" \x1b[38;5;214m(" + branch + ")\x1b[0m")
-		}
+	if branch != "" {
+		sb.WriteString(" \x1b[38;5;214m(" + branch + ")\x1b[0m")
 	}
 
 	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")

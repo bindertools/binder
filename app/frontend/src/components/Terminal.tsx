@@ -8,6 +8,7 @@ import type { InstalledPluginCommand } from '../plugins'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
   CreateTerminal,
+  SetTerminalAlignment,
   ExecuteCommand,
   InterruptCommand,
   CloseTerminal,
@@ -133,6 +134,20 @@ export default function Terminal({
     EventsOn(startEv, () => { setIsPtyActive(true);  termRef.current?.focus() })
     EventsOn(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
     return () => { EventsOff(startEv); EventsOff(endEv) }
+  }, [tabId, commandAlignment])
+
+  // Keep Go terminal in sync when the user changes alignment via Settings.
+  useEffect(() => {
+    SetTerminalAlignment(tabId, commandAlignment).catch(() => {})
+  }, [tabId, commandAlignment])
+
+  // Structured prompt data pushed from Go when alignment is top/bottom.
+  const [barPrompt, setBarPrompt] = useState({ path: '', branch: '', ts: '' })
+  useEffect(() => {
+    if (commandAlignment === 'default') return
+    const ev = `terminal:bar-prompt:${tabId}`
+    EventsOn(ev, (data: { path: string; branch: string; ts: string }) => setBarPrompt(data))
+    return () => EventsOff(ev)
   }, [tabId, commandAlignment])
 
   const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
@@ -334,7 +349,7 @@ export default function Terminal({
     }
     container.addEventListener('wheel', handleWheel, { passive: false })
 
-    CreateTerminal(tabId, initialCwd ?? '').catch(() => {})
+    CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
 
     const outEvent = `terminal:output:${tabId}`
     EventsOn(outEvent, (data: string) => { term.write(data) })
@@ -942,6 +957,10 @@ export default function Terminal({
     return parts.length <= 2 ? parts.join('/') : parts.slice(-2).join('/')
   }, [cwd])
 
+  // barPath: prefer Go's formatted path (respects minimal_pwd); fall back to
+  // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
+  const barPath = barPrompt.path || cwdLabel
+
   const inputBar = commandAlignment !== 'default' ? (
     <div
       className={[
@@ -951,9 +970,19 @@ export default function Terminal({
         isPtyActive ? 'opacity-50 pointer-events-none' : '',
       ].join(' ')}
     >
-      <span className="font-mono text-[11px] text-[var(--info-bar-color)] select-none shrink-0 max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap">
-        {cwdLabel}
+      {barPrompt.ts && (
+        <span className="font-mono text-[11px] text-[var(--tab-color)] select-none shrink-0 whitespace-nowrap">
+          ({barPrompt.ts})
+        </span>
+      )}
+      <span className="font-mono text-[11px] text-[#5AC8FA] select-none shrink-0 max-w-[160px] overflow-hidden text-ellipsis whitespace-nowrap">
+        {barPath}
       </span>
+      {barPrompt.branch && (
+        <span className="font-mono text-[11px] text-[#FF9F0A] select-none shrink-0 whitespace-nowrap">
+          ({barPrompt.branch})
+        </span>
+      )}
       <span className="text-[var(--info-bar-color)] shrink-0 select-none text-[11px] leading-none">❯</span>
       <input
         ref={inputBarRef}

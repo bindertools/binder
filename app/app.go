@@ -390,12 +390,23 @@ func (a *App) ExplorerReveal(path string) error {
 
 // ─── Terminal management ──────────────────────────────────────────────────────
 
-func (a *App) CreateTerminal(id string, initialCwd string) error {
-	t := NewTerminal(a.ctx, id, initialCwd)
+func (a *App) CreateTerminal(id string, initialCwd string, alignment string) error {
+	t := NewTerminal(a.ctx, id, initialCwd, alignment)
 	a.mu.Lock()
 	a.terminals[id] = t
 	a.mu.Unlock()
 	return nil
+}
+
+// SetTerminalAlignment updates the alignment of a running terminal session so
+// that prompt() routes its output correctly without restarting the terminal.
+func (a *App) SetTerminalAlignment(id string, alignment string) {
+	a.mu.Lock()
+	t, ok := a.terminals[id]
+	a.mu.Unlock()
+	if ok {
+		t.SetAlignment(alignment)
+	}
 }
 
 func (a *App) ExecuteCommand(id string, line string) {
