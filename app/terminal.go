@@ -151,8 +151,10 @@ func (t *Terminal) emitBarPrompt() {
 // to keep in sync — a config change takes effect on the very next command.
 func (t *Terminal) prompt() string {
 	if a := config.Get().CommandAlignment; a != "" && a != "default" {
-		// Move cursor to a fresh line so the next command echo always starts cleanly.
-		t.write("\r\n")
+		// Two newlines: one to end the current output line, one blank separator row
+		// between the output block and the next command echo — mirrors the visual
+		// rhythm of default mode where the prompt's leading \r\n creates that gap.
+		t.write("\r\n\r\n")
 		go t.emitBarPrompt()
 		return ""
 	}
