@@ -996,13 +996,13 @@ export default function Terminal({
       ].join(' ')}
     >
       {!isPtyActive && (
-        <div style={{ display: 'flex', flexShrink: 0, height: H }}>
+        <div style={{ display: 'flex', flexShrink: 0, height: H, gap: 0, margin: 0, padding: 0 }}>
 
           {hasTs && (
             <div style={{
               display: 'flex', alignItems: 'center',
               background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-              height: H, paddingLeft: 14, paddingRight: 14,
+              height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
               fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
             }}>
               {barPrompt.ts}
@@ -1012,7 +1012,7 @@ export default function Terminal({
           <div style={{
             display: 'flex', alignItems: 'center',
             background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-            height: H, paddingLeft: 14, paddingRight: 14,
+            height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
             fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
             maxWidth: 260, overflow: 'hidden',
           }}>
@@ -1023,7 +1023,7 @@ export default function Terminal({
             <div style={{
               display: 'flex', alignItems: 'center',
               background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
-              height: H, paddingLeft: 14, paddingRight: 14,
+              height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
               fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
             }}>
               {barPrompt.branch}
