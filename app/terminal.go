@@ -164,16 +164,20 @@ func (t *Terminal) prompt() string {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
+	// ── Timestamp pill — dark-blue background, light-blue text ───────────────
 	if ts != "" {
-		sb.WriteString(fmt.Sprintf("\x1b[38;5;246m(%s)\x1b[0m ", ts))
+		sb.WriteString("\x1b[48;5;17;38;5;75m " + ts + " \x1b[0m ")
 	}
 
-	sb.WriteString("\x1b[38;5;75m" + dir + "\x1b[0m")
+	// ── Path pill — dark-green background, bright-green text ─────────────────
+	sb.WriteString("\x1b[48;5;22;38;5;76m " + dir + " \x1b[0m")
 
+	// ── Branch pill — dark-red background, orange text ────────────────────────
 	if branch != "" {
-		sb.WriteString(" \x1b[38;5;214m(" + branch + ")\x1b[0m")
+		sb.WriteString(" \x1b[48;5;88;38;5;208m " + branch + " \x1b[0m")
 	}
 
+	// ── Prompt symbol ─────────────────────────────────────────────────────────
 	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")
 	return sb.String()
 }

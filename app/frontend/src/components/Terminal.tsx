@@ -990,16 +990,16 @@ export default function Terminal({
       ].join(' ')}
     >
       {barPrompt.ts && (
-        <span className="font-mono text-[11px] text-[var(--tab-color)] select-none shrink-0 whitespace-nowrap">
-          ({barPrompt.ts})
+        <span className="font-mono text-[10.5px] select-none shrink-0 whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(0,36,100,0.6)', color: '#5AC8FA' }}>
+          {barPrompt.ts}
         </span>
       )}
-      <span className="font-mono text-[11px] text-[#5AC8FA] select-none shrink-0 max-w-[160px] overflow-hidden text-ellipsis whitespace-nowrap">
+      <span className="font-mono text-[10.5px] select-none shrink-0 max-w-[160px] overflow-hidden text-ellipsis whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(0,60,0,0.6)', color: '#57c653' }}>
         {barPath}
       </span>
       {barPrompt.branch && (
-        <span className="font-mono text-[11px] text-[#FF9F0A] select-none shrink-0 whitespace-nowrap">
-          ({barPrompt.branch})
+        <span className="font-mono text-[10.5px] select-none shrink-0 whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(80,0,0,0.6)', color: '#FF9F0A' }}>
+          {barPrompt.branch}
         </span>
       )}
       <span className="text-[var(--info-bar-color)] shrink-0 select-none text-[11px] leading-none">❯</span>

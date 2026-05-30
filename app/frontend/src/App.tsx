@@ -1,5 +1,5 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import TabBar from './components/TabBar'
+import TabsMenu from './components/TabsMenu'
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
@@ -292,6 +292,7 @@ export default function App() {
   const [splitEnabled,  setSplitEnabled]  = useState(false)
   const [splitRatio,    setSplitRatio]    = useState(0.5)
   const [searchOpen,    setSearchOpen]    = useState(false)
+  const [tabsMenuOpen,  setTabsMenuOpen]  = useState(false)
   const [terminalCwds,  setTerminalCwds]  = useState<Record<string, string>>({})
   // tabType → Plugin; rebuilt whenever a plugin is installed/uninstalled
   const [plugins, setPlugins] = useState<Record<string, Plugin>>({})
@@ -533,13 +534,11 @@ export default function App() {
     return () => window.removeEventListener('terminal:open-plugin-tab', handler)
   }, [])
 
-  // ── keyboard shortcut: Ctrl+K → search palette ───────────────────────────────
+  // ── keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'k') {
-        e.preventDefault()
-        setSearchOpen(v => !v)
-      }
+      if (e.ctrlKey && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v) }
+      if (e.ctrlKey && e.key === '`') { e.preventDefault(); setTabsMenuOpen(v => !v) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -681,6 +680,50 @@ export default function App() {
   const handleSaveSettings = useCallback(async (cfg: AppConfig) => {
     await SaveAppConfig(cfg as any)
   }, [])
+
+  // ── derive active terminal ID + search placeholder ───────────────────────────
+  const activeTerminalId = useMemo(() => {
+    const focused = focusedPanel === 'left' ? activeId : rightActiveId
+    const tab = tabs.find(t => t.id === focused)
+    if (tab?.type === 'terminal') return tab.id
+    return tabs.find(t => t.type === 'terminal')?.id ?? null
+  }, [focusedPanel, activeId, rightActiveId, tabs])
+
+  const searchPlaceholder = useMemo(() => {
+    if (!activeTerminalId) return 'Search…'
+    const cwd = terminalCwds[activeTerminalId]
+    if (!cwd) return 'Search…'
+    return `Search inside of ${cwd.replace(/\\/g, '/')}`
+  }, [activeTerminalId, terminalCwds])
+
+  // ── header action handlers (must follow handleLeft/Right/etc.) ────────────────
+  const handleOpenSettings = useCallback(() => {
+    dispatch({ type: 'open-config', terminalId: activeTerminalId ?? undefined })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTerminalId])
+
+  const handleOpenInFS = useCallback(() => {
+    const termId = activeTerminalId
+    const cwd    = termId ? (terminalCwds[termId] ?? '') : ''
+    dispatch({ type: 'open-tab', tabType: 'fullscreen', title: 'explorer', terminalId: termId ?? undefined, cwd })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTerminalId, terminalCwds])
+
+  const handleSplitToggle = useCallback(() => {
+    if (splitEnabled) {
+      setSplitEnabled(false)
+    } else if (rightTabs.length > 0 && rightActiveId) {
+      setSplitEnabled(true)
+    } else {
+      handleRightNewTerminal()
+    }
+  }, [splitEnabled, rightTabs, rightActiveId, handleRightNewTerminal])
+
+  const handleSelectFromMenu = useCallback((id: string) => {
+    const panel = tabPanels[id] ?? 'left'
+    if (panel === 'right') handleRightSelect(id)
+    else handleLeftSelect(id)
+  }, [tabPanels, handleLeftSelect, handleRightSelect])
 
   // ── problems helpers ──────────────────────────────────────────────────────────
   const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
@@ -834,81 +877,60 @@ export default function App() {
     return null
   }
 
-  // ── derive active terminal ID for search palette ──────────────────────────────
-  const activeTerminalId = useMemo(() => {
-    const focused = focusedPanel === 'left' ? activeId : rightActiveId
-    const tab = tabs.find(t => t.id === focused)
-    if (tab?.type === 'terminal') return tab.id
-    // Fall back to any terminal tab
-    return tabs.find(t => t.type === 'terminal')?.id ?? null
-  }, [focusedPanel, activeId, rightActiveId, tabs])
 
   // ── render ────────────────────────────────────────────────────────────────────
-  const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+  const wcBtnBase   = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+  const iconBtnBase = "flex items-center justify-center w-7 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]"
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui">
 
-      {/* ── App header (draggable title bar) ──────────────────────────────────── */}
+      {/* ── App header (draggable) ────────────────────────────────────────────── */}
       <div
-        className="flex items-center h-[42px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden pr-1.5"
+        className="flex items-center h-[42px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden"
         style={{ ['--wails-draggable' as any]: 'drag' }}
         onDoubleClick={WindowToggleMaximise}
       >
-        {/* Left panel tab bar */}
-        <div
-          className="flex items-center overflow-hidden min-w-0 shrink h-full"
-          style={splitEnabled
-            ? { width: `calc(${splitRatio * 100}% - 2px)` }
-            : { flex: 1, minWidth: 0 }
-          }
-        >
-          <TabBar
-            panel="left"
-            tabs={leftTabs}
-            activeId={activeId}
-            focused={focusedPanel === 'left'}
-            onSelect={handleLeftSelect}
-            onClose={id => dispatch({ type: 'close', id })}
-            onCloseOthers={handleCloseOthers}
-            onMoveRight={handleMoveRight}
-            onMoveLeft={handleMoveLeft}
-            onNewTerminal={() => dispatch({ type: 'add-terminal' })}
-            onAddSiblingTerminal={handleAddSiblingTerminal}
-            onDrop={id => handleTabDrop(id, 'left')}
-          />
+
+        {/* ── Left: Hamburger tabs button ─────────────────────────────────────── */}
+        <div className="flex items-center px-2 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          <button
+            className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
+            onClick={() => setTabsMenuOpen(v => !v)}
+            title="Tabs (Ctrl+`)"
+            aria-label="Open tabs menu"
+          >
+            <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
+              <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </button>
         </div>
 
-        {splitEnabled && (
-          <>
-            <div className="w-px h-5 bg-sep shrink-0 mx-0.5" />
-            <div className="flex items-center overflow-hidden min-w-0 shrink h-full" style={{ flex: 1, minWidth: 0 }}>
-              <TabBar
-                panel="right"
-                tabs={rightTabs}
-                activeId={rightActiveId}
-                focused={focusedPanel === 'right'}
-                onSelect={handleRightSelect}
-                onClose={handleRightClose}
-                onCloseOthers={handleCloseOthers}
-                onMoveRight={handleMoveRight}
-                onMoveLeft={handleMoveLeft}
-                onNewTerminal={handleRightNewTerminal}
-                onAddSiblingTerminal={handleAddSiblingTerminal}
-                onDrop={id => handleTabDrop(id, 'right')}
-              />
-            </div>
-          </>
-        )}
+        {/* ── Center: Search bar with active path as placeholder ──────────────── */}
+        <div className="flex-1 flex items-center justify-center px-3 min-w-0">
+          <button
+            className="flex items-center gap-1.5 h-[26px] w-full max-w-[500px] px-2.5 rounded-md border border-sep-strong bg-surface-raised cursor-pointer text-[var(--tab-color)] font-ui text-[11.5px] transition-[background,color,border-color] duration-[100ms] whitespace-nowrap select-none hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-accent-border"
+            onClick={() => setSearchOpen(true)}
+            title="Search files and tabs (Ctrl+K)"
+            style={{ ['--wails-draggable' as any]: 'no-drag' }}
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="flex-1 text-left overflow-hidden text-ellipsis">{searchPlaceholder}</span>
+            <span className="text-[10px] opacity-40 tracking-normal font-ui shrink-0">Ctrl K</span>
+          </button>
+        </div>
 
-        {/* Search bar + window controls */}
-        <div className="flex items-center shrink-0 gap-0.5 ml-auto pl-2" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+        {/* ── Right: action icons + window controls ───────────────────────────── */}
+        <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          {/* Update badge */}
           {updateTag && (
             <button
               className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
               title={`Update available: ${updateTag} — click to install`}
               onClick={() => PerformUpdate(updateTag).catch(() => {})}
-              aria-label="Update available"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -916,18 +938,40 @@ export default function App() {
               </svg>
             </button>
           )}
-          <button
-            className="flex items-center gap-1.5 h-[26px] min-w-[160px] max-w-[220px] px-2.5 rounded-md border border-sep-strong bg-surface-raised cursor-pointer text-[var(--tab-color)] font-ui text-[11.5px] transition-[background,color,border-color] duration-[100ms] shrink-0 whitespace-nowrap select-none hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-accent-border"
-            onClick={() => setSearchOpen(true)}
-            title="Search files and tabs (Ctrl+K)"
-          >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+
+          {/* Settings */}
+          <button className={iconBtnBase} onClick={handleOpenSettings} title="Settings (/config)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round">
+              <circle cx="8" cy="8" r="2.5"/>
+              <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>
             </svg>
-            <span className="flex-1 text-left overflow-hidden text-ellipsis">Search...</span>
-            <span className="text-[10px] opacity-45 tracking-normal font-ui">Ctrl K</span>
           </button>
+
+          {/* Split view */}
+          <button
+            className={iconBtnBase + (splitEnabled ? ' text-accent' : '')}
+            onClick={handleSplitToggle}
+            title={splitEnabled ? 'Close split view' : 'Split view — open a second terminal'}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="1" y="1" width="6" height="6" rx="1.2"/>
+              <rect x="9" y="1" width="6" height="6" rx="1.2"/>
+              <rect x="1" y="9" width="6" height="6" rx="1.2"/>
+              <rect x="9" y="9" width="6" height="6" rx="1.2"/>
+            </svg>
+          </button>
+
+          {/* Fullscreen explorer (/fs) */}
+          <button className={iconBtnBase} onClick={handleOpenInFS} title="Open in fullscreen explorer (/fs)">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5"/>
+            </svg>
+          </button>
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+
+          {/* Window controls */}
           <div className="flex items-center gap-0.5">
             <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
               <svg width="10" height="2" viewBox="0 0 10 2">
@@ -946,8 +990,21 @@ export default function App() {
               </svg>
             </button>
           </div>
-        </div>
-      </div>
+        </div>{/* end right group */}
+      </div>{/* end header */}
+
+      {/* ── Tabs drawer (hamburger menu) ──────────────────────────────────────── */}
+      <TabsMenu
+        open={tabsMenuOpen}
+        tabs={tabs}
+        activeId={activeId}
+        rightActiveId={rightActiveId}
+        tabPanels={tabPanels}
+        terminalCwds={terminalCwds}
+        onSelect={handleSelectFromMenu}
+        onClose={id => dispatch({ type: 'close', id })}
+        onDismiss={() => setTabsMenuOpen(false)}
+      />
 
       {/* ── Search palette ────────────────────────────────────────────────────── */}
       {searchOpen && (
