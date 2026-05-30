@@ -161,51 +161,20 @@ func (t *Terminal) prompt() string {
 
 	dir, branch, ts := t.promptComponents()
 
-	// ── Powerline prompt ──────────────────────────────────────────────────────
-	// Each segment flows directly into the next via ▶ (U+25B6, standard
-	// right-pointing triangle in every font).  The arrow's fg matches the preceding
-	// segment's bg, and its bg matches the following segment's bg, creating a
-	// seamless chevron transition identical to image-1 reference design.
-	// Works with any standard monospace font — no Nerd Font required.
-	
-	const pw = "▶" // U+25B6 BLACK RIGHT-POINTING TRIANGLE (standard font, no Nerd Font needed)
-
-	const tsBg  = "18;48;100"    // deep navy
-	const pathBg = "12;60;18"    // forest green
-	const brBg   = "80;38;0"     // amber
-	const tsFg   = "110;190;255" // sky blue
-	const pathFg = "140;230;110" // lime
-	const brFg   = "255;175;50"  // orange
-
-	// ANSI SGR is cumulative — colors change in-place, never reset between
-	// segments. Resetting between a pill and its arrow drops back to the
-	// terminal default background, creating a visible gap. The only reset
-	// needed is before the final tail arrow (to return to terminal bg).
 	var sb strings.Builder
-	sb.WriteString("\r\n\x1b[0m") // clean slate at line start
+	sb.WriteString("\r\n\x1b[0m")
 
+	// Timestamp pill
 	if ts != "" {
-		// 1. Timestamp pill: set bg + fg, write text. NO reset at end.
-		sb.WriteString("\x1b[48;2;" + tsBg + "m\x1b[38;2;" + tsFg + "m " + ts + " ")
-		// 2. Arrow ts→path: fg changes to tsBg (navy ▶ on green). NO reset.
-		sb.WriteString("\x1b[38;2;" + tsBg + "m\x1b[48;2;" + pathBg + "m" + pw)
-		// 3. Path text: fg changes to pathFg; bg already pathBg. NO reset.
-		sb.WriteString("\x1b[38;2;" + pathFg + "m " + dir + " ")
-	} else {
-		// No timestamp: start path directly.
-		sb.WriteString("\x1b[48;2;" + pathBg + "m\x1b[38;2;" + pathFg + "m " + dir + " ")
+		sb.WriteString("\x1b[48;2;18;48;100m\x1b[38;2;110;190;255m " + ts + " \x1b[0m ")
 	}
 
+	// Path pill
+	sb.WriteString("\x1b[48;2;12;60;18m\x1b[38;2;140;230;110m " + dir + " \x1b[0m")
+
+	// Branch pill
 	if branch != "" {
-		// 4. Arrow path→branch: fg=pathBg (green ▶ on amber). NO reset.
-		sb.WriteString("\x1b[38;2;" + pathBg + "m\x1b[48;2;" + brBg + "m" + pw)
-		// 5. Branch text: fg changes to brFg; bg already brBg. NO reset.
-		sb.WriteString("\x1b[38;2;" + brFg + "m " + branch + " ")
-		// 6. RESET now — need terminal-default bg for the tail arrow.
-		sb.WriteString("\x1b[0m\x1b[38;2;" + brBg + "m" + pw + "\x1b[0m")
-	} else {
-		// 6. RESET — tail arrow from path with terminal-default bg.
-		sb.WriteString("\x1b[0m\x1b[38;2;" + pathBg + "m" + pw + "\x1b[0m")
+		sb.WriteString(" \x1b[48;2;80;38;0m\x1b[38;2;255;175;50m " + branch + " \x1b[0m")
 	}
 
 	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")
