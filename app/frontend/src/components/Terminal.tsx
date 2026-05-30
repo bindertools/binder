@@ -550,14 +550,9 @@ export default function Terminal({
       }
       // In bar mode, echo the command with a styled prompt prefix so it looks
       // identical to the default-mode "prompt + command" line.
+      // Bar already shows path/time/branch — just echo the command itself.
       if (commandAlignmentRef.current !== 'default') {
-        const bp = barPromptRef.current
-        let prefix = ''
-        if (bp.ts)     prefix += `\x1b[38;5;246m(${bp.ts})\x1b[0m `
-        if (bp.path)   prefix += `\x1b[38;5;75m${bp.path}\x1b[0m`
-        if (bp.branch) prefix += ` \x1b[38;5;214m(${bp.branch})\x1b[0m`
-        prefix += ` \x1b[38;5;246m❯\x1b[0m `
-        term.write(prefix + value + '\r\n')
+        term.write(`\x1b[38;5;246m❯\x1b[0m ${value}\r\n`)
       } else {
         term.write(value + '\r\n')
       }
