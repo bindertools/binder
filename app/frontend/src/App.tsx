@@ -227,7 +227,7 @@ const defaultConfig: AppConfig = {
   default_directory: '', indent_guides: false, order_directory: false,
   minimap: false, theme: 'minimal', show_timestamps: false,
   git_recognition: { show_git_branch: false }, soft_close: false,
-  zoom_insights: true, minimal_pwd: false, default_zoom: 1,
+  zoom_insights: true, minimal_pwd: false, default_zoom: 1, command_alignment: 'default',
   terminal_word_wrap: false, file_word_wrap: false, scroll_speed: 1,
   preferred_shell: '',
 }
@@ -720,6 +720,7 @@ export default function App() {
           xtermTheme={resolvedTheme.xtermTheme}
           initialCwd={tab.initialCwd}
           defaultZoom={currentZoom}
+          commandAlignment={(appConfig.command_alignment || 'default') as 'default' | 'top' | 'bottom'}
           pluginCommands={pluginCommands}
           onCwdChange={cwd => setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))}
         />

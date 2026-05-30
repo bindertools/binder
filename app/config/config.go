@@ -24,7 +24,8 @@ type Config struct {
 	SoftClose        bool                 `json:"soft_close"`
 	ZoomInsights     bool                 `json:"zoom_insights"`
 	MinimalPwd       bool                 `json:"minimal_pwd"`
-	DefaultZoom      float64              `json:"default_zoom"`
+	DefaultZoom        float64              `json:"default_zoom"`
+	CommandAlignment   string               `json:"command_alignment"` // "default" | "top" | "bottom"
 	CustomTheme      map[string]string    `json:"custom_theme,omitempty"`
 	TerminalWordWrap bool                 `json:"terminal_word_wrap"`
 	FileWordWrap     bool                 `json:"file_word_wrap"`
@@ -94,6 +95,9 @@ func load() (Config, error) {
 		}
 		if _, exists := rawMap["default_zoom"]; !exists {
 			c.DefaultZoom = 1.0
+		}
+		if _, exists := rawMap["command_alignment"]; !exists {
+			c.CommandAlignment = "default"
 		}
 		if _, exists := rawMap["scroll_speed"]; !exists {
 			c.ScrollSpeed = 3

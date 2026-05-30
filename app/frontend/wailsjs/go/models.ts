@@ -24,6 +24,7 @@ export namespace config {
 	    zoom_insights: boolean;
 	    minimal_pwd: boolean;
 	    default_zoom: number;
+	    command_alignment: string;
 	    custom_theme?: Record<string, string>;
 	    terminal_word_wrap: boolean;
 	    file_word_wrap: boolean;
@@ -47,6 +48,7 @@ export namespace config {
 	        this.zoom_insights = source["zoom_insights"];
 	        this.minimal_pwd = source["minimal_pwd"];
 	        this.default_zoom = source["default_zoom"];
+	        this.command_alignment = source["command_alignment"];
 	        this.custom_theme = source["custom_theme"];
 	        this.terminal_word_wrap = source["terminal_word_wrap"];
 	        this.file_word_wrap = source["file_word_wrap"];

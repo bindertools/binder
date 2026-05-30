@@ -29,6 +29,7 @@ interface Props {
   xtermTheme: ITheme
   initialCwd?: string
   defaultZoom?: number
+  commandAlignment?: 'default' | 'top' | 'bottom'
   pluginCommands?: Record<string, InstalledPluginCommand>
   onCwdChange?: (cwd: string) => void
 }
@@ -92,6 +93,7 @@ export default function Terminal({
   xtermTheme,
   initialCwd,
   defaultZoom = 1,
+  commandAlignment = 'default',
   pluginCommands = {},
   onCwdChange,
 }: Props) {
@@ -108,8 +110,33 @@ export default function Terminal({
     if (termRef.current) termRef.current.options.theme = xtermTheme
   }, [xtermTheme])
 
+  // ── command-bar mode ───────────────────────────────────────────────────────
+  // lineRef is shared between xterm input (default) and the input bar (top/bottom).
+  // It must live outside the main useEffect so component-level handlers can read it.
+  const lineRef             = useRef('')
+  const commandAlignmentRef = useRef(commandAlignment)
+  const inputBarRef         = useRef<HTMLInputElement>(null)
+  const handleTabRef        = useRef<() => void>(() => {})
+  const submitRef           = useRef<(val: string) => void>(() => {})
+  const updateMenuRef       = useRef<() => void>(() => {})
+
+  useEffect(() => { commandAlignmentRef.current = commandAlignment }, [commandAlignment])
+
+  const [inputBarValue, setInputBarValue] = useState('')
+  const [isPtyActive,   setIsPtyActive]   = useState(false)
+
+  // Focus management: when a PTY process starts/ends, transfer focus to/from the input bar.
+  useEffect(() => {
+    if (commandAlignment === 'default') return
+    const startEv = `terminal:pty:start:${tabId}`
+    const endEv   = `terminal:pty:end:${tabId}`
+    EventsOn(startEv, () => { setIsPtyActive(true);  termRef.current?.focus() })
+    EventsOn(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
+    return () => { EventsOff(startEv); EventsOff(endEv) }
+  }, [tabId, commandAlignment])
+
   const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
-  const [, setCwd] = useState('')
+  const [cwd, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<MenuState | null>(null)
@@ -323,7 +350,7 @@ export default function Terminal({
       ResizeTerminal(tabId, cols, rows).catch(() => {})
     })
 
-    const lineRef = { current: '' }
+    // lineRef is declared at component scope (useRef) — accessible here and in handlers.
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -374,6 +401,15 @@ export default function Terminal({
     // Slash-command autocomplete: shown when the line starts with '/' and
     // contains no space yet (user is still typing the command name).
     // Returns true when it handled the update (even if it cleared the menu).
+    // Compute menu top/left for bar mode (relative to the input bar DOM element).
+    const barMenuPos = (menuH: number): { top: number; left: number } => {
+      const br = inputBarRef.current!.getBoundingClientRect()
+      const top = commandAlignmentRef.current === 'bottom'
+        ? br.top - menuH - 4
+        : br.bottom + 4
+      return { top, left: br.left + 52 }  // 52 ≈ width of the CWD + ❯ prompt area
+    }
+
     const updateSlashMenu = (): boolean => {
       const line = lineRef.current
       if (!line.startsWith('/') || line.includes(' ')) return false
@@ -381,21 +417,23 @@ export default function Terminal({
       const filtered = buildSlashCommands(pluginCommandsRef.current).filter(c => c.cmd.startsWith(line))
       if (filtered.length === 0) { setMenu(null); return true }
 
-      const { h, w } = cellDims()
-      const rect = container.getBoundingClientRect()
-      const cursorRow = term.buffer.active.cursorY
-      const cursorCol = term.buffer.active.cursorX
-
-      // Align left with the '/' character, not the container edge
-      const slashCol = Math.max(0, cursorCol - line.length)
-      const left = rect.left + 8 + slashCol * w
-
-      // Place below the cursor; flip above if it would overflow the viewport
       const ITEM_H = 26
       const menuH = Math.min(filtered.length * ITEM_H + 8, 220)
-      const below = rect.top + 6 + (cursorRow + 1) * h
-      const above = rect.top + 6 + cursorRow * h - menuH
-      const top = below + menuH > window.innerHeight - 8 ? above : below
+
+      let top: number, left: number
+      if (commandAlignmentRef.current !== 'default' && inputBarRef.current) {
+        ;({ top, left } = barMenuPos(menuH))
+      } else {
+        const { h, w } = cellDims()
+        const rect = container.getBoundingClientRect()
+        const cursorRow = term.buffer.active.cursorY
+        const cursorCol = term.buffer.active.cursorX
+        const slashCol = Math.max(0, cursorCol - line.length)
+        left = rect.left + 8 + slashCol * w
+        const below = rect.top + 6 + (cursorRow + 1) * h
+        const above = rect.top + 6 + cursorRow * h - menuH
+        top = below + menuH > window.innerHeight - 8 ? above : below
+      }
 
       setMenu({
         matches:      filtered.map(c => c.cmd),
@@ -429,19 +467,23 @@ export default function Terminal({
             : matches
           if (filtered.length === 0) { setMenu(null); return }
 
-          const { h, w } = cellDims()
-          const rect = container.getBoundingClientRect()
-          const cursorRow = term.buffer.active.cursorY
-          const cursorCol = term.buffer.active.cursorX
-          const partialStartCol = cursorCol - partial.length
-
-          // Place below the cursor; flip above if it would overflow the viewport
           const ITEM_H = 26
           const menuH = Math.min(filtered.length * ITEM_H + 8, 220)
-          const below = rect.top + 6 + (cursorRow + 1) * h
-          const above = rect.top + 6 + cursorRow * h - menuH
-          const top = below + menuH > window.innerHeight - 8 ? above : below
-          const left = Math.max(rect.left + 8, rect.left + 8 + partialStartCol * w)
+
+          let top: number, left: number
+          if (commandAlignmentRef.current !== 'default' && inputBarRef.current) {
+            ;({ top, left } = barMenuPos(menuH))
+          } else {
+            const { h, w } = cellDims()
+            const rect = container.getBoundingClientRect()
+            const cursorRow = term.buffer.active.cursorY
+            const cursorCol = term.buffer.active.cursorX
+            const partialStartCol = cursorCol - partial.length
+            const below = rect.top + 6 + (cursorRow + 1) * h
+            const above = rect.top + 6 + cursorRow * h - menuH
+            top = below + menuH > window.innerHeight - 8 ? above : below
+            left = Math.max(rect.left + 8, rect.left + 8 + partialStartCol * w)
+          }
 
           setMenu({
             matches: filtered,
@@ -456,40 +498,92 @@ export default function Terminal({
         })
         .catch(() => setMenu(null))
     }
+    updateMenuRef.current = updateMenu
+
+    // Input-bar submit: echo the command to xterm then execute it.
+    // Slash-command plugin interception is replicated here so /plugins etc. still work.
+    submitRef.current = (value: string) => {
+      if (!value.trim()) { term.write('\r\n'); return }
+      const hist = historyRef.current
+      if (hist.length === 0 || hist[hist.length - 1] !== value) {
+        hist.push(value)
+        if (hist.length > 500) hist.shift()
+      }
+      historyIdxRef.current = -1
+      savedInputRef.current = ''
+      lineRef.current = ''
+      if (value.startsWith('/')) {
+        const cmdName = value.slice(1).split(/\s+/)[0].toLowerCase()
+        const pluginCmd = pluginCommandsRef.current[cmdName]
+        if (pluginCmd) {
+          if (pluginCmd.handler) { pluginCmd.handler() }
+          else if (pluginCmd.tabType) {
+            window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
+              detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
+            }))
+          }
+          ExecuteCommand(tabId, '')
+          return
+        }
+      }
+      term.write(value + '\r\n')
+      ExecuteCommand(tabId, value)
+    }
 
     // Apply a specific match from the menu (used by click handler).
     applyMatchRef.current = (match: string) => {
       const m = menuRef.current
       if (!m) return
-      eraseChars(m.appliedLen)
-      term.write(match)
-      lineRef.current = m.prefix + match
-      setMenu(null)
-      term.focus()
+      if (commandAlignmentRef.current !== 'default') {
+        // Input-bar mode: update the bar's value, keep focus on bar
+        const newVal = m.prefix + match
+        setInputBarValue(newVal)
+        lineRef.current = newVal
+        setMenu(null)
+        inputBarRef.current?.focus()
+      } else {
+        eraseChars(m.appliedLen)
+        term.write(match)
+        lineRef.current = m.prefix + match
+        setMenu(null)
+        term.focus()
+      }
     }
 
     // Tab: apply selected match, then advance selection for next Tab.
     const handleTab = () => {
       const m = menuRef.current
       if (!m || m.matches.length === 0) return
+      const isBar = commandAlignmentRef.current !== 'default'
 
       if (!m.applied) {
-        // First Tab: apply the first (selected) match
         const match = m.matches[0]
-        eraseChars(m.appliedLen)
-        term.write(match)
-        lineRef.current = m.prefix + match
+        if (isBar) {
+          const newVal = m.prefix + match
+          setInputBarValue(newVal)
+          lineRef.current = newVal
+        } else {
+          eraseChars(m.appliedLen)
+          term.write(match)
+          lineRef.current = m.prefix + match
+        }
         setMenu({ ...m, applied: true, appliedLen: match.length, selectedIdx: 0 })
       } else {
-        // Subsequent Tab: cycle to next match
         const nextIdx = (m.selectedIdx + 1) % m.matches.length
         const match = m.matches[nextIdx]
-        eraseChars(m.appliedLen)
-        term.write(match)
-        lineRef.current = m.prefix + match
+        if (isBar) {
+          const newVal = m.prefix + match
+          setInputBarValue(newVal)
+          lineRef.current = newVal
+        } else {
+          eraseChars(m.appliedLen)
+          term.write(match)
+          lineRef.current = m.prefix + match
+        }
         setMenu({ ...m, appliedLen: match.length, selectedIdx: nextIdx })
       }
     }
+    handleTabRef.current = handleTab
 
     // ── keyboard ──────────────────────────────────────────────────────────────
 
@@ -568,6 +662,8 @@ export default function Terminal({
 
     const onWindowPaste = (e: ClipboardEvent) => {
       if (!activeRef.current) return
+      // In bar mode the browser handles paste natively in the <input> element
+      if (document.activeElement === inputBarRef.current) return
       e.preventDefault()
       const text = e.clipboardData?.getData('text/plain') ?? ''
       if (!text) return
@@ -584,6 +680,9 @@ export default function Terminal({
     const undoStack: string[] = []
 
     term.onData((data: string) => {
+      // In bar mode xterm is display-only; the input bar handles all typing.
+      if (commandAlignmentRef.current !== 'default' && !ptyModeRef.current) return
+
       // PTY mode: raw pass-through — the process drives the display
       if (ptyModeRef.current) {
         TerminalInput(tabId, data).catch(() => {})
@@ -773,13 +872,111 @@ export default function Terminal({
   useEffect(() => {
     if (active) {
       fitRef.current?.fit()
-      termRef.current?.focus()
+      if (commandAlignment !== 'default' && !isPtyActive) {
+        setTimeout(() => inputBarRef.current?.focus(), 50)
+      } else {
+        termRef.current?.focus()
+      }
     }
-  }, [active])
+  }, [active, commandAlignment, isPtyActive])
+
+  // ── input-bar handlers (bar modes only) ─────────────────────────────────────
+  const handleInputBarChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setInputBarValue(value)
+    lineRef.current = value
+    updateMenuRef.current()
+  }, [])
+
+  const handleInputBarKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const value = inputBarValue
+      setInputBarValue('')
+      setMenu(null)
+      lineRef.current = ''
+      submitRef.current(value)
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      lineRef.current = inputBarValue
+      handleTabRef.current()
+    } else if (e.key === 'Escape') {
+      setMenu(null)
+    } else if (e.ctrlKey && (e.key === 'c' || e.key === 'u')) {
+      e.preventDefault()
+      setInputBarValue('')
+      setMenu(null)
+      lineRef.current = ''
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const hist = historyRef.current
+      if (hist.length === 0) return
+      if (historyIdxRef.current === -1) {
+        savedInputRef.current = inputBarValue
+        historyIdxRef.current = hist.length - 1
+      } else if (historyIdxRef.current > 0) {
+        historyIdxRef.current--
+      } else { return }
+      const v = hist[historyIdxRef.current]
+      setInputBarValue(v); lineRef.current = v
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (historyIdxRef.current === -1) return
+      const hist = historyRef.current
+      if (historyIdxRef.current === hist.length - 1) {
+        historyIdxRef.current = -1
+        const v = savedInputRef.current
+        setInputBarValue(v); lineRef.current = v
+      } else {
+        historyIdxRef.current++
+        const v = hist[historyIdxRef.current]
+        setInputBarValue(v); lineRef.current = v
+      }
+    }
+  }, [inputBarValue]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── render ────────────────────────────────────────────────────────────────────
+  const cwdLabel = React.useMemo(() => {
+    const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
+    if (parts.length === 0) return '~'
+    return parts.length <= 2 ? parts.join('/') : parts.slice(-2).join('/')
+  }, [cwd])
+
+  const inputBar = commandAlignment !== 'default' ? (
+    <div
+      className={[
+        'flex items-center gap-2 px-3 h-9 shrink-0',
+        'bg-[var(--info-bar-bg)] border-[var(--border-color)]',
+        commandAlignment === 'top' ? 'border-b' : 'border-t',
+        isPtyActive ? 'opacity-50 pointer-events-none' : '',
+      ].join(' ')}
+    >
+      <span className="font-mono text-[11px] text-[var(--info-bar-color)] select-none shrink-0 max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap">
+        {cwdLabel}
+      </span>
+      <span className="text-[var(--info-bar-color)] shrink-0 select-none text-[11px] leading-none">❯</span>
+      <input
+        ref={inputBarRef}
+        type="text"
+        value={isPtyActive ? '' : inputBarValue}
+        placeholder={isPtyActive ? 'Running…' : ''}
+        onChange={handleInputBarChange}
+        onKeyDown={handleInputBarKeyDown}
+        disabled={isPtyActive}
+        className="flex-1 min-w-0 bg-transparent border-0 outline-none text-white font-mono text-[13px] placeholder-[var(--tab-color)] caret-white"
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+      />
+    </div>
+  ) : null
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {commandAlignment === 'top' && inputBar}
       <div ref={containerRef} className="flex-1 px-2 py-1.5 bg-[var(--app-bg)] overflow-hidden" />
+      {commandAlignment === 'bottom' && inputBar}
 
       {menu && ReactDOM.createPortal(
         <div

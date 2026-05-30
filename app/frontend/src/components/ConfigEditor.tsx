@@ -232,6 +232,20 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
             </div>
           </div>
 
+          {/* Command line alignment */}
+          <div className="ce-group">
+            <div className="ce-group-label">Command Line Alignment</div>
+            <select
+              className="ce-select"
+              value={cfg.command_alignment || 'default'}
+              onChange={e => setCfg(prev => ({ ...prev, command_alignment: e.target.value as 'default' | 'top' | 'bottom' }))}
+            >
+              <option value="default">Default — type directly in terminal</option>
+              <option value="top">Top — fixed input bar below tab bar</option>
+              <option value="bottom">Bottom — fixed input bar above status bar</option>
+            </select>
+          </div>
+
           {/* Default zoom */}
           <div className="ce-group">
             <div className="ce-group-label">Default Zoom</div>

@@ -117,6 +117,7 @@ export interface AppConfig {
   zoom_insights: boolean
   minimal_pwd: boolean
   default_zoom: number
+  command_alignment: 'default' | 'top' | 'bottom'
   custom_theme?: Record<string, string>
   terminal_word_wrap: boolean
   file_word_wrap: boolean
