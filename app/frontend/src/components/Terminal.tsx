@@ -992,23 +992,6 @@ export default function Terminal({
   const hasTs = !!barPrompt.ts
   const hasBr = !!barPrompt.branch
 
-  // Inline arrow triangle: extends AW px to the right of its parent,
-  // sits on top of the next segment via the parent's z-index.
-  // Arrow triangle: explicit pixel height (not '100%' which may not resolve
-  // when the containing block height isn't explicitly set).
-  // left:'100%' puts it flush against the segment's right edge — no gap.
-  const tri = (color: string): React.CSSProperties => ({
-    position: 'absolute',
-    top: 0,
-    left: '100%',
-    width: AW,
-    height: H,                                   // explicit 36 px, always correct
-    background: color,
-    clipPath: 'polygon(0 0, 0 100%, 100% 50%)', // right-pointing filled triangle
-    zIndex: 10,                                  // above everything in the breadcrumb
-    pointerEvents: 'none',
-  })
-
   const inputBar = commandAlignment !== 'default' ? (
     <div
       className={[
@@ -1018,59 +1001,37 @@ export default function Terminal({
       ].join(' ')}
     >
       {!isPtyActive && (
-        // overflow:visible lets the arrow divs extend right outside each wrapper.
-        // height:H on every wrapper makes top:0/height:H on the arrow reliable.
-        <div style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, overflow: 'visible', height: H }}>
+        <div style={{ display: 'flex', flexShrink: 0, height: H }}>
 
-          {/* Segment 1 — timestamp */}
           {hasTs && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 3, height: H }}>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-                height: H, paddingLeft: 14, paddingRight: 14,
-                fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-              }}>
-                {barPrompt.ts}
-              </div>
-              <div style={tri('rgb(18,48,100)')} />
-            </div>
-          )}
-
-          {/* Segment 2 — path */}
-          <div style={{ position: 'relative', flexShrink: 0, zIndex: 2, height: H }}>
             <div style={{
               display: 'flex', alignItems: 'center',
-              background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-              height: H,
-              paddingLeft: hasTs ? AW + 14 : 14,
-              paddingRight: 14,
+              background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
+              height: H, paddingLeft: 14, paddingRight: 14,
               fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-              maxWidth: 260, overflow: 'hidden',
             }}>
-              {barPath}
-            </div>
-            {hasBr && <div style={tri('rgb(12,60,18)')} />}
-          </div>
-
-          {/* Segment 3 — branch */}
-          {hasBr && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1, height: H }}>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
-                height: H, paddingLeft: AW + 14, paddingRight: 14,
-                fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-              }}>
-                {barPrompt.branch}
-              </div>
-              <div style={tri('rgb(80,38,0)')} />
+              {barPrompt.ts}
             </div>
           )}
-          {/* Tail arrow when branch is absent */}
-          {!hasBr && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1 }}>
-              <div style={tri('rgb(12,60,18)')} />
+
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
+            height: H, paddingLeft: 14, paddingRight: 14,
+            fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+            maxWidth: 260, overflow: 'hidden',
+          }}>
+            {barPath}
+          </div>
+
+          {hasBr && (
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
+              height: H, paddingLeft: 14, paddingRight: 14,
+              fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+            }}>
+              {barPrompt.branch}
             </div>
           )}
         </div>
