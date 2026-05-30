@@ -161,22 +161,45 @@ func (t *Terminal) prompt() string {
 
 	dir, branch, ts := t.promptComponents()
 
+	// ── Powerline prompt ──────────────────────────────────────────────────────
+	// Each segment flows directly into the next via  (the powerline
+	// right-pointing solid arrow).  The arrow's fg matches the preceding
+	// segment's bg, and its bg matches the following segment's bg, creating a
+	// seamless chevron transition identical to image-1 reference design.
+	// Requires a Nerd Font / Powerline-patched font; the font stack in
+	// Terminal.tsx lists CaskaydiaCove NF and Cascadia Code PL first.
+	const pw = "" // U+E0B0 powerline right-solid-arrow
+
+	const tsBg  = "18;48;100"    // deep navy
+	const pathBg = "12;60;18"    // forest green
+	const brBg   = "80;38;0"     // amber
+	const tsFg   = "110;190;255" // sky blue
+	const pathFg = "140;230;110" // lime
+	const brFg   = "255;175;50"  // orange
+
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	// ── Timestamp pill — deep-blue bg, sky-blue text ─────────────────────────
+	// ── Timestamp pill + transition arrow ─────────────────────────────────────
 	if ts != "" {
-		sb.WriteString("\x1b[48;2;18;48;100m\x1b[38;2;110;190;255m " + ts + " \x1b[0m")
-		sb.WriteString("\x1b[38;2;60;60;80m ❯ \x1b[0m")
+		sb.WriteString("\x1b[48;2;" + tsBg + "m\x1b[38;2;" + tsFg + "m " + ts + " \x1b[0m")
+		// Arrow fg = ts-bg, bg = path-bg — no space, seamless
+		sb.WriteString("\x1b[38;2;" + tsBg + "m\x1b[48;2;" + pathBg + "m" + pw + "\x1b[0m")
 	}
 
-	// ── Path pill — forest bg, lime text ──────────────────────────────────────
-	sb.WriteString("\x1b[48;2;12;60;18m\x1b[38;2;140;230;110m " + dir + " \x1b[0m")
+	// ── Path pill ─────────────────────────────────────────────────────────────
+	sb.WriteString("\x1b[48;2;" + pathBg + "m\x1b[38;2;" + pathFg + "m " + dir + " \x1b[0m")
 
-	// ── Branch pill — amber bg, orange text ───────────────────────────────────
+	// ── Branch pill (optional) + tail arrow ───────────────────────────────────
 	if branch != "" {
-		sb.WriteString("\x1b[38;2;60;60;80m ❯ \x1b[0m")
-		sb.WriteString("\x1b[48;2;80;38;0m\x1b[38;2;255;175;50m " + branch + " \x1b[0m")
+		// Arrow path → branch
+		sb.WriteString("\x1b[38;2;" + pathBg + "m\x1b[48;2;" + brBg + "m" + pw + "\x1b[0m")
+		sb.WriteString("\x1b[48;2;" + brBg + "m\x1b[38;2;" + brFg + "m " + branch + " \x1b[0m")
+		// Tail arrow: fg = branch-bg, bg = terminal default (transparent)
+		sb.WriteString("\x1b[38;2;" + brBg + "m" + pw + "\x1b[0m")
+	} else {
+		// Tail arrow from path: fg = path-bg
+		sb.WriteString("\x1b[38;2;" + pathBg + "m" + pw + "\x1b[0m")
 	}
 
 	// ── Prompt symbol ─────────────────────────────────────────────────────────
