@@ -232,10 +232,13 @@ func (a *App) GetCppBackendStatus() string {
 // ─── Fullscreen Explorer ──────────────────────────────────────────────────────
 
 func (a *App) ExplorerOpen(dir string) (fullscreen.FileNode, error) {
+	if a.cpp == nil {
+		return a.explorer.OpenDirectory(dir)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.tree", "id": a.cppID(), "path": dir}, 30000)
 	if err != nil {
-		return fullscreen.FileNode{}, err
+		return a.explorer.OpenDirectory(dir)
 	}
 	a.mu.Lock()
 	a.cppRootDir = dir
@@ -244,6 +247,9 @@ func (a *App) ExplorerOpen(dir string) (fullscreen.FileNode, error) {
 }
 
 func (a *App) ExplorerGetTree() (fullscreen.FileNode, error) {
+	if a.cpp == nil {
+		return a.explorer.GetTree()
+	}
 	a.mu.Lock()
 	rootDir := a.cppRootDir
 	a.mu.Unlock()
@@ -253,21 +259,27 @@ func (a *App) ExplorerGetTree() (fullscreen.FileNode, error) {
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.tree", "id": a.cppID(), "path": rootDir}, 30000)
 	if err != nil {
-		return fullscreen.FileNode{}, err
+		return a.explorer.GetTree()
 	}
 	return respToFileNode(resp)
 }
 
 func (a *App) ExplorerGetFile(path string) (string, error) {
+	if a.cpp == nil {
+		return a.explorer.GetFileContent(path)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
 	if err != nil {
-		return "", err
+		return a.explorer.GetFileContent(path)
 	}
 	return decodeB64Resp(resp)
 }
 
 func (a *App) ExplorerSaveFile(path string, content string) error {
+	if a.cpp == nil {
+		return a.explorer.SaveFile(path, content)
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type":    "fs.writefile",
 		"id":      a.cppID(),
@@ -275,7 +287,7 @@ func (a *App) ExplorerSaveFile(path string, content string) error {
 		"content": base64.StdEncoding.EncodeToString([]byte(content)),
 	}, 10000)
 	if err != nil {
-		return err
+		return a.explorer.SaveFile(path, content)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.writefile failed")
@@ -284,10 +296,13 @@ func (a *App) ExplorerSaveFile(path string, content string) error {
 }
 
 func (a *App) ExplorerCreateFile(path string) error {
+	if a.cpp == nil {
+		return a.explorer.CreateFile(path)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.create", "id": a.cppID(), "path": path}, 5000)
 	if err != nil {
-		return err
+		return a.explorer.CreateFile(path)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.create failed")
@@ -296,10 +311,13 @@ func (a *App) ExplorerCreateFile(path string) error {
 }
 
 func (a *App) ExplorerCreateDir(path string) error {
+	if a.cpp == nil {
+		return a.explorer.CreateDirectory(path)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.mkdir", "id": a.cppID(), "path": path}, 5000)
 	if err != nil {
-		return err
+		return a.explorer.CreateDirectory(path)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.mkdir failed")
@@ -308,12 +326,15 @@ func (a *App) ExplorerCreateDir(path string) error {
 }
 
 func (a *App) ExplorerRename(oldPath string, newPath string) error {
+	if a.cpp == nil {
+		return a.explorer.Rename(oldPath, newPath)
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type": "fs.rename", "id": a.cppID(),
 		"from": oldPath, "to": newPath,
 	}, 5000)
 	if err != nil {
-		return err
+		return a.explorer.Rename(oldPath, newPath)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.rename failed")
@@ -322,10 +343,13 @@ func (a *App) ExplorerRename(oldPath string, newPath string) error {
 }
 
 func (a *App) ExplorerDelete(path string) error {
+	if a.cpp == nil {
+		return a.explorer.Delete(path)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
 	if err != nil {
-		return err
+		return a.explorer.Delete(path)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.delete failed")
@@ -334,12 +358,15 @@ func (a *App) ExplorerDelete(path string) error {
 }
 
 func (a *App) ExplorerMove(src string, dest string) error {
+	if a.cpp == nil {
+		return a.explorer.MoveFile(src, dest)
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type": "fs.rename", "id": a.cppID(),
 		"from": src, "to": dest,
 	}, 5000)
 	if err != nil {
-		return err
+		return a.explorer.MoveFile(src, dest)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.rename failed")
@@ -441,15 +468,23 @@ func (a *App) ResizeTerminal(id string, cols int, rows int) {
 // ─── File & editor ────────────────────────────────────────────────────────────
 
 func (a *App) ReadFile(path string) (string, error) {
+	if a.cpp == nil {
+		data, err := os.ReadFile(path)
+		return string(data), err
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.readfile", "id": a.cppID(), "path": path}, 30000)
 	if err != nil {
-		return "", err
+		data, err2 := os.ReadFile(path)
+		return string(data), err2
 	}
 	return decodeB64Resp(resp)
 }
 
 func (a *App) WriteFile(path string, content string) error {
+	if a.cpp == nil {
+		return os.WriteFile(path, []byte(content), 0644)
+	}
 	resp, err := a.cpp.RoundTrip(map[string]any{
 		"type":    "fs.writefile",
 		"id":      a.cppID(),
@@ -457,7 +492,7 @@ func (a *App) WriteFile(path string, content string) error {
 		"content": base64.StdEncoding.EncodeToString([]byte(content)),
 	}, 10000)
 	if err != nil {
-		return err
+		return os.WriteFile(path, []byte(content), 0644)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.writefile failed")
@@ -466,10 +501,13 @@ func (a *App) WriteFile(path string, content string) error {
 }
 
 func (a *App) DeleteFile(path string) error {
+	if a.cpp == nil {
+		return os.Remove(path)
+	}
 	resp, err := a.cpp.RoundTrip(
 		map[string]any{"type": "fs.delete", "id": a.cppID(), "path": path}, 5000)
 	if err != nil {
-		return err
+		return os.Remove(path)
 	}
 	if !respOK(resp) {
 		return fmt.Errorf("fs.delete failed")
