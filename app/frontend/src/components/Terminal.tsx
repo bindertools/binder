@@ -980,43 +980,86 @@ export default function Terminal({
   // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
   const barPath = barPrompt.path || cwdLabel
 
+  // ── CSS breadcrumb colour palette (must match terminal.go prompt colours) ────
+  const SEG = {
+    ts:   { bg: 'rgb(18,48,100)',   fg: 'rgb(110,190,255)' },
+    path: { bg: 'rgb(12,60,18)',    fg: 'rgb(140,230,110)' },
+    br:   { bg: 'rgb(80,38,0)',     fg: 'rgb(255,175,50)'  },
+  }
+  // Arrow: SVG right-pointing triangle whose fill = left segment bg,
+  // whose element background = right segment bg (or transparent for tail).
+  // This creates the seamless chevron join — pure CSS/SVG, zero characters.
+  const H = 36 // bar height px (h-9)
+  const AW = 11 // arrow width px
+  const Arrow = ({ fill, nextBg = 'transparent' }: { fill: string; nextBg?: string }) => (
+    <svg width={AW} height={H} viewBox={`0 0 ${AW} ${H}`}
+         style={{ display: 'block', background: nextBg, flexShrink: 0 }}>
+      <polygon points={`0,0 0,${H} ${AW},${H / 2}`} fill={fill} />
+    </svg>
+  )
+
   const inputBar = commandAlignment !== 'default' ? (
     <div
       className={[
-        'flex items-center gap-2 px-3 h-9 shrink-0',
-        'bg-[var(--info-bar-bg)] border-[var(--border-color)]',
+        'flex items-stretch h-9 shrink-0 overflow-hidden',
+        'border-[var(--border-color)]',
         commandAlignment === 'top' ? 'border-b' : 'border-t',
-        isPtyActive ? 'opacity-50 pointer-events-none' : '',
       ].join(' ')}
     >
-      {barPrompt.ts && (
-        <span className="font-mono text-[10.5px] select-none shrink-0 whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(0,36,100,0.6)', color: '#5AC8FA' }}>
-          {barPrompt.ts}
-        </span>
+      {/* ── breadcrumb segments (CSS boxes + SVG arrows, no characters) ───── */}
+      {!isPtyActive ? (
+        <div className="flex items-stretch shrink-0">
+          {barPrompt.ts && (
+            <>
+              <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none"
+                   style={{ background: SEG.ts.bg, color: SEG.ts.fg }}>
+                {barPrompt.ts}
+              </div>
+              <Arrow fill={SEG.ts.bg} nextBg={SEG.path.bg} />
+            </>
+          )}
+
+          <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none max-w-[220px] overflow-hidden"
+               style={{ background: SEG.path.bg, color: SEG.path.fg }}>
+            {barPath}
+          </div>
+
+          {barPrompt.branch ? (
+            <>
+              <Arrow fill={SEG.path.bg} nextBg={SEG.br.bg} />
+              <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none"
+                   style={{ background: SEG.br.bg, color: SEG.br.fg }}>
+                {barPrompt.branch}
+              </div>
+              <Arrow fill={SEG.br.bg} />
+            </>
+          ) : (
+            <Arrow fill={SEG.path.bg} />
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center px-3 text-[11px] font-mono text-[var(--tab-color)] opacity-50 italic select-none shrink-0">
+          Running…
+        </div>
       )}
-      <span className="font-mono text-[10.5px] select-none shrink-0 max-w-[160px] overflow-hidden text-ellipsis whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(0,60,0,0.6)', color: '#57c653' }}>
-        {barPath}
-      </span>
-      {barPrompt.branch && (
-        <span className="font-mono text-[10.5px] select-none shrink-0 whitespace-nowrap px-1.5 py-px rounded-sm" style={{ background: 'rgba(80,0,0,0.6)', color: '#FF9F0A' }}>
-          {barPrompt.branch}
-        </span>
-      )}
-      <span className="text-[var(--info-bar-color)] shrink-0 select-none text-[11px] leading-none">❯</span>
-      <input
-        ref={inputBarRef}
-        type="text"
-        value={isPtyActive ? '' : inputBarValue}
-        placeholder={isPtyActive ? 'Running…' : ''}
-        onChange={handleInputBarChange}
-        onKeyDown={handleInputBarKeyDown}
-        disabled={isPtyActive}
-        className="flex-1 min-w-0 bg-transparent border-0 outline-none text-white font-mono text-[13px] placeholder-[var(--tab-color)] caret-white"
-        spellCheck={false}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-      />
+
+      {/* ── command input ────────────────────────────────────────────────── */}
+      <div className="flex items-center flex-1 min-w-0 px-3">
+        <input
+          ref={inputBarRef}
+          type="text"
+          value={isPtyActive ? '' : inputBarValue}
+          placeholder={isPtyActive ? '' : ''}
+          onChange={handleInputBarChange}
+          onKeyDown={handleInputBarKeyDown}
+          disabled={isPtyActive}
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-white font-mono text-[13px] caret-white"
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+        />
+      </div>
     </div>
   ) : null
 
