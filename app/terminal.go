@@ -39,31 +39,18 @@ type Terminal struct {
 	mu        sync.Mutex
 	process   *os.Process    // non-nil while an external command is running
 	stdinPipe io.WriteCloser // subprocess stdin; non-nil when process != nil
-	alignment string         // "default" | "top" | "bottom" — mirrors the frontend setting
 }
 
-func NewTerminal(ctx context.Context, id string, initialCwd string, alignment string) *Terminal {
+func NewTerminal(ctx context.Context, id string, initialCwd string) *Terminal {
 	dir := term.DefaultDir(config.Get().DefaultDirectory)
 	if initialCwd != "" {
 		if info, err := os.Stat(initialCwd); err == nil && info.IsDir() {
 			dir = initialCwd
 		}
 	}
-	t := &Terminal{id: id, cwd: dir, ctx: ctx, alignment: alignment}
-	go t.write(t.prompt()) // prompt() suppresses xterm output in bar mode
+	t := &Terminal{id: id, cwd: dir, ctx: ctx}
+	go t.write(t.prompt()) // reads alignment from config; suppresses xterm in bar mode
 	return t
-}
-
-// SetAlignment updates the terminal's command-line alignment at runtime so that
-// subsequent prompt() calls are routed correctly without restarting the session.
-func (t *Terminal) SetAlignment(alignment string) {
-	t.mu.Lock()
-	t.alignment = alignment
-	t.mu.Unlock()
-	// Immediately push the current prompt data to the bar if switching into bar mode.
-	if alignment != "" && alignment != "default" {
-		go t.emitBarPrompt()
-	}
 }
 
 // emitCwd broadcasts the current working directory to the frontend bar.
@@ -158,14 +145,12 @@ func (t *Terminal) emitBarPrompt() {
 }
 
 // prompt builds the ANSI-formatted prompt string for xterm.
-// In top/bottom alignment mode it returns "" (no xterm output) and instead
-// fires emitBarPrompt so the frontend input bar updates its display.
+// In top/bottom alignment mode it returns "" (nothing written to xterm) and
+// instead fires emitBarPrompt so the frontend input bar updates its display.
+// Alignment is read live from config.Get() so there is no per-terminal state
+// to keep in sync — a config change takes effect on the very next command.
 func (t *Terminal) prompt() string {
-	t.mu.Lock()
-	alignment := t.alignment
-	t.mu.Unlock()
-
-	if alignment != "" && alignment != "default" {
+	if a := config.Get().CommandAlignment; a != "" && a != "default" {
 		go t.emitBarPrompt()
 		return ""
 	}

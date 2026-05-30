@@ -390,22 +390,28 @@ func (a *App) ExplorerReveal(path string) error {
 
 // ─── Terminal management ──────────────────────────────────────────────────────
 
-func (a *App) CreateTerminal(id string, initialCwd string, alignment string) error {
-	t := NewTerminal(a.ctx, id, initialCwd, alignment)
+func (a *App) CreateTerminal(id string, initialCwd string) error {
+	t := NewTerminal(a.ctx, id, initialCwd)
 	a.mu.Lock()
 	a.terminals[id] = t
 	a.mu.Unlock()
 	return nil
 }
 
-// SetTerminalAlignment updates the alignment of a running terminal session so
-// that prompt() routes its output correctly without restarting the terminal.
+// SetTerminalAlignment is called by the frontend when the user switches
+// alignment mode. prompt() reads alignment from config.Get() directly, so
+// no per-terminal state is needed here. This call's only purpose is to
+// immediately push fresh bar-prompt data so the input bar updates without
+// waiting for the next command.
 func (a *App) SetTerminalAlignment(id string, alignment string) {
+	if alignment == "" || alignment == "default" {
+		return
+	}
 	a.mu.Lock()
 	t, ok := a.terminals[id]
 	a.mu.Unlock()
 	if ok {
-		t.SetAlignment(alignment)
+		go t.emitBarPrompt()
 	}
 }
 

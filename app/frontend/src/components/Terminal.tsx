@@ -349,7 +349,7 @@ export default function Terminal({
     }
     container.addEventListener('wheel', handleWheel, { passive: false })
 
-    CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
+    CreateTerminal(tabId, initialCwd ?? '').catch(() => {})
 
     const outEvent = `terminal:output:${tabId}`
     EventsOn(outEvent, (data: string) => { term.write(data) })
