@@ -1,5 +1,6 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import TabsMenu from './components/TabsMenu'
+import SplitModal from './components/SplitModal'
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
@@ -292,7 +293,8 @@ export default function App() {
   const [splitEnabled,  setSplitEnabled]  = useState(false)
   const [splitRatio,    setSplitRatio]    = useState(0.5)
   const [searchOpen,    setSearchOpen]    = useState(false)
-  const [tabsMenuOpen,  setTabsMenuOpen]  = useState(false)
+  const [tabsMenuOpen,   setTabsMenuOpen]   = useState(false)
+  const [splitModalOpen, setSplitModalOpen] = useState(false)
   const [terminalCwds,  setTerminalCwds]  = useState<Record<string, string>>({})
   // tabType → Plugin; rebuilt whenever a plugin is installed/uninstalled
   const [plugins, setPlugins] = useState<Record<string, Plugin>>({})
@@ -691,9 +693,11 @@ export default function App() {
 
   const searchPlaceholder = useMemo(() => {
     if (!activeTerminalId) return 'Search…'
-    const cwd = terminalCwds[activeTerminalId]
-    if (!cwd) return 'Search…'
-    return `Search inside of ${cwd.replace(/\\/g, '/')}`
+    const raw = terminalCwds[activeTerminalId]
+    if (!raw) return 'Search…'
+    // Show the full absolute path with forward slashes
+    const full = raw.replace(/\\/g, '/')
+    return `Search inside  ${full}`
   }, [activeTerminalId, terminalCwds])
 
   // ── header action handlers (must follow handleLeft/Right/etc.) ────────────────
@@ -709,15 +713,11 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTerminalId, terminalCwds])
 
-  const handleSplitToggle = useCallback(() => {
-    if (splitEnabled) {
-      setSplitEnabled(false)
-    } else if (rightTabs.length > 0 && rightActiveId) {
-      setSplitEnabled(true)
-    } else {
-      handleRightNewTerminal()
-    }
-  }, [splitEnabled, rightTabs, rightActiveId, handleRightNewTerminal])
+  // Assign a tab to a panel from the split modal
+  const handleTabAssign = useCallback((tabId: string, panel: 'left' | 'right') => {
+    if (panel === 'right') handleMoveRight(tabId)
+    else handleMoveLeft(tabId)
+  }, [handleMoveRight, handleMoveLeft])
 
   const handleSelectFromMenu = useCallback((id: string) => {
     const panel = tabPanels[id] ?? 'left'
@@ -939,19 +939,19 @@ export default function App() {
             </button>
           )}
 
-          {/* Settings */}
+          {/* Settings — proper gear/cog icon */}
           <button className={iconBtnBase} onClick={handleOpenSettings} title="Settings (/config)">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round">
-              <circle cx="8" cy="8" r="2.5"/>
-              <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
             </svg>
           </button>
 
-          {/* Split view */}
+          {/* Split view — opens layout modal */}
           <button
             className={iconBtnBase + (splitEnabled ? ' text-accent' : '')}
-            onClick={handleSplitToggle}
-            title={splitEnabled ? 'Close split view' : 'Split view — open a second terminal'}
+            onClick={() => setSplitModalOpen(true)}
+            title="Arrange split view layout"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <rect x="1" y="1" width="6" height="6" rx="1.2"/>
@@ -992,6 +992,21 @@ export default function App() {
           </div>
         </div>{/* end right group */}
       </div>{/* end header */}
+
+      {/* ── Split layout modal ───────────────────────────────────────────────── */}
+      <SplitModal
+        open={splitModalOpen}
+        tabs={tabs}
+        tabPanels={tabPanels}
+        splitEnabled={splitEnabled}
+        terminalCwds={terminalCwds}
+        onAssign={handleTabAssign}
+        onSetSplit={enabled => {
+          setSplitEnabled(enabled)
+          if (enabled && rightTabs.length === 0) handleRightNewTerminal()
+        }}
+        onDismiss={() => setSplitModalOpen(false)}
+      />
 
       {/* ── Tabs drawer (hamburger menu) ──────────────────────────────────────── */}
       <TabsMenu

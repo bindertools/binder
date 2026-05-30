@@ -164,17 +164,19 @@ func (t *Terminal) prompt() string {
 	var sb strings.Builder
 	sb.WriteString("\r\n")
 
-	// ── Timestamp pill — dark-blue background, light-blue text ───────────────
+	// ── Timestamp pill — deep-blue bg, sky-blue text ─────────────────────────
 	if ts != "" {
-		sb.WriteString("\x1b[48;5;17;38;5;75m " + ts + " \x1b[0m ")
+		sb.WriteString("\x1b[48;2;18;48;100m\x1b[38;2;110;190;255m " + ts + " \x1b[0m")
+		sb.WriteString("\x1b[38;2;60;60;80m ❯ \x1b[0m")
 	}
 
-	// ── Path pill — dark-green background, bright-green text ─────────────────
-	sb.WriteString("\x1b[48;5;22;38;5;76m " + dir + " \x1b[0m")
+	// ── Path pill — forest bg, lime text ──────────────────────────────────────
+	sb.WriteString("\x1b[48;2;12;60;18m\x1b[38;2;140;230;110m " + dir + " \x1b[0m")
 
-	// ── Branch pill — dark-red background, orange text ────────────────────────
+	// ── Branch pill — amber bg, orange text ───────────────────────────────────
 	if branch != "" {
-		sb.WriteString(" \x1b[48;5;88;38;5;208m " + branch + " \x1b[0m")
+		sb.WriteString("\x1b[38;2;60;60;80m ❯ \x1b[0m")
+		sb.WriteString("\x1b[48;2;80;38;0m\x1b[38;2;255;175;50m " + branch + " \x1b[0m")
 	}
 
 	// ── Prompt symbol ─────────────────────────────────────────────────────────
