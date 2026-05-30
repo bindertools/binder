@@ -164,17 +164,18 @@ func (t *Terminal) prompt() string {
 	var sb strings.Builder
 	sb.WriteString("\r\n\x1b[0m")
 
-	// Timestamp pill
+	// Timestamp pill — no trailing space after reset (that space is on the dark
+	// terminal background and creates a visible gap between the pills)
 	if ts != "" {
-		sb.WriteString("\x1b[48;2;18;48;100m\x1b[38;2;110;190;255m " + ts + " \x1b[0m ")
+		sb.WriteString("\x1b[48;2;18;48;100m\x1b[38;2;110;190;255m " + ts + " \x1b[0m")
 	}
 
-	// Path pill
+	// Path pill — starts immediately after timestamp (no leading dark-bg space)
 	sb.WriteString("\x1b[48;2;12;60;18m\x1b[38;2;140;230;110m " + dir + " \x1b[0m")
 
-	// Branch pill
+	// Branch pill — no leading dark-bg space before the coloured background
 	if branch != "" {
-		sb.WriteString(" \x1b[48;2;80;38;0m\x1b[38;2;255;175;50m " + branch + " \x1b[0m")
+		sb.WriteString("\x1b[48;2;80;38;0m\x1b[38;2;255;175;50m " + branch + " \x1b[0m")
 	}
 
 	sb.WriteString(" \x1b[38;5;246m❯\x1b[0m ")
