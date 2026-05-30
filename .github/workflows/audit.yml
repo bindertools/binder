@@ -1,0 +1,135 @@
+name: Dependency & Secret Audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly full scan — Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write  # for uploading SARIF results
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Go vulnerability scanner ──────────────────────────────────────────────────
+  govulncheck:
+    name: Go — govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+        working-directory: app
+
+  # ── npm audit — app frontend ──────────────────────────────────────────────────
+  npm-audit-app:
+    name: npm audit — app/frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: Run npm audit
+        # Fail only on high or critical vulnerabilities
+        run: npm audit --audit-level=high
+        working-directory: app/frontend
+
+  # ── npm audit — installer frontend ───────────────────────────────────────────
+  npm-audit-installer:
+    name: npm audit — installer/frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: installer/frontend
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        working-directory: installer/frontend
+
+  # ── Secret / credential scanning ─────────────────────────────────────────────
+  gitleaks:
+    name: Secret scan — Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can scan all commits in a PR
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.21.2"
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Scan full repository history
+        run: gitleaks detect --source . --exit-code 1 --redact
+
+      - name: Scan commits introduced by this run
+        if: github.event_name == 'pull_request'
+        run: |
+          gitleaks detect \
+            --source . \
+            --log-opts "origin/${{ github.base_ref }}..HEAD" \
+            --exit-code 1 \
+            --redact
+
+  # ── OSV vulnerability scan (cross-ecosystem) ──────────────────────────────────
+  osv-scan:
+    name: OSV — cross-ecosystem vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action@v2
+        with:
+          scan-args: |-
+            --recursive
+            --skip-git
+            .

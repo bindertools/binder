@@ -1,0 +1,92 @@
+name: Build Matrix
+
+# Compile the Go binary on every platform on each PR.
+# Catches Windows-only vs Unix-only compilation errors before merge.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: build-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  compile:
+    name: Compile — ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            shell: pwsh
+            npm: npm.cmd
+            go-cache: ${{ github.workspace }}\.cache\go-build
+          - os: ubuntu-latest
+            shell: bash
+            npm: npm
+            go-cache: /home/runner/.cache/go-build
+          - os: macos-latest
+            shell: bash
+            npm: npm
+            go-cache: /Users/runner/.cache/go-build
+
+    runs-on: ${{ matrix.os }}
+    env:
+      GOCACHE: ${{ matrix.go-cache }}
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # The Go package embeds frontend/dist — must exist before go build
+      - name: Install frontend dependencies
+        run: ${{ matrix.npm }} ci
+        working-directory: app/frontend
+
+      - name: Build frontend
+        run: ${{ matrix.npm }} run build
+        working-directory: app/frontend
+
+      - name: go build (compile check)
+        run: go build ./...
+        working-directory: app
+
+      - name: go vet (quick static check)
+        run: go vet ./...
+        working-directory: app
+
+      - name: go test (unit tests)
+        run: go test ./... -timeout 60s
+        working-directory: app

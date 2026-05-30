@@ -1,0 +1,108 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Go — golangci-lint ────────────────────────────────────────────────────────
+  go-lint:
+    name: Go — golangci-lint
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      GOCACHE: ${{ github.workspace }}\.cache\go-build
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+
+      # Go embeds frontend/dist at compile time — must be built before analysis
+      - name: Install frontend dependencies
+        run: npm.cmd ci
+        working-directory: app/frontend
+
+      - name: Build frontend
+        run: npm.cmd run build
+        working-directory: app/frontend
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: app
+          args: --config ../.golangci.yml --timeout 15m
+
+  # ── TypeScript — type check ───────────────────────────────────────────────────
+  ts-typecheck:
+    name: TypeScript — tsc --noEmit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: Type check
+        run: npx tsc --noEmit
+        working-directory: app/frontend
+
+  # ── TypeScript — ESLint ───────────────────────────────────────────────────────
+  ts-eslint:
+    name: TypeScript — ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: ESLint
+        # --max-warnings 0 treats warnings as errors; lower to a number if the
+        # existing codebase has outstanding warnings you're working through.
+        run: npx eslint src --max-warnings 20
+        working-directory: app/frontend
