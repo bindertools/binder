@@ -994,18 +994,19 @@ export default function Terminal({
 
   // Inline arrow triangle: extends AW px to the right of its parent,
   // sits on top of the next segment via the parent's z-index.
-  // Arrow: a full-height div clipped to a right-pointing triangle.
-  // height:'100%' fills the wrapper exactly. clip-path cuts it to the shape.
-  // No zero-height border tricks — those caused the sizing and gap issues.
+  // Arrow triangle: explicit pixel height (not '100%' which may not resolve
+  // when the containing block height isn't explicitly set).
+  // left:'100%' puts it flush against the segment's right edge — no gap.
   const tri = (color: string): React.CSSProperties => ({
     position: 'absolute',
     top: 0,
-    left: `calc(100% - 1px)`, // -1px closes any sub-pixel rendering gap
+    left: '100%',
     width: AW,
-    height: '100%',
+    height: H,                                   // explicit 36 px, always correct
     background: color,
-    clipPath: 'polygon(0 0, 0 100%, 100% 50%)',
-    zIndex: 1,
+    clipPath: 'polygon(0 0, 0 100%, 100% 50%)', // right-pointing filled triangle
+    zIndex: 10,                                  // above everything in the breadcrumb
+    pointerEvents: 'none',
   })
 
   const inputBar = commandAlignment !== 'default' ? (
@@ -1017,44 +1018,52 @@ export default function Terminal({
       ].join(' ')}
     >
       {!isPtyActive && (
-        <div className="flex items-stretch shrink-0" style={{ overflow: 'visible' }}>
+        // overflow:visible lets the arrow divs extend right outside each wrapper.
+        // height:H on every wrapper makes top:0/height:H on the arrow reliable.
+        <div style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, overflow: 'visible', height: H }}>
 
           {/* Segment 1 — timestamp */}
           {hasTs && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 3 }}>
-              <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
-                   style={{ background: 'rgb(18,48,100)', color: 'rgb(110,190,255)', height: H, paddingLeft: 14, paddingRight: 14 }}>
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 3, height: H }}>
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
+                height: H, paddingLeft: 14, paddingRight: 14,
+                fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+              }}>
                 {barPrompt.ts}
               </div>
-              {/* Arrow extends right over the path segment */}
               <div style={tri('rgb(18,48,100)')} />
             </div>
           )}
 
           {/* Segment 2 — path */}
-          <div style={{ position: 'relative', flexShrink: 0, zIndex: 2 }}>
-            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
-                 style={{
-                   background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-                   height: H,
-                   paddingLeft: hasTs ? AW + 14 : 14,
-                   paddingRight: 14,
-                   maxWidth: 260, overflow: 'hidden',
-                 }}>
+          <div style={{ position: 'relative', flexShrink: 0, zIndex: 2, height: H }}>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
+              height: H,
+              paddingLeft: hasTs ? AW + 14 : 14,
+              paddingRight: 14,
+              fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+              maxWidth: 260, overflow: 'hidden',
+            }}>
               {barPath}
             </div>
-            {/* Arrow extends right over the branch segment (if exists) */}
             {hasBr && <div style={tri('rgb(12,60,18)')} />}
           </div>
 
           {/* Segment 3 — branch */}
           {hasBr && (
-            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1 }}>
-              <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none"
-                   style={{ background: 'rgb(80,38,0)', color: 'rgb(255,175,50)', height: H, paddingLeft: AW + 14, paddingRight: 14 }}>
+            <div style={{ position: 'relative', flexShrink: 0, zIndex: 1, height: H }}>
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
+                height: H, paddingLeft: AW + 14, paddingRight: 14,
+                fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+              }}>
                 {barPrompt.branch}
               </div>
-              {/* Tail arrow — transparent halves show bar background */}
               <div style={tri('rgb(80,38,0)')} />
             </div>
           )}
