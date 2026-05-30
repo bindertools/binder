@@ -980,76 +980,83 @@ export default function Terminal({
   // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
   const barPath = barPrompt.path || cwdLabel
 
-  // ── CSS breadcrumb colour palette (must match terminal.go prompt colours) ────
-  const SEG = {
-    ts:   { bg: 'rgb(18,48,100)',   fg: 'rgb(110,190,255)' },
-    path: { bg: 'rgb(12,60,18)',    fg: 'rgb(140,230,110)' },
-    br:   { bg: 'rgb(80,38,0)',     fg: 'rgb(255,175,50)'  },
-  }
-  // Arrow: SVG right-pointing triangle whose fill = left segment bg,
-  // whose element background = right segment bg (or transparent for tail).
-  // This creates the seamless chevron join — pure CSS/SVG, zero characters.
-  const H = 36 // bar height px (h-9)
-  const AW = 11 // arrow width px
-  const Arrow = ({ fill, nextBg = 'transparent' }: { fill: string; nextBg?: string }) => (
-    <svg width={AW} height={H} viewBox={`0 0 ${AW} ${H}`}
-         style={{ display: 'block', background: nextBg, flexShrink: 0 }}>
-      <polygon points={`0,0 0,${H} ${AW},${H / 2}`} fill={fill} />
-    </svg>
-  )
+  // ── Breadcrumb bar — clip-path chevron segments ───────────────────────────
+  // Each segment is a <div> shaped into a right-pointing pentagon via CSS
+  // clip-path.  Segments overlap each other by ARROW_PX using negative
+  // margin-left; z-index puts left segments on top so the pointed tip of
+  // each segment is visible against the background of the next.
+  // No SVG, no Unicode characters — pure CSS geometry.
+  const ARROW_PX = 14
+  const CLIP_FIRST  = `polygon(0 0,calc(100% - ${ARROW_PX}px) 0,100% 50%,calc(100% - ${ARROW_PX}px) 100%,0 100%)`
+  const CLIP_MIDDLE = `polygon(${ARROW_PX}px 0,calc(100% - ${ARROW_PX}px) 0,100% 50%,calc(100% - ${ARROW_PX}px) 100%,${ARROW_PX}px 100%,0 50%)`
 
   const inputBar = commandAlignment !== 'default' ? (
     <div
       className={[
-        'flex items-stretch h-9 shrink-0 overflow-hidden',
-        'border-[var(--border-color)]',
+        'flex items-stretch h-9 shrink-0',
         commandAlignment === 'top' ? 'border-b' : 'border-t',
+        'border-[var(--border-color)]',
       ].join(' ')}
     >
-      {/* ── breadcrumb segments (CSS boxes + SVG arrows, no characters) ───── */}
-      {!isPtyActive ? (
+      {/* ── chevron breadcrumb ──────────────────────────────────────────── */}
+      {!isPtyActive && (
         <div className="flex items-stretch shrink-0">
+
+          {/* Timestamp */}
           {barPrompt.ts && (
-            <>
-              <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none"
-                   style={{ background: SEG.ts.bg, color: SEG.ts.fg }}>
-                {barPrompt.ts}
-              </div>
-              <Arrow fill={SEG.ts.bg} nextBg={SEG.path.bg} />
-            </>
+            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
+                 style={{
+                   background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
+                   clipPath: CLIP_FIRST,
+                   paddingLeft: 12, paddingRight: ARROW_PX + 10,
+                   position: 'relative', zIndex: 3,
+                 }}>
+              {barPrompt.ts}
+            </div>
           )}
 
-          <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none max-w-[220px] overflow-hidden"
-               style={{ background: SEG.path.bg, color: SEG.path.fg }}>
+          {/* Path */}
+          <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
+               style={{
+                 background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
+                 clipPath: barPrompt.ts ? CLIP_MIDDLE : CLIP_FIRST,
+                 paddingLeft: barPrompt.ts ? ARROW_PX + 10 : 12,
+                 paddingRight: ARROW_PX + 10,
+                 marginLeft: barPrompt.ts ? -ARROW_PX : 0,
+                 position: 'relative', zIndex: 2,
+                 maxWidth: 240, overflow: 'hidden',
+               }}>
             {barPath}
           </div>
 
-          {barPrompt.branch ? (
-            <>
-              <Arrow fill={SEG.path.bg} nextBg={SEG.br.bg} />
-              <div className="flex items-center px-3 font-mono text-[11px] whitespace-nowrap select-none"
-                   style={{ background: SEG.br.bg, color: SEG.br.fg }}>
-                {barPrompt.branch}
-              </div>
-              <Arrow fill={SEG.br.bg} />
-            </>
-          ) : (
-            <Arrow fill={SEG.path.bg} />
+          {/* Branch */}
+          {barPrompt.branch && (
+            <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
+                 style={{
+                   background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
+                   clipPath: CLIP_MIDDLE,
+                   paddingLeft: ARROW_PX + 10, paddingRight: ARROW_PX + 10,
+                   marginLeft: -ARROW_PX,
+                   position: 'relative', zIndex: 1,
+                 }}>
+              {barPrompt.branch}
+            </div>
           )}
         </div>
-      ) : (
-        <div className="flex items-center px-3 text-[11px] font-mono text-[var(--tab-color)] opacity-50 italic select-none shrink-0">
+      )}
+
+      {isPtyActive && (
+        <div className="flex items-center px-4 text-[11px] font-mono text-[var(--tab-color)] opacity-40 italic select-none shrink-0">
           Running…
         </div>
       )}
 
-      {/* ── command input ────────────────────────────────────────────────── */}
+      {/* ── text input ──────────────────────────────────────────────────── */}
       <div className="flex items-center flex-1 min-w-0 px-3">
         <input
           ref={inputBarRef}
           type="text"
           value={isPtyActive ? '' : inputBarValue}
-          placeholder={isPtyActive ? '' : ''}
           onChange={handleInputBarChange}
           onKeyDown={handleInputBarKeyDown}
           disabled={isPtyActive}
