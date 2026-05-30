@@ -995,8 +995,10 @@ export default function Terminal({
   // Inline arrow triangle: extends AW px to the right of its parent,
   // sits on top of the next segment via the parent's z-index.
   const tri = (color: string): React.CSSProperties => ({
-    position: 'absolute', top: 0, left: '100%',
-    width: 0, height: 0,
+    position: 'absolute',
+    top: H / 2,        // ← must be H/2, NOT 0. border-top extends H/2 UPWARD
+    left: '100%',      //   from this point (reaching bar top) and border-bottom
+    width: 0, height: 0, // extends H/2 DOWNWARD (reaching bar bottom).
     borderTop:    `${H / 2}px solid transparent`,
     borderBottom: `${H / 2}px solid transparent`,
     borderLeft:   `${AW}px solid ${color}`,
