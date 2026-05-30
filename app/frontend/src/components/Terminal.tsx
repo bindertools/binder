@@ -980,15 +980,17 @@ export default function Terminal({
   // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
   const barPath = barPrompt.path || cwdLabel
 
-  // ── Breadcrumb bar — clip-path chevron segments ───────────────────────────
-  // Each segment is a <div> shaped into a right-pointing pentagon via CSS
-  // clip-path.  Segments overlap each other by ARROW_PX using negative
-  // margin-left; z-index puts left segments on top so the pointed tip of
-  // each segment is visible against the background of the next.
-  // No SVG, no Unicode characters — pure CSS geometry.
-  const ARROW_PX = 14
-  const CLIP_FIRST  = `polygon(0 0,calc(100% - ${ARROW_PX}px) 0,100% 50%,calc(100% - ${ARROW_PX}px) 100%,0 100%)`
-  const CLIP_MIDDLE = `polygon(${ARROW_PX}px 0,calc(100% - ${ARROW_PX}px) 0,100% 50%,calc(100% - ${ARROW_PX}px) 100%,${ARROW_PX}px 100%,0 50%)`
+  // ── Breadcrumb bar — reference HTML/CSS ported exactly ──────────────────────
+  // clip-path polygon values are copied verbatim from the user's reference code.
+  // Arrow width = 34 px, overlap = 34 px (margin-left: -34px on non-first).
+  //   CP1  step-1: right arrow only        (first segment)
+  //   CP2  step-2: right arrow + left notch (middle segment)
+  //   CP3  step-3: left notch only          (last segment)
+  const CP1 = 'polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%)'
+  const CP2 = 'polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%, 34px 50%)'
+  const CP3 = 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 34px 50%)'
+  const hasTs = !!barPrompt.ts
+  const hasBr = !!barPrompt.branch
 
   const inputBar = commandAlignment !== 'default' ? (
     <div
@@ -998,45 +1000,47 @@ export default function Terminal({
         'border-[var(--border-color)]',
       ].join(' ')}
     >
-      {/* ── chevron breadcrumb ──────────────────────────────────────────── */}
       {!isPtyActive && (
         <div className="flex items-stretch shrink-0">
 
-          {/* Timestamp */}
-          {barPrompt.ts && (
+          {/* Segment 1 — timestamp  (step-1: right arrow only) */}
+          {hasTs && (
             <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
                  style={{
                    background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-                   clipPath: CLIP_FIRST,
-                   paddingLeft: 12, paddingRight: ARROW_PX + 10,
+                   clipPath: CP1,
+                   paddingLeft: 12, paddingRight: 48,
                    position: 'relative', zIndex: 3,
                  }}>
               {barPrompt.ts}
             </div>
           )}
 
-          {/* Path */}
+          {/* Segment 2 — path  (clip-path depends on neighbours) */}
           <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
                style={{
                  background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-                 clipPath: barPrompt.ts ? CLIP_MIDDLE : CLIP_FIRST,
-                 paddingLeft: barPrompt.ts ? ARROW_PX + 10 : 12,
-                 paddingRight: ARROW_PX + 10,
-                 marginLeft: barPrompt.ts ? -ARROW_PX : 0,
+                 clipPath: !hasTs && !hasBr ? undefined
+                         : !hasTs &&  hasBr ? CP1
+                         :  hasTs && !hasBr ? CP3
+                         :                    CP2,
+                 paddingLeft: hasTs ? 48 : 12,
+                 paddingRight: hasBr ? 48 : 14,
+                 marginLeft: hasTs ? -34 : 0,
                  position: 'relative', zIndex: 2,
                  maxWidth: 240, overflow: 'hidden',
                }}>
             {barPath}
           </div>
 
-          {/* Branch */}
-          {barPrompt.branch && (
+          {/* Segment 3 — branch  (step-3: left notch only) */}
+          {hasBr && (
             <div className="flex items-center font-mono text-[11px] whitespace-nowrap select-none shrink-0"
                  style={{
                    background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
-                   clipPath: CLIP_MIDDLE,
-                   paddingLeft: ARROW_PX + 10, paddingRight: ARROW_PX + 10,
-                   marginLeft: -ARROW_PX,
+                   clipPath: CP3,
+                   paddingLeft: 48, paddingRight: 14,
+                   marginLeft: -34,
                    position: 'relative', zIndex: 1,
                  }}>
               {barPrompt.branch}
