@@ -1002,8 +1002,9 @@ export default function Terminal({
             <div style={{
               display: 'flex', alignItems: 'center',
               background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-              height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
+              height: H, margin: 0, marginRight: -1, paddingLeft: 10, paddingRight: 10,
               fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+              position: 'relative', zIndex: 2,
             }}>
               {barPrompt.ts}
             </div>
@@ -1012,9 +1013,10 @@ export default function Terminal({
           <div style={{
             display: 'flex', alignItems: 'center',
             background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-            height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
+            height: H, margin: 0, marginRight: hasBr ? -1 : 0, paddingLeft: 10, paddingRight: 10,
             fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
             maxWidth: 260, overflow: 'hidden',
+            position: 'relative', zIndex: 1,
           }}>
             {barPath}
           </div>
@@ -1025,6 +1027,7 @@ export default function Terminal({
               background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
               height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
               fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
+              position: 'relative', zIndex: 0,
             }}>
               {barPrompt.branch}
             </div>
