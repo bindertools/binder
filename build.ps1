@@ -275,8 +275,9 @@ function Build-CppBackend {
 
     $toolchain = Join-Path $vcpkgRoot 'scripts\buildsystems\vcpkg.cmake'
 
+    $overlayPorts = Join-Path $cppDir 'ports'
     if (-not (Test-Path (Join-Path $cppBuild 'CMakeCache.txt'))) {
-        & cmake -B $cppBuild -S $cppDir "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+        & cmake -B $cppBuild -S $cppDir "-DCMAKE_TOOLCHAIN_FILE=$toolchain" "-DVCPKG_OVERLAY_PORTS=$overlayPorts"
         if ($LASTEXITCODE -ne 0) { Fail "C++ cmake configure failed" }
     }
 
@@ -288,6 +289,17 @@ function Build-CppBackend {
         Ok "Binary    -> cpp/build/Release/cmdide-backend.exe"
     } else {
         Warn "cmdide-backend.exe not found after build (check cmake output)"
+    }
+
+    # Build the C++ WebView host alongside the existing backend
+    & cmake --build $cppBuild --config Release --target cmdide-host
+    if ($LASTEXITCODE -ne 0) { Fail "C++ cmdide-host build failed" }
+
+    $hostExe = Join-Path $cppBuild 'Release\cmdide-host.exe'
+    if (Test-Path $hostExe) {
+        Ok "Binary    -> cpp/build/Release/cmdide-host.exe"
+    } else {
+        Warn "cmdide-host.exe not found at expected path cpp/build/Release/ (check cmake output)"
     }
 }
 
