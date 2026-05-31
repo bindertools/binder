@@ -14,6 +14,7 @@
 #include <dwmapi.h>
 #include <zip.h>
 #include <filesystem>
+#include <fstream>
 namespace fs = std::filesystem;
 
 // Extract the embedded FRONTEND_ZIP resource to a temp directory.
