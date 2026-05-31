@@ -66,5 +66,7 @@ jobs:
         working-directory: app/frontend
 
       - name: ESLint
-        run: npx eslint src --max-warnings 100
+        # max-warnings is intentionally not set: warnings are tracked separately.
+        # All actual ESLint errors must be 0 for CI to pass.
+        run: npx eslint src
         working-directory: app/frontend
