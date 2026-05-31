@@ -4,7 +4,7 @@
   "dependencies": [
     "nlohmann-json",
     "spdlog",
-    "cpp-httplib",
+    { "name": "cpp-httplib", "features": ["openssl"] },
     "cmark",
     "sqlite3",
     "libzip",

@@ -1,23 +1,54 @@
 #include "config.hpp"
 
 #include <spdlog/spdlog.h>
+#include <filesystem>
+#include <fstream>
+#include <string>
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-
-#include <filesystem>
-#include <fstream>
-#include <string>
+#endif
 
 namespace fs = std::filesystem;
 using json         = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Platform-specific config root ────────────────────────────────────────────
 
-static fs::path from_w(const std::wstring& w) { return fs::path(w); }
+static fs::path GetConfigRoot() {
+#ifdef _WIN32
+    wchar_t appdata[MAX_PATH] = {};
+    GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+    return fs::path(appdata) / "cmdIDE";
+#elif __APPLE__
+    const char* home = getenv("HOME");
+    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "cmdIDE";
+#else  // Linux / other Unix
+    const char* xdg = getenv("XDG_CONFIG_HOME");
+    if (xdg && *xdg) return fs::path(xdg) / "cmdide";
+    const char* home = getenv("HOME");
+    return fs::path(home ? home : "/tmp") / ".config" / "cmdide";
+#endif
+}
+
+static fs::path GetDataRoot() {
+#ifdef _WIN32
+    wchar_t localapp[MAX_PATH] = {};
+    GetEnvironmentVariableW(L"LOCALAPPDATA", localapp, MAX_PATH);
+    return fs::path(localapp) / "cmdIDE";
+#elif __APPLE__
+    const char* home = getenv("HOME");
+    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "cmdIDE";
+#else
+    const char* xdg = getenv("XDG_DATA_HOME");
+    if (xdg && *xdg) return fs::path(xdg) / "cmdide";
+    const char* home = getenv("HOME");
+    return fs::path(home ? home : "/tmp") / ".local" / "share" / "cmdide";
+#endif
+}
 
 // ─── Config singleton ─────────────────────────────────────────────────────────
 
@@ -26,10 +57,14 @@ Config& Config::instance() {
     return inst;
 }
 
+static fs::path GetConfigPath() { return GetConfigRoot() / "config.json"; }
+
 std::wstring Config::config_path_w() const {
-    wchar_t appdata[MAX_PATH] = {};
-    GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    return std::wstring(appdata) + L"\\cmdIDE\\config.json";
+#ifdef _WIN32
+    return GetConfigPath().wstring();
+#else
+    return {};
+#endif
 }
 
 // Defaults must match Go's config.Ensure() exactly — same field names, same
@@ -63,8 +98,7 @@ bool Config::load() {
     std::lock_guard<std::mutex> lk(mu_);
     data_ = make_defaults();
 
-    auto path_w = config_path_w();
-    auto path   = from_w(path_w);
+    auto path = GetConfigPath();
 
     // Create config dir and write defaults if file is absent.
     if (!fs::exists(path)) {
@@ -106,20 +140,27 @@ bool Config::load() {
 }
 
 bool Config::save_locked() {
-    auto path_w  = config_path_w();
-    auto tmp_w   = path_w + L".tmp";
+    auto path = GetConfigPath();
+    auto tmp  = fs::path(path.string() + ".tmp");
 
-    std::string text = data_.dump(2); // 2-space indent, matches Go's json.MarshalIndent
+    std::string text = data_.dump(2);
 
-    std::ofstream f(from_w(tmp_w), std::ios::binary | std::ios::trunc);
+    std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
     if (!f) { spdlog::warn("config: cannot write tmp file"); return false; }
     f << text;
     f.close();
 
-    // Atomic replace — safe against crash mid-write.
-    if (!MoveFileExW(tmp_w.c_str(), path_w.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        spdlog::warn("config: MoveFileExW failed: {}", GetLastError());
-        return false;
+    // Atomic replace via filesystem rename
+    std::error_code ec;
+    fs::rename(tmp, path, ec);
+    if (ec) {
+        // Fallback: copy then delete (some platforms don't support cross-device rename)
+        fs::copy_file(tmp, path, fs::copy_options::overwrite_existing, ec);
+        fs::remove(tmp, ec);
+        if (ec) {
+            spdlog::warn("config: save failed: {}", ec.message());
+            return false;
+        }
     }
     return true;
 }

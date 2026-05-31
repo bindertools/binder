@@ -38,8 +38,9 @@ target_link_libraries(cmdide-backend-lib PUBLIC
     libzip::zip
     iphlpapi
     psapi
-    winhttp
 )
+
+# WinHTTP was removed in K.4 — replaced by cpp-httplib with OpenSSL.
 
 if(WIN32)
     target_compile_definitions(cmdide-backend-lib PUBLIC

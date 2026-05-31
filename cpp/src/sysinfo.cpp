@@ -1,5 +1,7 @@
 #include "sysinfo.hpp"
+#include <spdlog/spdlog.h>
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -7,8 +9,7 @@
 #include <ws2def.h>   // AF_INET — must come after windows.h, before iphlpapi.h
 #include <iphlpapi.h>
 #include <psapi.h>
-
-#include <spdlog/spdlog.h>
+#endif // _WIN32
 
 #include <algorithm>
 #include <sstream>
@@ -19,6 +20,8 @@
 using json = nlohmann::json;
 
 namespace sysinfo_ops {
+
+#ifdef _WIN32
 
 namespace {
 
@@ -414,5 +417,23 @@ bool dispatch(const std::string& type, const json& msg,
     }
     return false;
 }
+
+#else // not _WIN32
+
+// ── Unix stub implementations (Phase K.3 adds full macOS/Linux implementations) ─
+bool dispatch(const std::string& type, const json& msg,
+              const std::string& id, json& resp) {
+    auto reply = [&](json body) {
+        body["type"] = type + ".resp";
+        body["id"]   = id;
+        resp = std::move(body);
+    };
+    if (type == "sysinfo.ports")     { reply({{"ports", json::array()}}); return true; }
+    if (type == "sysinfo.perf")      { reply({{"perf",  json::object()}}); return true; }
+    if (type == "sysinfo.processes") { reply({{"processes", json::array()}}); return true; }
+    return false;
+}
+
+#endif // _WIN32
 
 } // namespace sysinfo_ops
