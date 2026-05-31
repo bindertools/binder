@@ -10,8 +10,10 @@
 #include <windows.h>
 #endif
 
+#ifndef _WIN32
+#include <sys/stat.h>  // stat() for cross-platform mtime
+#endif
 #include <algorithm>
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
@@ -51,17 +53,10 @@ int64_t get_mtime(const fs::path& p) {
     // 100-ns intervals since 1601-01-01 → Unix seconds
     return static_cast<int64_t>((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
 #else
-    std::error_code ec;
-    auto ft = fs::last_write_time(p, ec);
-    if (ec) return 0;
-    // Convert file_time_type → Unix seconds
-    auto sc = std::chrono::duration_cast<std::chrono::seconds>(ft.time_since_epoch());
-    // file_time_type epoch is implementation-defined; subtract the Unix epoch offset.
-    // The simplest portable approach: cast via system_clock.
-    auto sys = std::chrono::file_clock::to_sys(ft);
-    return static_cast<int64_t>(
-        std::chrono::duration_cast<std::chrono::seconds>(
-            sys.time_since_epoch()).count());
+    // C++17 portable: use POSIX stat() which directly gives Unix mtime.
+    struct stat st{};
+    if (::stat(p.c_str(), &st) != 0) return 0;
+    return static_cast<int64_t>(st.st_mtime);
 #endif
 }
 

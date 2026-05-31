@@ -60,7 +60,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
-            cmake ninja-build libssl-dev
+            ninja-build libssl-dev
+          # Install cmake 4.x from Kitware (vcpkg 2025+ requires cmake >= 4.x)
+          wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] \
+            https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/kitware.list
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake
 
       - name: Bootstrap vcpkg (Unix)
         if: runner.os != 'Windows'
