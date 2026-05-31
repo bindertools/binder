@@ -31,7 +31,7 @@ export function pushMonacoTheme(
 }
 
 export default function Editor({
-  tabId, filePath, content, language, active,
+  tabId: _tabId, filePath, content, language, active: _active,
   indentGuides, monacoTheme, monacoThemeDef, minimap,
   defaultZoom = 1, gotoLine,
 }: Props) {

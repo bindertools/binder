@@ -258,7 +258,7 @@ interface CtxMenuState {
 }
 
 export default function TabBar({
-  panel, tabs, activeId, focused,
+  panel: _panel, tabs, activeId, focused: _focused,
   onSelect, onClose, onCloseOthers, onMoveRight, onMoveLeft,
   onNewTerminal, onAddSiblingTerminal, onDrop,
 }: Props) {

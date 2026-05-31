@@ -1032,7 +1032,7 @@ export default function App() {
           tabs={tabs}
           activeTerminalId={activeTerminalId}
           onSelectTab={id => { handleLeftSelect(id); setSearchOpen(false) }}
-          onOpenFile={(path, line) => { handleOpenFileAtLine(path, line ?? 0, 0); setSearchOpen(false) }}
+          onOpenFile={(path, line) => { void handleOpenFileAtLine(path, line ?? 0, 0); setSearchOpen(false) }}
           onClose={() => setSearchOpen(false)}
         />
       )}

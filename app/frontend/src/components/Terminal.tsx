@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { Terminal as XTerm } from '@xterm/xterm'
-import type { ITheme } from '@xterm/xterm'
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { InstalledPluginCommand } from '../plugins'
@@ -188,7 +187,7 @@ export default function Terminal({
     const handler = (e: Event) => {
       const { terminalId } = (e as CustomEvent).detail
       if (terminalId !== tabId) return
-      SelectDirectory().then(path => { if (path) SetTerminalCwd(tabId, path) }).catch(() => {})
+      SelectDirectory().then(path => { if (path) SetTerminalCwd(tabId, path).catch(() => {}) }).catch(() => {})
     }
     window.addEventListener('terminal:select-dir', handler)
     return () => window.removeEventListener('terminal:select-dir', handler)
@@ -385,7 +384,7 @@ export default function Terminal({
           const cmd = lineRef.current
           lineRef.current = ''
           term.write('\r\n')
-          ExecuteCommand(tabId, cmd)
+          void ExecuteCommand(tabId, cmd)
         }
       })
     }
@@ -544,7 +543,7 @@ export default function Terminal({
               detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
             }))
           }
-          ExecuteCommand(tabId, '')
+          void ExecuteCommand(tabId, '')
           return
         }
       }
@@ -556,7 +555,7 @@ export default function Terminal({
       } else {
         term.write(value + '\r\n')
       }
-      ExecuteCommand(tabId, value)
+      void ExecuteCommand(tabId, value)
     }
 
     // Apply a specific match from the menu (used by click handler).
@@ -750,7 +749,7 @@ export default function Terminal({
               }))
             }
             // Ask Go to re-draw the prompt so the terminal stays usable.
-            ExecuteCommand(tabId, '')
+            void ExecuteCommand(tabId, '')
             return
           }
         }

@@ -141,7 +141,7 @@ export default function SplitModal({
   const leftTabs  = tabs.filter(t => (local[t.id] ?? 'left') === 'left')
   const rightTabs = tabs.filter(t => local[t.id] === 'right')
 
-  const handleDragStart = (e: React.DragEvent, id: string) => {
+  const _handleDragStart = (e: React.DragEvent, id: string) => {
     draggingId.current = id
     e.dataTransfer.setData('text/plain', id)
     e.dataTransfer.effectAllowed = 'move'

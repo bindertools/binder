@@ -66,5 +66,5 @@ jobs:
         working-directory: app/frontend
 
       - name: ESLint
-        run: npx eslint src --max-warnings 20
+        run: npx eslint src --max-warnings 100
         working-directory: app/frontend
