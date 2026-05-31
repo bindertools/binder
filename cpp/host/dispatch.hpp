@@ -23,8 +23,12 @@ public:
     explicit Dispatcher(webview::webview& wv);
     ~Dispatcher();
 
-    // Pass the splash screen pointer so app.ready can close it.
+    // Pass the splash screen pointer so app.ready can close it (Windows only).
+#ifdef _WIN32
     void SetSplash(SplashScreen* splash) { splash_ = splash; }
+#else
+    void SetSplash(SplashScreen* /*splash*/) {}
+#endif
 
     // Called from the __cmdide_invoke bind callback (any thread).
     void dispatch(const std::string& seq,
@@ -51,7 +55,9 @@ private:
     void resolve_err(const std::string& seq, const std::string& error);
 
     webview::webview& wv_;
+#ifdef _WIN32
     SplashScreen*     splash_ = nullptr;
+#endif
 
     // Active terminal sessions
     std::unordered_map<std::string, std::unique_ptr<Terminal>> terminals_;

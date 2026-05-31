@@ -120,7 +120,9 @@ void Dispatcher::dispatch(const std::string& seq,
         return;
     }
     if (type == "app.ready") {
+#ifdef _WIN32
         if (splash_) splash_->Close();
+#endif
         resolve_ok(seq, true);
         return;
     }
