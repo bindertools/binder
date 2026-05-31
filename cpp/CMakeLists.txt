@@ -13,7 +13,6 @@ find_package(libzip CONFIG REQUIRED)
 
 # ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────
 add_library(cmdide-backend-lib STATIC
-    src/ipc.cpp
     src/terminal.cpp
     src/fileops.cpp
     src/config.cpp
@@ -50,10 +49,6 @@ if(WIN32)
         UNICODE
     )
 endif()
-
-# ── Standalone backend executable (cmdide-backend.exe) ────────────────────────
-add_executable(cmdide-backend src/main.cpp)
-target_link_libraries(cmdide-backend PRIVATE cmdide-backend-lib)
 
 # ── WebView host and installer ─────────────────────────────────────────────────
 add_subdirectory(host)
