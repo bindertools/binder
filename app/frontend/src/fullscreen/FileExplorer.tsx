@@ -58,7 +58,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const toggle = useCallback((path: string) => {
     setExpanded(prev => {
       const next = new Set(prev)
-      next.has(path) ? next.delete(path) : next.add(path)
+      if (next.has(path)) { next.delete(path) } else { next.add(path) }
       return next
     })
   }, [])
@@ -127,7 +127,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   }, [newItem, onRefresh])
 
   const handleCopyPath = useCallback((node: FileNode) => {
-    navigator.clipboard.writeText(node.path)
+    void navigator.clipboard.writeText(node.path)
   }, [])
 
   const handleReveal = useCallback((node: FileNode) => {
@@ -240,7 +240,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
               onChange={e => setRenameVal(e.target.value)}
               onBlur={() => commitRename(node)}
               onKeyDown={e => {
-                if (e.key === 'Enter') commitRename(node)
+                if (e.key === 'Enter') void commitRename(node)
                 if (e.key === 'Escape') setRenaming(null)
                 e.stopPropagation()
               }}

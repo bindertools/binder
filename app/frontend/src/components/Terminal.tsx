@@ -754,7 +754,7 @@ export default function Terminal({
           }
         }
 
-        ExecuteCommand(tabId, line)
+        void ExecuteCommand(tabId, line)
         return
       }
 
@@ -779,7 +779,7 @@ export default function Terminal({
         savedInputRef.current = ''
         term.write('^C\r\n')
         lineRef.current = ''
-        InterruptCommand(tabId)
+        void InterruptCommand(tabId)
         return
       }
 
@@ -817,7 +817,7 @@ export default function Terminal({
         setMenu(null)
         term.write('\x1b[2J\x1b[H')
         lineRef.current = ''
-        ExecuteCommand(tabId, 'clear')
+        void ExecuteCommand(tabId, 'clear')
         return
       }
 
@@ -868,7 +868,7 @@ export default function Terminal({
     // Allow plugins to execute commands in this terminal
     const handlePluginExec = (e: Event) => {
       const { terminalId, cmd } = (e as CustomEvent).detail
-      if (terminalId === tabId) ExecuteCommand(tabId, cmd)
+      if (terminalId === tabId) void ExecuteCommand(tabId, cmd)
     }
     window.addEventListener('plugin:execute', handlePluginExec)
 
@@ -889,7 +889,7 @@ export default function Terminal({
       EventsOff(ptyStartEvent)
       EventsOff(ptyEndEvent)
       ptyModeRef.current = false
-      CloseTerminal(tabId)
+      void CloseTerminal(tabId)
       term.dispose()
       termRef.current = null
       fitRef.current = null
@@ -982,7 +982,7 @@ export default function Terminal({
   // transparent halves reveal the next segment's background, the join is
   // seamless — no clip-path, no characters, no gaps.
   const H  = 36  // bar height px (h-9)
-  const AW = 34  // arrow width  px
+  const _AW = 34  // arrow width  px
   const hasTs = !!barPrompt.ts
   const hasBr = !!barPrompt.branch
 

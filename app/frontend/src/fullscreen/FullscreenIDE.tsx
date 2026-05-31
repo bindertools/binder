@@ -202,10 +202,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     // Render the tree immediately — never block on git status
     setTree(await ExplorerOpen(cwd) as FileNode)
     // Fetch git badges in the background; they paint in once ready
-    if (isInstalled('git')) fetchGitStatusMap(cwd).then(setGitStatusMap)
+    if (isInstalled('git')) void fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
 
-  useEffect(() => { loadTree() }, [loadTree])
+  useEffect(() => { void loadTree() }, [loadTree])
 
   useEffect(() => {
     EventsOn('fullscreen:tree', (node: FileNode) => setTree(node))
@@ -326,7 +326,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     } else {
       setSelectedPaths(prev => {
         const next = new Set(prev)
-        next.has(path) ? next.delete(path) : next.add(path)
+        if (next.has(path)) { next.delete(path) } else { next.add(path) }
         return next
       })
     }
@@ -373,7 +373,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void saveFile() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -427,7 +427,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.KeyS) {
         e.preventDefault()
         e.stopPropagation()
-        saveFile()
+        void saveFile()
       }
     })
 
@@ -538,7 +538,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     fileObj: OpenFile | undefined,
     onChange: (v: string | undefined) => void,
     onMount: (editor: any, monaco: any) => void,
-    isFocused: boolean,
+    _isFocused: boolean,
   ) => {
     if (!fileObj) {
       return (
