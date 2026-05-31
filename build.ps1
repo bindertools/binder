@@ -1,14 +1,13 @@
 #!/usr/bin/env pwsh
 # build.ps1 - Builds all C++ release artifacts.
 #
-# Output artifacts (matching the old Go/Wails build exactly):
-#   cmdIDE-windows-amd64.exe         - base app (no plugin manager)
-#   cmdIDE-plugins-windows-amd64.exe - plugins app (with plugin manager)
-#   cmdIDE-installer-windows.exe     - stable installer
-#   cmdIDE-installer-dev-windows.exe - dev-channel installer (includes pre-releases)
+# Output artifacts:
+#   cmdIDE-windows-amd64.exe     - main app (plugin manager included as standard)
+#   cmdIDE-installer-windows.exe - stable installer
+#   cmdIDE-installer-dev-windows.exe - dev-channel installer
 #
 # Flags:
-#   -AppOnly        build app variants only, skip installer
+#   -AppOnly        build app only, skip installer
 #   -InstallerOnly  build installer only
 #   -Version        version string (e.g. "v1.2.3")
 
@@ -36,9 +35,8 @@ if ($IsWindows -or $env:OS -eq 'Windows_NT') {
 }
 Write-Host "`n  Platform : $platform" -ForegroundColor DarkGray
 
-# -- Artifact names (exact match to old Go/Wails outputs) ----------------------
-$baseName    = "cmdIDE-$platform-amd64$binExt"
-$pluginsName = "cmdIDE-plugins-$platform-amd64$binExt"
+# -- Artifact names ------------------------------------------------------------
+$appName     = "cmdIDE-$platform-amd64$binExt"
 $instName    = "cmdIDE-installer-$platform$binExt"
 $instDevName = "cmdIDE-installer-dev-$platform$binExt"
 
@@ -53,35 +51,17 @@ if (-not $vcpkgRoot) { Fail "vcpkg not found. Set VCPKG_ROOT." }
 $toolchain    = Join-Path $vcpkgRoot 'scripts/buildsystems/vcpkg.cmake'
 $overlayPorts = Join-Path $root 'cpp/ports'
 
-# On Windows use the static triplet so all dependencies are statically linked.
-# This produces truly standalone .exe files with zero DLL dependencies,
-# matching the old Wails single-binary build behavior.
+# On Windows use the static triplet so all dependencies are statically linked
+# (zero DLL dependencies — truly self-contained exe like the old Wails build).
 $tripletArgs = @()
 if ($platform -eq 'windows') {
     $tripletArgs = @('-DVCPKG_TARGET_TRIPLET=x64-windows-static', '-DVCPKG_HOST_TRIPLET=x64-windows-static')
 }
-Write-Host "  vcpkg    : $vcpkgRoot" -ForegroundColor DarkGray
 
-$cppDir   = Join-Path $root 'cpp'
-$cppBuild = Join-Path $cppDir 'build'
-$devBuild = Join-Path $cppDir 'build-dev'
+$cppDir     = Join-Path $root 'cpp'
+$cppBuild   = Join-Path $cppDir 'build'
+$devBuild   = Join-Path $cppDir 'build-dev'
 $releaseDir = Join-Path $cppBuild 'Release'
-
-# -- Helper: run npm build for a frontend variant ------------------------------
-function Build-Frontend {
-    param([string]$dir, [bool]$WithPlugins = $false)
-    $variant = if ($WithPlugins) { 'plugins' } else { 'base' }
-    Step "Frontend build - $variant ($dir)"
-    Push-Location $dir
-    if (-not (Test-Path 'node_modules')) { npm install }
-    if ($WithPlugins) { $env:VITE_PLUGINS = 'true' } else { Remove-Item Env:VITE_PLUGINS -EA SilentlyContinue }
-    npm run build
-    $code = $LASTEXITCODE
-    Remove-Item Env:VITE_PLUGINS -EA SilentlyContinue
-    Pop-Location
-    if ($code -ne 0) { Fail "Frontend ($variant) build failed" }
-    Ok "Built -> $dir/dist/ ($variant)"
-}
 
 # -- Helper: cmake configure ---------------------------------------------------
 function Cmake-Configure {
@@ -97,21 +77,57 @@ function Cmake-Configure {
 }
 
 # =============================================================================
-# STEP 1 - Installer frontend (same for stable and dev)
+# STEP 1 - Installer frontend
 # =============================================================================
 if (-not $AppOnly) {
-    Build-Frontend -dir (Join-Path $root 'installer/windows/frontend')
+    Step "Frontend build - installer"
+    Push-Location (Join-Path $root 'installer/windows/frontend')
+    if (-not (Test-Path 'node_modules')) { npm install }
+    npm run build
+    $code = $LASTEXITCODE
+    Pop-Location
+    if ($code -ne 0) { Fail "Installer frontend npm build failed" }
+    Ok "Built -> installer/windows/frontend/dist/"
 }
 
 # =============================================================================
-# STEP 2 - Initial CMake configure (installs vcpkg packages)
+# STEP 2 - App frontend (plugin manager always included as standard)
+# =============================================================================
+if (-not $InstallerOnly) {
+    Step "Frontend build - app (plugins standard)"
+    Push-Location (Join-Path $root 'app/frontend')
+    if (-not (Test-Path 'node_modules')) { npm install }
+    $env:VITE_PLUGINS = 'true'
+    npm run build
+    $code = $LASTEXITCODE
+    Remove-Item Env:VITE_PLUGINS -EA SilentlyContinue
+    Pop-Location
+    if ($code -ne 0) { Fail "App frontend npm build failed" }
+    Ok "Built -> app/frontend/dist/ (plugins standard)"
+}
+
+# =============================================================================
+# STEP 3 - CMake configure
 # =============================================================================
 Step "CMake configure"
 Cmake-Configure -buildDir $cppBuild
 Ok "Configured -> cpp/build"
 
 # =============================================================================
-# STEP 3 - Build stable installer
+# STEP 4 - Build app
+# =============================================================================
+if (-not $InstallerOnly) {
+    Step "Build cmdide-host"
+    & cmake --build $cppBuild --config Release --target cmdide-host
+    if ($LASTEXITCODE -ne 0) { Fail "cmdide-host build failed" }
+    $hostSrc = Join-Path $releaseDir "cmdide-host$binExt"
+    $appDst  = Join-Path $releaseDir $appName
+    if (Test-Path $hostSrc) { Copy-Item -Force $hostSrc $appDst }
+    Ok "Built -> $appName"
+}
+
+# =============================================================================
+# STEP 5 - Build stable installer
 # =============================================================================
 if (-not $AppOnly) {
     Step "Build stable installer"
@@ -124,55 +140,22 @@ if (-not $AppOnly) {
 }
 
 # =============================================================================
-# STEP 4 - Build dev installer (reuses vcpkg_installed from step 2)
+# STEP 6 - Build dev installer
 # =============================================================================
 if (-not $AppOnly) {
     Step "Build dev installer"
     $sharedInstalled = Join-Path $cppBuild 'vcpkg_installed'
+    $devExtra = @{ CMDIDE_INSTALLER_DEV = 'ON' }
     if (Test-Path $sharedInstalled) {
-        Cmake-Configure -buildDir $devBuild -extra @{
-            CMDIDE_INSTALLER_DEV = 'ON'
-            VCPKG_INSTALLED_DIR  = $sharedInstalled
-        }
-    } else {
-        Cmake-Configure -buildDir $devBuild -extra @{ CMDIDE_INSTALLER_DEV = 'ON' }
+        $devExtra['VCPKG_INSTALLED_DIR'] = $sharedInstalled
     }
+    Cmake-Configure -buildDir $devBuild -extra $devExtra
     & cmake --build $devBuild --config Release --target cmdide-installer
     if ($LASTEXITCODE -ne 0) { Fail "Dev installer build failed" }
-    $devExe = Join-Path $devBuild "Release\cmdide-installer$binExt"
+    $devSrc = Join-Path $devBuild "Release\cmdide-installer$binExt"
     $devDst = Join-Path $releaseDir $instDevName
-    if (Test-Path $devExe) { Copy-Item -Force $devExe $devDst }
+    if (Test-Path $devSrc) { Copy-Item -Force $devSrc $devDst }
     Ok "Built -> $instDevName"
-}
-
-# =============================================================================
-# STEP 5 - Base app (no plugin manager)
-# =============================================================================
-if (-not $InstallerOnly) {
-    Build-Frontend -dir (Join-Path $root 'app/frontend') -WithPlugins $false
-
-    Step "Build cmdide-host (base - no plugins)"
-    & cmake --build $cppBuild --config Release --target cmdide-host
-    if ($LASTEXITCODE -ne 0) { Fail "cmdide-host (base) build failed" }
-    $hostSrc = Join-Path $releaseDir "cmdide-host$binExt"
-    $hostDst = Join-Path $releaseDir $baseName
-    if (Test-Path $hostSrc) { Copy-Item -Force $hostSrc $hostDst }
-    Ok "Built -> $baseName"
-}
-
-# =============================================================================
-# STEP 6 - Plugins app (with plugin manager)
-# =============================================================================
-if (-not $InstallerOnly) {
-    Build-Frontend -dir (Join-Path $root 'app/frontend') -WithPlugins $true
-
-    Step "Build cmdide-host (plugins)"
-    # cmake detects the changed frontend.zip and re-links with the new RC resource
-    & cmake --build $cppBuild --config Release --target cmdide-host
-    if ($LASTEXITCODE -ne 0) { Fail "cmdide-host (plugins) build failed" }
-    $pluginsDst = Join-Path $releaseDir $pluginsName
-    if (Test-Path $hostSrc) { Copy-Item -Force $hostSrc $pluginsDst }
-    Ok "Built -> $pluginsName"
 }
 
 # =============================================================================
@@ -187,7 +170,7 @@ function Check-Artifact($name) {
     else { Warn "MISSING: $name"; $script:ok = $false }
 }
 
-if (-not $InstallerOnly) { Check-Artifact $baseName; Check-Artifact $pluginsName }
+if (-not $InstallerOnly) { Check-Artifact $appName }
 if (-not $AppOnly)       { Check-Artifact $instName; Check-Artifact $instDevName }
 
 if (-not $ok) { Fail "One or more artifacts are missing" }
@@ -196,10 +179,7 @@ Write-Host ''
 Write-Host '  Build complete.' -ForegroundColor Green
 Write-Host ''
 Write-Host "  Artifacts in cpp/build/Release/:" -ForegroundColor DarkGray
-if (-not $InstallerOnly) {
-    Write-Host "    $baseName" -ForegroundColor DarkGray
-    Write-Host "    $pluginsName" -ForegroundColor DarkGray
-}
+if (-not $InstallerOnly) { Write-Host "    $appName" -ForegroundColor DarkGray }
 if (-not $AppOnly) {
     Write-Host "    $instName" -ForegroundColor DarkGray
     Write-Host "    $instDevName" -ForegroundColor DarkGray

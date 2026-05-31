@@ -150,8 +150,7 @@ void InstallerApp::GetReleases(const std::string& seq) {
 
 void InstallerApp::Install(const std::string& seq,
                            const std::string& version,
-                           bool create_desktop,
-                           bool /*install_plugins*/) {
+                           bool create_desktop) {
     emit_progress(5, "Preparing...");
 
     std::string install_dir = GetInstallDirPath();

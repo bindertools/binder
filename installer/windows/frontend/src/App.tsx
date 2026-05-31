@@ -91,7 +91,6 @@ export default function App() {
   const [installDir,     setInstallDir]    = useState('')
   const [channel,        setChannel]       = useState('stable')
   const [createShortcut, setCreateShortcut]= useState(true)
-  const [installPlugins, setInstallPlugins]= useState(false)
   const [version,        setVersion]       = useState('latest')
   const [releases,       setReleases]      = useState<Release[]>([])
 
@@ -117,7 +116,7 @@ export default function App() {
     setProgress(0)
     setStatusMsg('Starting…')
     try {
-      await Install(version, createShortcut, installPlugins)
+      await Install(version, createShortcut)
     } catch (e: unknown) {
       // Install() returned an error — backend already emits installer:error,
       // but fall back to showing it in the banner.
@@ -178,14 +177,6 @@ export default function App() {
                   onChange={e => setCreateShortcut(e.target.checked)}
                 />
                 <span>Desktop shortcut</span>
-              </label>
-              <label className="opt-row">
-                <input
-                  type="checkbox"
-                  checked={installPlugins}
-                  onChange={e => setInstallPlugins(e.target.checked)}
-                />
-                <span>Plugin Manager</span>
               </label>
             </div>
 

@@ -24,8 +24,7 @@ public:
     void GetInstallDir(const std::string& seq);
     void Install(const std::string& seq,
                  const std::string& version,
-                 bool create_desktop,
-                 bool install_plugins);
+                 bool create_desktop);
     void LaunchAndClose(const std::string& seq);
     void CloseInstaller(const std::string& seq);
 

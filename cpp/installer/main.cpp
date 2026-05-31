@@ -153,8 +153,7 @@ int main(int, char**) {
                     else if (type == "installer.getInstallDir") app->GetInstallDir(seq);
                     else if (type == "installer.install")
                         app->Install(seq, args.value("version", std::string{}),
-                                     args.value("createDesktop", false),
-                                     args.value("installPlugins", false));
+                                     args.value("createDesktop", false));
                     else if (type == "installer.launch") app->LaunchAndClose(seq);
                     else if (type == "installer.close")  app->CloseInstaller(seq);
                     else {
