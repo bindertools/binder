@@ -11,8 +11,8 @@ find_package(cmark CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
 
-add_executable(cmdide-backend
-    src/main.cpp
+# ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────
+add_library(cmdide-backend-lib STATIC
     src/ipc.cpp
     src/terminal.cpp
     src/fileops.cpp
@@ -25,23 +25,34 @@ add_executable(cmdide-backend
     src/updater.cpp
 )
 
-target_link_libraries(cmdide-backend PRIVATE
+target_include_directories(cmdide-backend-lib PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
+
+target_link_libraries(cmdide-backend-lib PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib
     cmark::cmark
     unofficial::sqlite3::sqlite3
     libzip::zip
-    iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable, GetIfTable
-    psapi      # EnumProcesses, GetProcessMemoryInfo, GetModuleFileNameExW
-    winhttp    # WinHttpOpen — GitHub API and update downloads
+    iphlpapi
+    psapi
+    winhttp
 )
 
 if(WIN32)
-    target_compile_definitions(cmdide-backend PRIVATE
+    target_compile_definitions(cmdide-backend-lib PUBLIC
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         _UNICODE
         UNICODE
     )
 endif()
+
+# ── Standalone backend executable (cmdide-backend.exe) ────────────────────────
+add_executable(cmdide-backend src/main.cpp)
+target_link_libraries(cmdide-backend PRIVATE cmdide-backend-lib)
+
+# ── WebView host and installer ─────────────────────────────────────────────────
+add_subdirectory(host)
