@@ -6,32 +6,32 @@
 #include <thread>
 
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
 #include <algorithm>
 #include <windows.h>
 #include <dwmapi.h>
 #include <zip.h>
 #include <filesystem>
 #include <fstream>
+#include <WebView2.h>
 namespace fs = std::filesystem;
 
-// Extract the embedded FRONTEND_ZIP resource to a temp directory.
-// Returns the extraction root path.
+// ── Asset extraction ──────────────────────────────────────────────────────────
 static std::string ExtractInstallerAssets() {
     HMODULE hMod = GetModuleHandleW(nullptr);
     HRSRC hRes = FindResourceW(hMod, L"FRONTEND_ZIP", RT_RCDATA);
     if (!hRes) {
-        // Fallback to www/ sidecar (dev builds without RC embedding)
+        // Dev/fallback: look for www/ next to the exe
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        return fs::path(exe).parent_path().string() + "\\www";
+        std::string dir = fs::path(exe).parent_path().string();
+        for (char& c : dir) if (c == '\\') c = '/';
+        return dir + "/www";
     }
 
     HGLOBAL hData  = LoadResource(hMod, hRes);
     const char* data = static_cast<const char*>(LockResource(hData));
     DWORD       size = SizeofResource(hMod, hRes);
+    if (!data || size == 0) return "";
 
     uint32_t hash = 0x811c9dc5u;
     for (DWORD i = 0; i < std::min(size, (DWORD)64); ++i)
@@ -41,15 +41,14 @@ static std::string ExtractInstallerAssets() {
     GetTempPathA(MAX_PATH, tmp);
     char hashStr[12];
     sprintf_s(hashStr, "%08x", hash);
-    // Use forward slashes throughout so URLs work without conversion
     std::string tmpPath(tmp);
     for (char& c : tmpPath) if (c == '\\') c = '/';
-    if (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
+    while (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
     std::string extractDir = tmpPath + "/cmdide-inst-" + hashStr;
-    std::string marker = extractDir + "/.extracted";
+    std::string marker     = extractDir + "/.extracted";
 
     if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES)
-        return extractDir;
+        return extractDir;  // already extracted
 
     fs::create_directories(extractDir);
     zip_error_t ze{};
@@ -77,36 +76,59 @@ static std::string ExtractInstallerAssets() {
     return extractDir;
 }
 
-// Convert Windows backslashes to forward slashes for a valid file:// URL.
-static std::string ToFileUrl(const std::string& path) {
+// ── Virtual host setup (avoids file:// CORS restrictions) ─────────────────────
+// Returns "https://installer.local/index.html" on success,
+// or a plain file:// URL as fallback.
+static std::string SetupInstallerUrl(webview::webview& wv, const std::string& root) {
+    auto ctrl_res = wv.browser_controller();
+    if (ctrl_res.ok()) {
+        auto* ctrl = static_cast<ICoreWebView2Controller*>(ctrl_res.value());
+        ICoreWebView2* wv2 = nullptr;
+        if (SUCCEEDED(ctrl->get_CoreWebView2(&wv2)) && wv2) {
+            ICoreWebView2_3* wv2_3 = nullptr;
+            if (SUCCEEDED(wv2->QueryInterface(IID_PPV_ARGS(&wv2_3))) && wv2_3) {
+                std::wstring wroot(root.begin(), root.end());
+                wv2_3->SetVirtualHostNameToFolderMapping(
+                    L"installer.local", wroot.c_str(),
+                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
+                wv2_3->Release();
+                wv2->Release();
+                return "https://installer.local/index.html";
+            }
+            wv2->Release();
+        }
+    }
+    // Fallback: file:// with normalised forward slashes
     std::string url = "file:///";
-    for (char c : path) url += (c == '\\') ? '/' : c;
+    for (char c : root) url += (c == '\\') ? '/' : c;
     if (url.back() != '/') url += '/';
-    url += "index.html";
-    return url;
+    return url + "index.html";
 }
 
-static std::string GetInstallerUrl(const std::string& root) {
-    return ToFileUrl(root);
-}
-
+// ── Window helpers ─────────────────────────────────────────────────────────────
 static void MakeInstallerFrameless(HWND hwnd) {
+    // Hide during style changes to avoid the flash of a window with OS decorations
+    ShowWindow(hwnd, SW_HIDE);
     SetWindowLongPtrW(hwnd, GWL_STYLE,
                       WS_POPUP | WS_VISIBLE | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     MARGINS m = {1, 1, 1, 1};
     DwmExtendFrameIntoClientArea(hwnd, &m);
+    // Re-show after styling applied — no more flash
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
 }
 static void CenterWindow(HWND hwnd, int w, int h) {
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
     SetWindowPos(hwnd, nullptr, (sw - w) / 2, (sh - h) / 2, w, h,
                  SWP_NOZORDER | SWP_NOACTIVATE);
 }
-#else
-static std::string ExtractInstallerAssets() { return ""; }
-static std::string GetInstallerUrl(const std::string&) { return "about:blank"; }
-#endif
+
+#else // non-Windows stubs
+static std::string ExtractInstallerAssets()                             { return ""; }
+static std::string SetupInstallerUrl(webview::webview&, const std::string&) { return "about:blank"; }
+#endif // _WIN32
 
 static constexpr const char* kWailsProxy = R"js(
 window.go = window.go || new Proxy({}, {
@@ -161,8 +183,8 @@ int main(int, char**) {
                 std::thread([ctx, seq, type, args]() {
                     auto* wv  = ctx->wv;
                     auto* app = ctx->app;
-                    if      (type == "installer.getReleases")  app->GetReleases(seq);
-                    else if (type == "installer.getChannel")   app->GetChannel(seq);
+                    if      (type == "installer.getReleases")   app->GetReleases(seq);
+                    else if (type == "installer.getChannel")    app->GetChannel(seq);
                     else if (type == "installer.getInstallDir") app->GetInstallDir(seq);
                     else if (type == "installer.install")
                         app->Install(seq, args.value("version", std::string{}),
@@ -182,7 +204,15 @@ int main(int, char**) {
         &ctx);
 
     wv.init(kWailsProxy);
-    wv.navigate(GetInstallerUrl(root));
+
+#ifdef _WIN32
+    // Use virtual host mapping to avoid file:// CORS restrictions
+    std::string url = SetupInstallerUrl(wv, root);
+#else
+    std::string url = root.empty() ? "about:blank" : "file://" + root + "/index.html";
+#endif
+
+    wv.navigate(url);
     wv.run();
     return 0;
 }
