@@ -124,6 +124,12 @@ int main(int, char**) {
         HWND hwnd = static_cast<HWND>(hwnd_res.value());
         MakeInstallerFrameless(hwnd);
         CenterWindow(hwnd, 460, 330);
+        // Set the taskbar / Alt+Tab icon
+        HICON hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(100));
+        if (hIcon) {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
+        }
     }
 #endif
 

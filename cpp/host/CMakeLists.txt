@@ -66,13 +66,17 @@ if(WIN32)
         unofficial::webview2::webview2
         ole32 oleaut32 shlwapi dwmapi
     )
-    add_custom_command(TARGET cmdide-host POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:cmdide-host>
-            "${CMAKE_BINARY_DIR}/$<CONFIG>"
-        COMMAND_EXPAND_LISTS
-        COMMENT "Copying runtime DLLs"
-    )
+    # With x64-windows-static triplet, all libs are statically linked — no DLLs to copy.
+    # WebView2Loader.dll is an exception (always a DLL — it's the WebView2 runtime loader).
+    if(NOT VCPKG_TARGET_TRIPLET MATCHES "static")
+        add_custom_command(TARGET cmdide-host POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:cmdide-host>
+                "${CMAKE_BINARY_DIR}/$<CONFIG>"
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLLs"
+        )
+    endif()
 elseif(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)

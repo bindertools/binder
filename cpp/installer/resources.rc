@@ -1,5 +1,9 @@
 // cmdIDE installer resources
 #include <windows.h>
 
+// Application icon — displayed in taskbar, Alt+Tab, and Windows Explorer
+// (the first ICON resource in an exe is used as its file icon)
+100 ICON "../../app/build/windows/icon.ico"
+
 // Installer frontend assets embedded as a zip
 FRONTEND_ZIP RCDATA "generated/frontend.zip"

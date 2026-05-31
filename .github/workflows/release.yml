@@ -44,11 +44,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkg-win-${{ hashFiles('cpp/vcpkg.json') }}
-          restore-keys: vcpkg-win-
+          key: vcpkg-win-static-${{ hashFiles('cpp/vcpkg.json') }}
+          restore-keys: vcpkg-win-static-
 
       - name: Build all artifacts
         run: ./build.ps1 -Version "${{ github.event.release.tag_name }}"
+        # build.ps1 automatically uses x64-windows-static on Windows for standalone exes
 
       - name: Verify outputs
         run: |

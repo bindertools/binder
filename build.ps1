@@ -52,6 +52,14 @@ if (-not $vcpkgRoot) {
 if (-not $vcpkgRoot) { Fail "vcpkg not found. Set VCPKG_ROOT." }
 $toolchain    = Join-Path $vcpkgRoot 'scripts/buildsystems/vcpkg.cmake'
 $overlayPorts = Join-Path $root 'cpp/ports'
+
+# On Windows use the static triplet so all dependencies are statically linked.
+# This produces truly standalone .exe files with zero DLL dependencies,
+# matching the old Wails single-binary build behavior.
+$tripletArgs = @()
+if ($platform -eq 'windows') {
+    $tripletArgs = @('-DVCPKG_TARGET_TRIPLET=x64-windows-static', '-DVCPKG_HOST_TRIPLET=x64-windows-static')
+}
 Write-Host "  vcpkg    : $vcpkgRoot" -ForegroundColor DarkGray
 
 $cppDir   = Join-Path $root 'cpp'
@@ -81,6 +89,7 @@ function Cmake-Configure {
     $args = @("-B", $buildDir, "-S", $cppDir,
               "-DCMAKE_TOOLCHAIN_FILE=$toolchain",
               "-DVCPKG_OVERLAY_PORTS=$overlayPorts")
+    $args += $tripletArgs
     if ($Version) { $args += "-DCMDIDE_VERSION=$Version" }
     foreach ($k in $extra.Keys) { $args += "-D$k=$($extra[$k])" }
     & cmake @args

@@ -69,11 +69,13 @@ if(WIN32)
         unofficial::webview2::webview2
         ole32 oleaut32 shlwapi dwmapi shell32
     )
-    add_custom_command(TARGET cmdide-installer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:cmdide-installer>
-            "${CMAKE_BINARY_DIR}/$<CONFIG>"
-        COMMAND_EXPAND_LISTS
-        COMMENT "Copying runtime DLLs"
-    )
+    if(NOT VCPKG_TARGET_TRIPLET MATCHES "static")
+        add_custom_command(TARGET cmdide-installer POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:cmdide-installer>
+                "${CMAKE_BINARY_DIR}/$<CONFIG>"
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLLs"
+        )
+    endif()
 endif()
