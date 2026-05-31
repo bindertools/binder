@@ -188,6 +188,7 @@ void Terminal::ReadLoop() {
 #include <pty.h>    // forkpty on Linux
 #endif
 #include <unistd.h>
+#include <signal.h>     // kill(), SIGTERM
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <termios.h>
