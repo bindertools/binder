@@ -16,6 +16,27 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
+
+// Run a command in a hidden console window (no CMD flash for the user)
+static void RunHidden(const std::string& cmd) {
+    std::wstring wcmd;
+    int n = MultiByteToWideChar(CP_UTF8, 0, cmd.data(), (int)cmd.size(), nullptr, 0);
+    wcmd.resize(n);
+    MultiByteToWideChar(CP_UTF8, 0, cmd.data(), (int)cmd.size(), wcmd.data(), n);
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    PROCESS_INFORMATION pi{};
+    if (CreateProcessW(nullptr, wcmd.data(), nullptr, nullptr,
+                       FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 30000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+}
 #endif
 
 using json = nlohmann::json;
@@ -62,15 +83,18 @@ static std::string GetInstallDirPath() {
 InstallerApp::InstallerApp(webview::webview& wv) : wv_(wv) {}
 
 void InstallerApp::emit_progress(int pct, const std::string& msg) {
-    json data = {{"pct", pct}, {"msg", msg}};
+    // Pass pct and msg as POSITIONAL args matching the Wails EventsOn(event, pct, msg) convention.
+    // The callback is (pct: number, msg: string) — it must receive separate args, not one object.
+    nlohmann::json jmsg = msg;  // handles quoting/escaping
     std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('install:progress'," +
-                     data.dump() + ")}";
+                     std::to_string(pct) + "," + jmsg.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
 
 void InstallerApp::emit_error(const std::string& msg) {
-    std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('installer:error',\"" +
-                     msg + "\")}";
+    nlohmann::json jmsg = msg;
+    std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('installer:error'," +
+                     jmsg.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
 
@@ -262,7 +286,7 @@ void InstallerApp::Install(const std::string& seq,
         "Set-ItemProperty -Path $p -Name InstallLocation -Value '" + install_dir + "';"
         "Set-ItemProperty -Path $p -Name UninstallString -Value 'powershell.exe -File \\\"" + uninstall_ps + "\\\"';"
         "\"";
-    system(reg_cmd.c_str());
+    RunHidden(reg_cmd);
 
     emit_progress(98, "Creating shortcuts...");
     // Create Start Menu shortcut
@@ -275,7 +299,7 @@ void InstallerApp::Install(const std::string& seq,
             "$l.TargetPath='" + dest + "';"
             "$l.WorkingDirectory='" + install_dir + "';"
             "$l.Save()\"";
-        system(ps.c_str());
+        RunHidden(ps);
     };
     make_shortcut("StartMenu");
     if (create_desktop) make_shortcut("Desktop");

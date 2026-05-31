@@ -1,10 +1,10 @@
 // Low-level IPC client for the C++ installer host.
-// Identical to app/frontend/src/lib/ipc.ts — kept as a separate copy.
 
 declare global {
   interface Window {
-    __cmdide_invoke?: (type: string, argsJson: string, reqId: string) => Promise<string>
-    __cmdide_emit?: (event: string, dataJson: string) => void
+    __cmdide_invoke?: (type: string, argsJson: string, reqId: string) => Promise<unknown>
+    __cmdide_emit?: (event: string, ...args: unknown[]) => void
+    __cmdide_events?: Record<string, Array<{cb: (...a: unknown[]) => void, max: number, count: number}>>
   }
 }
 
@@ -13,14 +13,32 @@ type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }
 type Handler = (data: unknown) => void
 const _handlers = new Map<string, Set<Handler>>()
 
+// Set up the global event receiver. This runs at module load time and will
+// overwrite whatever the C++ init script defined. We must handle BOTH:
+//   1. ipc.ts `on/off` handlers (used when wails-shim loads successfully)
+//   2. window.__cmdide_events handlers (used by window.runtime.EventsOn stubs)
+// C++ emit_progress passes positional args: emit(event, pct, msg)
+// NOT a single JSON string — so we spread the args to both handler registries.
 if (typeof window !== 'undefined') {
-  window.__cmdide_emit = (event: string, dataJson: string) => {
+  window.__cmdide_emit = (event: string, ...args: unknown[]) => {
     try {
-      const data = JSON.parse(dataJson)
+      // 1. Fire ipc.ts on/off handlers with the first arg (or all args as array)
+      const data = args.length === 1 ? args[0] : args
       _handlers.get(event)?.forEach(h => h(data))
-    } catch {
-      // ignore
-    }
+
+      // 2. Fire window.runtime.EventsOn handlers (registered via __cmdide_events)
+      //    Pass all args as positional so (pct, msg) callbacks work correctly.
+      const entries = window.__cmdide_events?.[event]
+      if (entries?.length) {
+        const keep: typeof entries = []
+        for (const entry of entries) {
+          try { entry.cb(...args) } catch { /* ignore */ }
+          entry.count++
+          if (entry.max < 0 || entry.count < entry.max) keep.push(entry)
+        }
+        window.__cmdide_events![event] = keep
+      }
+    } catch { /* ignore */ }
   }
 }
 
@@ -30,8 +48,9 @@ export function isWebViewHost(): boolean {
 
 export async function invoke<T = unknown>(type: string, args: object = {}): Promise<T> {
   if (!window.__cmdide_invoke) throw new Error('IPC not available')
-  const raw = await window.__cmdide_invoke(type, JSON.stringify(args), crypto.randomUUID())
-  const result = JSON.parse(raw) as IpcResult<T>
+  // webview/webview automatically JSON.parses the resolve value,
+  // so the result is already a parsed object: {ok, data} — not a string.
+  const result = await window.__cmdide_invoke(type, JSON.stringify(args), crypto.randomUUID()) as IpcResult<T>
   if (!result.ok) throw new Error(result.error)
   return result.data
 }

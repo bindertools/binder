@@ -158,8 +158,10 @@ static std::string BuildInlineHtml(const std::string& extractDir) {
 
 // ── Window helpers ─────────────────────────────────────────────────────────────
 static void MakeFrameless(HWND hwnd, int w, int h) {
+    // Hide during transformation so the title-bar window never flashes
+    ShowWindow(hwnd, SW_HIDE);
     SetWindowLongPtrW(hwnd, GWL_STYLE,
-                      WS_POPUP | WS_VISIBLE | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+                      WS_POPUP | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
     SetWindowPos(hwnd, nullptr,
                  (sw - w) / 2, (sh - h) / 2, w, h,
@@ -169,6 +171,8 @@ static void MakeFrameless(HWND hwnd, int w, int h) {
         SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
     }
+    // Show only after styling is complete — zero flash
+    ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 }
 
@@ -245,14 +249,18 @@ if (!window.runtime) {
     WindowSetSystemDefaultTheme: function() {}, WindowSetLightTheme: function() {}, WindowSetDarkTheme: function() {},
   };
 }
-// Patch __cmdide_emit to fire into EventsOnMultiple-registered listeners
-window.__cmdide_emit = function(event, dataJson) {
+// Patch __cmdide_emit to fire into EventsOnMultiple-registered listeners.
+// C++ calls: window.__cmdide_emit('event', arg1, arg2, ...)
+// The callback receives the same positional args: callback(arg1, arg2, ...)
+// e.g. install:progress -> callback(pct, msg)
+//      installer:error  -> callback(errorMsg)
+window.__cmdide_emit = function(event) {
   try {
-    const data = JSON.parse(dataJson);
-    const entries = (window.__cmdide_events || {})[event] || [];
-    const keep = [];
+    var args = Array.prototype.slice.call(arguments, 1);
+    var entries = (window.__cmdide_events || {})[event] || [];
+    var keep = [];
     entries.forEach(function(entry) {
-      try { entry.cb(data); } catch(e) {}
+      try { entry.cb.apply(null, args); } catch(e) {}
       entry.count++;
       if (entry.max < 0 || entry.count < entry.max) keep.push(entry);
     });
