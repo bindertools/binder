@@ -18,7 +18,7 @@ jobs:
   # ── Windows ──────────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         shell: pwsh
@@ -41,14 +41,119 @@ jobs:
           }
           echo "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
 
-      - name: Build
-        run: ./build.ps1 -Version "${{ github.event.release.tag_name }}" -DevInstaller
+      # Cache compiled vcpkg packages so OpenSSL and other slow builds are fast
+      # on subsequent runs. Key includes vcpkg.json hash so cache invalidates
+      # when dependencies change.
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: vcpkg-win-${{ hashFiles('cpp/vcpkg.json') }}
+          restore-keys: vcpkg-win-
+
+      - name: Build frontends
+        run: |
+          Set-Location app\frontend
+          npm ci
+          npm run build
+          Set-Location $env:GITHUB_WORKSPACE
+
+          Set-Location app\frontend
+          $env:VITE_PLUGINS = 'true'
+          npm run build
+          Remove-Item Env:VITE_PLUGINS -ErrorAction SilentlyContinue
+          Set-Location $env:GITHUB_WORKSPACE
+
+          Set-Location installer\windows\frontend
+          npm ci
+          npm run build
+          Set-Location $env:GITHUB_WORKSPACE
+
+      - name: CMake configure (shared vcpkg_installed)
+        run: |
+          $toolchain = "C:\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          $overlayPorts = "cpp\ports"
+
+          # Base build — vcpkg installs packages here
+          cmake -B cpp\build -S cpp `
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+            "-DVCPKG_OVERLAY_PORTS=$overlayPorts"
+
+          # Dev installer build — reuse the same vcpkg_installed to avoid
+          # a second full package installation (especially OpenSSL)
+          $sharedInstalled = (Resolve-Path cpp\build\vcpkg_installed).Path
+          cmake -B cpp\build-dev -S cpp `
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+            "-DVCPKG_OVERLAY_PORTS=$overlayPorts" `
+            "-DVCPKG_INSTALLED_DIR=$sharedInstalled" `
+            "-DCMDIDE_INSTALLER_DEV=ON"
+
+      - name: Build C++ targets
+        run: |
+          # Base app (frontend was built with no plugins — cmake copies to www/)
+          cmake --build cpp\build --config Release --target cmdide-host
+
+          # Stable installer
+          cmake --build cpp\build --config Release --target cmdide-installer
+
+          # Dev installer (uses shared vcpkg_installed)
+          cmake --build cpp\build-dev --config Release --target cmdide-installer
+          $devExe = "cpp\build-dev\Release\cmdide-installer.exe"
+          if (Test-Path $devExe) {
+            Copy-Item -Force $devExe "cpp\build\Release\cmdide-installer-dev.exe"
+          }
+
+          # Build plugins variant — rebuild frontend with plugins then re-copy www/
+          $env:VITE_PLUGINS = 'true'
+          Set-Location app\frontend; npm run build; Set-Location $env:GITHUB_WORKSPACE
+          Remove-Item Env:VITE_PLUGINS -ErrorAction SilentlyContinue
+          $distDir = "app\frontend\dist"
+          $wwwDest = "cpp\build\Release\www"
+          if (Test-Path $wwwDest) { Remove-Item -Recurse -Force $wwwDest }
+          Copy-Item -Recurse $distDir $wwwDest
+
+      - name: Stage and package artifacts
+        run: |
+          $rel = "cpp\build\Release"
+
+          # Stage base (no plugins)
+          $base = "$rel\cmdIDE-windows-amd64"
+          New-Item -ItemType Directory -Force $base | Out-Null
+          Copy-Item "$rel\cmdide-host.exe" "$base\cmdIDE-windows-amd64.exe"
+          Get-ChildItem $rel -Filter '*.dll' | Copy-Item -Destination $base
+          Copy-Item -Recurse "$rel\www" "$base\www"
+
+          # Rebuild www/ with base (no-plugins) frontend for the base package
+          # (the last cmake already put plugins in www/ -- swap it back for base)
+          # Actually we need base frontend for base package:
+          # Re-build base frontend and copy to base stage www/
+          Remove-Item Env:VITE_PLUGINS -ErrorAction SilentlyContinue
+          Set-Location app\frontend; npm run build; Set-Location $env:GITHUB_WORKSPACE
+          Remove-Item -Recurse -Force "$base\www"
+          Copy-Item -Recurse app\frontend\dist "$base\www"
+          Compress-Archive -Path "$base\*" -DestinationPath "$rel\cmdIDE-windows-amd64.zip"
+          Write-Host "  staged: cmdIDE-windows-amd64.zip"
+
+          # Stage plugins variant
+          $plugins = "$rel\cmdIDE-plugins-windows-amd64"
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          Copy-Item "$rel\cmdide-host.exe" "$plugins\cmdIDE-plugins-windows-amd64.exe"
+          Get-ChildItem $rel -Filter '*.dll' | Copy-Item -Destination $plugins
+          $env:VITE_PLUGINS = 'true'
+          Set-Location app\frontend; npm run build; Set-Location $env:GITHUB_WORKSPACE
+          Remove-Item Env:VITE_PLUGINS -ErrorAction SilentlyContinue
+          Copy-Item -Recurse app\frontend\dist "$plugins\www"
+          Compress-Archive -Path "$plugins\*" -DestinationPath "$rel\cmdIDE-plugins-windows-amd64.zip"
+          Write-Host "  staged: cmdIDE-plugins-windows-amd64.zip"
 
       - name: Verify outputs
         run: |
+          $rel = "cpp\build\Release"
           @(
-            'cpp\build\Release\cmdide-host.exe',
-            'cpp\build\Release\cmdide-installer.exe'
+            "$rel\cmdide-host.exe",
+            "$rel\cmdide-installer.exe",
+            "$rel\cmdIDE-windows-amd64.zip",
+            "$rel\cmdIDE-plugins-windows-amd64.zip"
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -70,12 +175,13 @@ jobs:
 
           if (-not $signtool) { throw "signtool.exe not found" }
 
+          $rel = "cpp\build\Release"
           $files = @(
-            'cpp\build\Release\cmdide-host.exe',
-            'cpp\build\Release\cmdide-installer.exe'
+            "$rel\cmdide-host.exe",
+            "$rel\cmdide-installer.exe"
           )
-          if (Test-Path 'cpp\build\Release\cmdide-installer-dev.exe') {
-            $files += 'cpp\build\Release\cmdide-installer-dev.exe'
+          if (Test-Path "$rel\cmdide-installer-dev.exe") {
+            $files += "$rel\cmdide-installer-dev.exe"
           }
 
           foreach ($f in $files) {
@@ -91,23 +197,28 @@ jobs:
         continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-windows
-          if-no-files-found: error
-          path: cpp/build/Release/cmdIDE-windows-amd64.zip
+          if-no-files-found: warn
+          path: |
+            cpp/build/Release/cmdIDE-windows-amd64.zip
+            cpp/build/Release/cmdIDE-plugins-windows-amd64.zip
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.event.release.tag_name }}"
-          $zip = "cpp/build/Release/cmdIDE-windows-amd64.zip"
-          if (Test-Path $zip) {
-            gh release upload $tag "$zip#cmdIDE-windows-amd64.zip" --clobber
+          $rel = "cpp/build/Release"
+          foreach ($f in @("$rel/cmdIDE-windows-amd64.zip", "$rel/cmdIDE-plugins-windows-amd64.zip")) {
+            if (Test-Path $f) {
+              $name = Split-Path $f -Leaf
+              gh release upload $tag "${f}#${name}" --clobber
+            }
           }
 
   # ── macOS ────────────────────────────────────────────────────────────────────
   build-macos:
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash
@@ -124,23 +235,26 @@ jobs:
       - name: Install dependencies
         run: |
           brew install cmake ninja create-dmg
-          # vcpkg
           if [ ! -f "$HOME/vcpkg/vcpkg" ]; then
             git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
             "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           fi
           echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-macos-${{ hashFiles('cpp/vcpkg.json') }}
+          restore-keys: vcpkg-macos-
+
       - name: Build
         run: |
-          # Delete Windows-generated package-lock.json so npm install picks the
-          # correct macOS Rollup native binary (Vite 7 / Rollup v4 requirement).
+          # Delete Windows-generated lockfiles so npm picks the correct macOS binary
           rm -f app/frontend/package-lock.json
           rm -f installer/windows/frontend/package-lock.json
-          # Install npm deps and build frontends
           (cd app/frontend && npm install && npm run build)
           (cd installer/windows/frontend && npm install && npm run build)
-          # CMake configure + build
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             "-DVCPKG_OVERLAY_PORTS=cpp/ports"
@@ -149,21 +263,30 @@ jobs:
       - name: Package macOS .app
         run: |
           mkdir -p cmdIDE.app/Contents/MacOS
-          cp cpp/build/cmdide cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || \
-          cp cpp/build/Release/cmdide cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || true
-          # Create minimal Info.plist
-          cat > cmdIDE.app/Contents/Info.plist <<EOF
+          # Try both possible output locations
+          cp cpp/build/Release/cmdide-host cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || \
+          cp cpp/build/cmdide-host cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || \
+          cp cpp/build/host/Release/cmdide-host cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || true
+
+          cat > cmdIDE.app/Contents/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleName</key><string>cmdIDE</string>
+            <key>CFBundleDisplayName</key><string>cmdIDE</string>
             <key>CFBundleExecutable</key><string>cmdide</string>
             <key>CFBundleIdentifier</key><string>com.cmdide.app</string>
-            <key>CFBundleVersion</key><string>${{ github.event.release.tag_name }}</string>
             <key>NSHighResolutionCapable</key><true/>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
           </dict></plist>
-          EOF
+          PLIST
+
           codesign --deep --force --sign - cmdIDE.app 2>/dev/null || true
+
+          # Copy www/ assets into the bundle
+          if [ -d cpp/build/Release/www ]; then
+            cp -r cpp/build/Release/www cmdIDE.app/Contents/Resources/
+          fi
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -176,7 +299,7 @@ jobs:
   # ── Linux ────────────────────────────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash
@@ -212,9 +335,16 @@ jobs:
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-linux-${{ hashFiles('cpp/vcpkg.json') }}
+          restore-keys: vcpkg-linux-
+
       - name: Build
         run: |
-          # Delete Windows-generated package-lock.json for Linux Rollup binary
+          # Delete Windows-generated lockfiles so npm picks the correct Linux binary
           rm -f app/frontend/package-lock.json
           rm -f installer/windows/frontend/package-lock.json
           (cd app/frontend && npm install && npm run build)
@@ -227,8 +357,12 @@ jobs:
       - name: Package Linux tar.gz
         run: |
           mkdir -p cmdide-linux-amd64
-          cp cpp/build/cmdide cmdide-linux-amd64/ 2>/dev/null || \
-          cp cpp/build/Release/cmdide cmdide-linux-amd64/ 2>/dev/null || true
+          # Find the output binary
+          find cpp/build -name "cmdide-host" -type f 2>/dev/null | head -1 | xargs -I{} cp {} cmdide-linux-amd64/cmdide-host || true
+          # Include www/ assets
+          if [ -d cpp/build/Release/www ]; then
+            cp -r cpp/build/Release/www cmdide-linux-amd64/
+          fi
           tar -czf cmdIDE-linux-amd64.tar.gz cmdide-linux-amd64/
 
       - name: Upload workflow artifacts
