@@ -1,15 +1,18 @@
 #include "assets.hpp"
 #include "dispatch.hpp"
+#include <webview.h>
+#include <nlohmann/json.hpp>
+#include <cstdlib>
+#include <string>
+
+#ifdef _WIN32
 #include "window_win.hpp"
 #include "splash_windows.hpp"
 #include "jumplist_windows.hpp"
 #include "singleinstance.hpp"
 #include "resource.h"
-#include <webview.h>
 #include <windows.h>
-#include <nlohmann/json.hpp>
-#include <cstdlib>
-#include <string>
+#endif
 
 // Suppress Wails window.go errors; the TypeScript shim replaces this properly.
 static constexpr const char* kWailsProxy = R"js(
@@ -30,16 +33,18 @@ window.go = window.go || new Proxy({}, {
 });
 )js";
 
+#ifdef _WIN32
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+#else
+int main(int, char**) {
+#endif
     bool debug = false;
 #ifdef _DEBUG
     debug = true;
 #endif
 
 #ifdef _WIN32
-    // Single-instance: bring existing window to front and exit if already running
     if (!AcquireSingleInstance()) return 0;
-
     SplashScreen splash;
     splash.Show();
 #endif
@@ -49,13 +54,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     wv.set_size(1280, 800, WEBVIEW_HINT_NONE);
 
 #ifdef _WIN32
-    // Make frameless + set taskbar icon after webview constructor (HWND is valid)
     auto hwnd_res = wv.window();
     if (hwnd_res.ok()) {
         HWND hwnd = static_cast<HWND>(hwnd_res.value());
         MakeFrameless(hwnd);
-
-        // Set app icon in taskbar and Alt+Tab
         HICON hIcon = LoadIconW(GetModuleHandleW(nullptr),
                                 MAKEINTRESOURCEW(IDI_APPICON));
         if (hIcon) {
@@ -65,24 +67,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
 #endif
 
-    // Instantiate dispatcher — full backend wiring
     Dispatcher dispatcher(wv);
 
 #ifdef _WIN32
-    // Register jump list (taskbar right-click entries)
     RegisterJumpList();
-#endif
-
-    // Pass splash pointer so app.ready IPC can close it
-    dispatcher.SetSplash(
-#ifdef _WIN32
-        &splash
+    dispatcher.SetSplash(&splash);
 #else
-        nullptr
+    dispatcher.SetSplash(nullptr);
 #endif
-    );
 
-    // Register the IPC entry point BEFORE wv.run()
     wv.bind("__cmdide_invoke",
         [](const std::string& seq, const std::string& req, void* arg) {
             auto* d = static_cast<Dispatcher*>(arg);
@@ -98,7 +91,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         },
         &dispatcher);
 
-    // Inject Wails compatibility proxy via init script (runs before page scripts)
     wv.init(kWailsProxy);
 
     const char* dev_env = std::getenv("CMDIDE_DEV");

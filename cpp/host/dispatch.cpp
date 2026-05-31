@@ -1,5 +1,7 @@
 #include "dispatch.hpp"
+#ifdef _WIN32
 #include "window_win.hpp"
+#endif
 #include "../src/fileops.hpp"
 #include "../src/config.hpp"
 #include "../src/search.hpp"

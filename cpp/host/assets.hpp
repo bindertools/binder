@@ -15,7 +15,20 @@ inline std::string GetExeDir() {
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     return fs::path(path).parent_path().string();
 }
-#else
+#elif __APPLE__
+#include <filesystem>
+#include <mach-o/dyld.h>
+namespace fs = std::filesystem;
+
+inline std::string GetExeDir() {
+    char path[4096] = {};
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        return fs::path(path).parent_path().string();
+    }
+    return fs::current_path().string();
+}
+#else  // Linux
 #include <filesystem>
 #include <unistd.h>
 namespace fs = std::filesystem;
