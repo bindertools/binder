@@ -1,4 +1,5 @@
 #include "installer.hpp"
+#include <httplib.h>
 #include <webview.h>
 #include <nlohmann/json.hpp>
 #include <cstdlib>
@@ -12,7 +13,6 @@
 #include <zip.h>
 #include <filesystem>
 #include <fstream>
-#include <WebView2.h>
 namespace fs = std::filesystem;
 
 // ── Asset extraction ──────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ static std::string ExtractInstallerAssets() {
     HMODULE hMod = GetModuleHandleW(nullptr);
     HRSRC hRes = FindResourceW(hMod, L"FRONTEND_ZIP", RT_RCDATA);
     if (!hRes) {
-        // Dev/fallback: look for www/ next to the exe
+        // Fallback: www/ next to the exe (dev mode)
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
         std::string dir = fs::path(exe).parent_path().string();
@@ -48,7 +48,7 @@ static std::string ExtractInstallerAssets() {
     std::string marker     = extractDir + "/.extracted";
 
     if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES)
-        return extractDir;  // already extracted
+        return extractDir;
 
     fs::create_directories(extractDir);
     zip_error_t ze{};
@@ -76,80 +76,31 @@ static std::string ExtractInstallerAssets() {
     return extractDir;
 }
 
-// ── Virtual host setup (avoids file:// CORS restrictions) ─────────────────────
-// Returns "https://installer.local/index.html" on success,
-// or a plain file:// URL as fallback.
-static std::string SetupInstallerUrl(webview::webview& wv, const std::string& root) {
-    auto ctrl_res = wv.browser_controller();
-    if (ctrl_res.ok()) {
-        auto* ctrl = static_cast<ICoreWebView2Controller*>(ctrl_res.value());
-        ICoreWebView2* wv2 = nullptr;
-        if (SUCCEEDED(ctrl->get_CoreWebView2(&wv2)) && wv2) {
-            ICoreWebView2_3* wv2_3 = nullptr;
-            if (SUCCEEDED(wv2->QueryInterface(IID_PPV_ARGS(&wv2_3))) && wv2_3) {
-                std::wstring wroot(root.begin(), root.end());
-                wv2_3->SetVirtualHostNameToFolderMapping(
-                    L"installer.local", wroot.c_str(),
-                    COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
-                wv2_3->Release();
-                wv2->Release();
-                return "https://installer.local/index.html";
-            }
-            wv2->Release();
-        }
-    }
-    // Fallback: file:// with normalised forward slashes
-    std::string url = "file:///";
-    for (char c : root) url += (c == '\\') ? '/' : c;
-    if (url.back() != '/') url += '/';
-    return url + "index.html";
-}
-
-// ── Pre-create the installer window (frameless from the start) ─────────────────
-// By creating the window BEFORE webview::webview, we avoid the flash of a
-// standard window with OS decorations. We pass this HWND to the webview
-// constructor so it embeds its content directly into our frameless window.
-static HWND CreateInstallerWindow(int w, int h) {
-    static const wchar_t* kClass = L"cmdIDEInstallerWnd";
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-
-    WNDCLASSEXW wc{};
-    wc.cbSize        = sizeof(wc);
-    wc.lpfnWndProc   = DefWindowProcW;
-    wc.hInstance     = hInst;
-    wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-    wc.lpszClassName = kClass;
-    wc.hIcon         = LoadIconW(hInst, MAKEINTRESOURCEW(100));
-    RegisterClassExW(&wc);
-
+// ── Frameless window helpers ───────────────────────────────────────────────────
+static void MakeFrameless(HWND hwnd, int w, int h) {
+    // Remove title bar; keep drop shadow
+    SetWindowLongPtrW(hwnd, GWL_STYLE,
+                      WS_POPUP | WS_VISIBLE | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+    // Center on screen
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
-    HWND hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW,            // show in taskbar
-        kClass, L"cmdIDE Installer",
-        WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,  // NO WS_VISIBLE yet
-        (sw - w) / 2, (sh - h) / 2, w, h,
-        nullptr, nullptr, hInst, nullptr);
-
-    if (!hwnd) return nullptr;
-
-    // Drop shadow via DWM
+    SetWindowPos(hwnd, nullptr,
+                 (sw - w) / 2, (sh - h) / 2, w, h,
+                 SWP_NOZORDER | SWP_FRAMECHANGED);
     MARGINS m = {1, 1, 1, 1};
     DwmExtendFrameIntoClientArea(hwnd, &m);
-
-    // Icons in taskbar / Alt+Tab
-    HICON hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(100));
+    // Set icon
+    HICON hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(100));
     if (hIcon) {
         SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
     }
-    return hwnd;
+    UpdateWindow(hwnd);
 }
 
-#else // non-Windows stubs
-static std::string ExtractInstallerAssets()                             { return ""; }
-static std::string SetupInstallerUrl(webview::webview&, const std::string&) { return "about:blank"; }
-#endif // _WIN32
+#else
+static std::string ExtractInstallerAssets() { return ""; }
+static void MakeFrameless(void*, int, int) {}
+#endif
 
 static constexpr const char* kWailsProxy = R"js(
 window.go = window.go || new Proxy({}, {
@@ -170,21 +121,40 @@ int main(int, char**) {
 #endif
     std::string root = ExtractInstallerAssets();
 
-#ifdef _WIN32
-    // Pre-create a frameless window so there is NEVER a flash of OS decorations.
-    // The webview embeds its WebView2 control into our window and sizes it correctly
-    // from the start since our window is already the right size with the right style.
-    HWND hwnd = CreateInstallerWindow(460, 330);
-    // debug=true enables F12 DevTools in this window — helps diagnose JS errors
-    webview::webview wv(true, hwnd);  // pass our window; webview uses it, doesn't own it
-    // Show the window now that WebView2 is initialised inside it
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
-#else
-    webview::webview wv(false, nullptr);
-#endif
-    wv.set_title("cmdIDE Installer");
+    // ── Serve the extracted frontend from a localhost HTTP server ─────────────
+    // Using httplib avoids all file:// CORS restrictions while keeping things
+    // simple. The server runs on a random port bound to 127.0.0.1 only.
+    auto srv = std::make_shared<httplib::Server>();
+    std::string url = "about:blank";
 
+    if (!root.empty()) {
+        // Serve static files from the extracted directory
+        srv->set_mount_point("/", root.c_str());
+
+        // Bind to a random available port
+        int port = srv->bind_to_any_port("127.0.0.1");
+        if (port > 0) {
+            // Start server in background thread
+            std::thread([srv]{ srv->listen_after_bind(); }).detach();
+            url = "http://127.0.0.1:" + std::to_string(port) + "/index.html";
+        }
+    }
+
+    // ── Create webview ────────────────────────────────────────────────────────
+    // debug=true enables F12 DevTools for troubleshooting
+    webview::webview wv(true, nullptr);
+    wv.set_title("cmdIDE Installer");
+    wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
+
+#ifdef _WIN32
+    {
+        auto hwnd_res = wv.window();
+        if (hwnd_res.ok())
+            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 460, 330);
+    }
+#endif
+
+    // ── IPC binding ───────────────────────────────────────────────────────────
     InstallerApp app(wv);
     BindCtx ctx{&wv, &app};
 
@@ -221,15 +191,10 @@ int main(int, char**) {
         &ctx);
 
     wv.init(kWailsProxy);
-
-#ifdef _WIN32
-    // Use virtual host mapping to avoid file:// CORS restrictions
-    std::string url = SetupInstallerUrl(wv, root);
-#else
-    std::string url = root.empty() ? "about:blank" : "file://" + root + "/index.html";
-#endif
-
     wv.navigate(url);
     wv.run();
+
+    // Stop the server when the installer closes
+    srv->stop();
     return 0;
 }
