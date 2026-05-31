@@ -1,5 +1,4 @@
 #include "installer.hpp"
-#include <httplib.h>
 #include <webview.h>
 #include <nlohmann/json.hpp>
 #include <cstdlib>
@@ -9,24 +8,17 @@
 #ifdef _WIN32
 #include <algorithm>
 #include <windows.h>
-#include <dwmapi.h>
 #include <zip.h>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 namespace fs = std::filesystem;
 
 // ── Asset extraction ──────────────────────────────────────────────────────────
 static std::string ExtractInstallerAssets() {
     HMODULE hMod = GetModuleHandleW(nullptr);
     HRSRC hRes = FindResourceW(hMod, L"FRONTEND_ZIP", RT_RCDATA);
-    if (!hRes) {
-        // Fallback: www/ next to the exe (dev mode)
-        wchar_t exe[MAX_PATH];
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        std::string dir = fs::path(exe).parent_path().string();
-        for (char& c : dir) if (c == '\\') c = '/';
-        return dir + "/www";
-    }
+    if (!hRes) return "";
 
     HGLOBAL hData  = LoadResource(hMod, hRes);
     const char* data = static_cast<const char*>(LockResource(hData));
@@ -53,9 +45,9 @@ static std::string ExtractInstallerAssets() {
     fs::create_directories(extractDir);
     zip_error_t ze{};
     zip_source_t* src = zip_source_buffer_create(data, size, 0, &ze);
-    if (!src) return extractDir;
+    if (!src) return "";
     zip_t* za = zip_open_from_source(src, ZIP_RDONLY, &ze);
-    if (!za) { zip_source_free(src); return extractDir; }
+    if (!za) { zip_source_free(src); return ""; }
 
     zip_int64_t count = zip_get_num_entries(za, 0);
     for (zip_int64_t i = 0; i < count; ++i) {
@@ -76,19 +68,87 @@ static std::string ExtractInstallerAssets() {
     return extractDir;
 }
 
-// ── Frameless window helpers ───────────────────────────────────────────────────
+// ── Read a file into a string ─────────────────────────────────────────────────
+static std::string ReadFile(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return "";
+    return {std::istreambuf_iterator<char>(f), {}};
+}
+
+// ── Base64 encode (RFC 4648, no line breaks) ──────────────────────────────────
+static std::string Base64Encode(const std::string& s) {
+    static constexpr char kAlpha[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((s.size() + 2) / 3) * 4);
+    for (size_t i = 0; i < s.size(); i += 3) {
+        auto b0 = (uint8_t)s[i];
+        auto b1 = i+1 < s.size() ? (uint8_t)s[i+1] : 0;
+        auto b2 = i+2 < s.size() ? (uint8_t)s[i+2] : 0;
+        uint32_t v = (b0 << 16) | (b1 << 8) | b2;
+        out += kAlpha[(v >> 18) & 0x3F];
+        out += kAlpha[(v >> 12) & 0x3F];
+        out += i+1 < s.size() ? kAlpha[(v >>  6) & 0x3F] : '=';
+        out += i+2 < s.size() ? kAlpha[ v        & 0x3F] : '=';
+    }
+    return out;
+}
+
+// ── Find first file matching extension in a directory ────────────────────────
+static std::string FindFile(const std::string& dir, const std::string& ext) {
+    for (auto& entry : fs::directory_iterator(dir)) {
+        if (entry.path().extension() == ext)
+            return entry.path().string();
+    }
+    return "";
+}
+
+// ── Build self-contained HTML (inline CSS + JS) ───────────────────────────────
+// WebView2's AppContainer sandbox blocks loopback (127.0.0.1) HTTP connections.
+// The fix: inline all CSS and JS directly into the HTML so no network requests
+// are needed — everything is served via wv.set_html() in-process.
+static std::string BuildInlineHtml(const std::string& extractDir) {
+    std::string assetsDir = extractDir + "/assets";
+
+    std::string jsPath  = FindFile(assetsDir, ".js");
+    std::string cssPath = FindFile(assetsDir, ".css");
+
+    // Find the main bundle (largest .js file — not the small shim files)
+    size_t maxSize = 0;
+    for (auto& entry : fs::directory_iterator(assetsDir)) {
+        if (entry.path().extension() == ".js") {
+            size_t sz = static_cast<size_t>(entry.file_size());
+            if (sz > maxSize) { maxSize = sz; jsPath = entry.path().string(); }
+        }
+    }
+
+    std::string js  = ReadFile(jsPath);
+    std::string css = ReadFile(cssPath);
+
+    // Replace `import.meta.url` references that break inline scripts
+    // (Vite uses import.meta.url for asset references in module mode)
+    // We navigate with set_html so there's no document URL — just handle it.
+
+    std::ostringstream html;
+    html << "<!DOCTYPE html><html lang=\"en\"><head>"
+         << "<meta charset=\"UTF-8\"/>"
+         << "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>"
+         << "<title>cmdIDE Installer</title>"
+         << "<style>" << css << "</style>"
+         << "</head><body><div id=\"root\"></div>"
+         << "<script type=\"module\">" << js << "</script>"
+         << "</body></html>";
+    return html.str();
+}
+
+// ── Window helpers ─────────────────────────────────────────────────────────────
 static void MakeFrameless(HWND hwnd, int w, int h) {
-    // Remove title bar; keep drop shadow
     SetWindowLongPtrW(hwnd, GWL_STYLE,
                       WS_POPUP | WS_VISIBLE | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
-    // Center on screen
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
     SetWindowPos(hwnd, nullptr,
                  (sw - w) / 2, (sh - h) / 2, w, h,
                  SWP_NOZORDER | SWP_FRAMECHANGED);
-    MARGINS m = {1, 1, 1, 1};
-    DwmExtendFrameIntoClientArea(hwnd, &m);
-    // Set icon
     HICON hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(100));
     if (hIcon) {
         SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
@@ -99,10 +159,12 @@ static void MakeFrameless(HWND hwnd, int w, int h) {
 
 #else
 static std::string ExtractInstallerAssets() { return ""; }
+static std::string BuildInlineHtml(const std::string&) { return "<html><body>Installer</body></html>"; }
 static void MakeFrameless(void*, int, int) {}
 #endif
 
 static constexpr const char* kWailsProxy = R"js(
+// Stub window.go so Wails-style App.* calls fail gracefully
 window.go = window.go || new Proxy({}, {
   get: (_,k) => new Proxy(function(){}, {
     get: (_,k2) => new Proxy(function(){}, {
@@ -110,6 +172,56 @@ window.go = window.go || new Proxy({}, {
     })
   })
 });
+// Stub window.runtime so EventsOn/EventsOff calls don't throw.
+// The wails-shim will patch these properly if it loads; otherwise
+// these no-ops prevent React from crashing in useEffect.
+if (!window.runtime) {
+  // Provide stubs for all Wails runtime functions used by the installer.
+  // EventsOn → EventsOnMultiple → window.runtime.EventsOnMultiple (must exist!)
+  window.__cmdide_events = {};
+  window.runtime = {
+    EventsOnMultiple: function(e, cb, max) {
+      (window.__cmdide_events[e] = window.__cmdide_events[e] || []).push({cb: cb, max: max, count: 0});
+      return function() { delete window.__cmdide_events[e]; };
+    },
+    EventsOn:   function(e, cb) { return window.runtime.EventsOnMultiple(e, cb, -1); },
+    EventsOnce: function(e, cb) { return window.runtime.EventsOnMultiple(e, cb, 1); },
+    EventsOff:  function(e) { delete window.__cmdide_events[e]; },
+    EventsOffAll: function() { window.__cmdide_events = {}; },
+    EventsEmit: function() {},
+    LogPrint: function() {}, LogTrace: function() {}, LogDebug: function() {},
+    LogInfo: function() {}, LogWarning: function() {}, LogError: function() {}, LogFatal: function() {},
+    WindowSetTitle: function() {}, WindowReload: function() {}, WindowReloadApp: function() {},
+    WindowSetAlwaysOnTop: function() {}, WindowCenter: function() {},
+    WindowFullscreen: function() {}, WindowUnfullscreen: function() {},
+    WindowSetSize: function() {}, WindowGetSize: function() { return Promise.resolve({w:460,h:330}); },
+    WindowSetMaxSize: function() {}, WindowSetMinSize: function() {}, WindowSetPosition: function() {},
+    WindowGetPosition: function() { return Promise.resolve({x:0,y:0}); },
+    WindowIsFullscreen: function() { return Promise.resolve(false); },
+    WindowIsMaximised: function() { return Promise.resolve(false); },
+    WindowIsMinimised: function() { return Promise.resolve(false); },
+    WindowMaximise: function() {}, WindowUnmaximise: function() {},
+    WindowToggleMaximise: function() {}, WindowMinimise: function() {}, WindowUnminimise: function() {},
+    BrowserOpenURL: function() {}, ScreenGetAll: function() { return Promise.resolve([]); },
+    Environment: function() { return Promise.resolve({platform:'windows',arch:'amd64',buildType:'production'}); },
+    Quit: function() {},
+    WindowSetSystemDefaultTheme: function() {}, WindowSetLightTheme: function() {}, WindowSetDarkTheme: function() {},
+  };
+}
+// Patch __cmdide_emit to fire into EventsOnMultiple-registered listeners
+window.__cmdide_emit = function(event, dataJson) {
+  try {
+    const data = JSON.parse(dataJson);
+    const entries = (window.__cmdide_events || {})[event] || [];
+    const keep = [];
+    entries.forEach(function(entry) {
+      try { entry.cb(data); } catch(e) {}
+      entry.count++;
+      if (entry.max < 0 || entry.count < entry.max) keep.push(entry);
+    });
+    window.__cmdide_events[event] = keep;
+  } catch(e) {}
+};
 )js";
 
 struct BindCtx { webview::webview* wv; InstallerApp* app; };
@@ -120,41 +232,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 int main(int, char**) {
 #endif
     std::string root = ExtractInstallerAssets();
+    std::string html = root.empty()
+        ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Installer Error: Could not extract assets</h2></body></html>"
+        : BuildInlineHtml(root);
 
-    // ── Serve the extracted frontend from a localhost HTTP server ─────────────
-    // Using httplib avoids all file:// CORS restrictions while keeping things
-    // simple. The server runs on a random port bound to 127.0.0.1 only.
-    auto srv = std::make_shared<httplib::Server>();
-    std::string url = "about:blank";
-
-    if (!root.empty()) {
-        // Serve static files from the extracted directory
-        srv->set_mount_point("/", root.c_str());
-
-        // Bind to a random available port
-        int port = srv->bind_to_any_port("127.0.0.1");
-        if (port > 0) {
-            // Start server in background thread
-            std::thread([srv]{ srv->listen_after_bind(); }).detach();
-            url = "http://127.0.0.1:" + std::to_string(port) + "/index.html";
-        }
-    }
-
-    // ── Create webview ────────────────────────────────────────────────────────
-    // debug=true enables F12 DevTools for troubleshooting
     webview::webview wv(true, nullptr);
     wv.set_title("cmdIDE Installer");
-    wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
+    wv.set_size(460, 330, WEBVIEW_HINT_NONE);
+    // NO frameless — test set_html rendering
 
-#ifdef _WIN32
-    {
-        auto hwnd_res = wv.window();
-        if (hwnd_res.ok())
-            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 460, 330);
-    }
-#endif
-
-    // ── IPC binding ───────────────────────────────────────────────────────────
     InstallerApp app(wv);
     BindCtx ctx{&wv, &app};
 
@@ -191,10 +277,7 @@ int main(int, char**) {
         &ctx);
 
     wv.init(kWailsProxy);
-    wv.navigate(url);
+    wv.navigate("data:text/html;base64," + Base64Encode(html));
     wv.run();
-
-    // Stop the server when the installer closes
-    srv->stop();
     return 0;
 }
