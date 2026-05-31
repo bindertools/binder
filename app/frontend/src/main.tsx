@@ -10,7 +10,7 @@ import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App'
 import './App.css'
 import '../../themes/index.scss'
-import { isWebViewHost } from './lib/ipc'
+import { isWebViewHost, invoke } from './lib/ipc'
 
 // Inject Wails compatibility shim so window.go.* routes through the C++ IPC.
 // Must happen before React renders any components that call window.go.*.
@@ -36,8 +36,17 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco })
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
+root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 )
+
+// Signal the C++ host that the frontend has rendered (closes the splash screen)
+if (isWebViewHost()) {
+  // Use setTimeout(0) to ensure React has flushed the initial render
+  setTimeout(() => {
+    invoke('app.ready').catch(() => {})
+  }, 0)
+}

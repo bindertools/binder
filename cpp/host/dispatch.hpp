@@ -8,6 +8,13 @@
 #include <string>
 #include <unordered_map>
 
+#ifdef _WIN32
+#include "splash_windows.hpp"
+#else
+// Forward declaration for non-Windows
+class SplashScreen;
+#endif
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 // Routes all __cmdide_invoke calls to backend modules.
 // Terminal output events are pushed to the frontend via emit().
@@ -15,6 +22,9 @@ class Dispatcher {
 public:
     explicit Dispatcher(webview::webview& wv);
     ~Dispatcher();
+
+    // Pass the splash screen pointer so app.ready can close it.
+    void SetSplash(SplashScreen* splash) { splash_ = splash; }
 
     // Called from the __cmdide_invoke bind callback (any thread).
     void dispatch(const std::string& seq,
@@ -41,6 +51,7 @@ private:
     void resolve_err(const std::string& seq, const std::string& error);
 
     webview::webview& wv_;
+    SplashScreen*     splash_ = nullptr;
 
     // Active terminal sessions
     std::unordered_map<std::string, std::unique_ptr<Terminal>> terminals_;

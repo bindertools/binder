@@ -3,7 +3,9 @@ find_path(ZSERGE_WEBVIEW_INCLUDE_DIRS "webview.h" REQUIRED)
 
 if(WIN32)
     find_package(unofficial-webview2 CONFIG REQUIRED)
-    add_executable(cmdide-host WIN32 main.cpp dispatch.cpp)
+    add_executable(cmdide-host WIN32 main.cpp dispatch.cpp window_win.cpp
+                                       splash_windows.cpp jumplist_windows.cpp
+                                       resources.rc)
 else()
     add_executable(cmdide-host main.cpp dispatch.cpp)
 endif()

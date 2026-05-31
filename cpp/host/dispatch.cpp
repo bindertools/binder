@@ -1,4 +1,5 @@
 #include "dispatch.hpp"
+#include "window_win.hpp"
 #include "../src/fileops.hpp"
 #include "../src/config.hpp"
 #include "../src/search.hpp"
@@ -117,6 +118,7 @@ void Dispatcher::dispatch(const std::string& seq,
         return;
     }
     if (type == "app.ready") {
+        if (splash_) splash_->Close();
         resolve_ok(seq, true);
         return;
     }
@@ -268,6 +270,17 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         } else if (type == "window.close") {
             resolve_ok(seq, true);
             wv_.dispatch([this] { wv_.terminate(); });
+        } else if (type == "window.setDragRects") {
+            auto rects_json = args.value("rects", json::array());
+            std::vector<DragRect> rects;
+            for (auto& r : rects_json) {
+                rects.push_back({
+                    r.value("x", 0), r.value("y", 0),
+                    r.value("w", 0), r.value("h", 0)
+                });
+            }
+            if (hwnd) SetDragRects(hwnd, rects);
+            resolve_ok(seq, true);
         } else if (type == "window.new") {
             // Launch a new instance of this exe
             wchar_t exe[MAX_PATH];

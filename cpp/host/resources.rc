@@ -1,0 +1,9 @@
+// cmdIDE host resources
+#include <windows.h>
+#include "resource.h"
+
+// Application icon (shown in taskbar, Alt+Tab, window decoration)
+IDI_APPICON ICON "../../app/build/windows/icon.ico"
+
+// Splash screen banner PNG (720x240 dark lockup)
+IDB_SPLASH  RCDATA "../../app/build/windows/splash_banner.png"

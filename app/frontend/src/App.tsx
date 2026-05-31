@@ -19,6 +19,7 @@ import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
 import { Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
+import { useDragRegions } from './lib/useDragRegions'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
 
@@ -284,6 +285,9 @@ class PluginErrorBoundary extends React.Component<PluginErrorBoundaryProps, Plug
 export default function App() {
   const [state, dispatch] = useReducer(tabReducer, initialState)
   const { tabs, activeId } = state
+
+  // Report drag regions to C++ host for frameless window dragging
+  useDragRegions()
 
   // ── per-panel state ──────────────────────────────────────────────────────────
   // tabPanels maps tabId → 'right' for right panel; absent = left panel (default)
