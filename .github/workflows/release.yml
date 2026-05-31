@@ -133,9 +133,13 @@ jobs:
 
       - name: Build
         run: |
+          # Delete Windows-generated package-lock.json so npm install picks the
+          # correct macOS Rollup native binary (Vite 7 / Rollup v4 requirement).
+          rm -f app/frontend/package-lock.json
+          rm -f installer/windows/frontend/package-lock.json
           # Install npm deps and build frontends
-          (cd app/frontend && npm ci && npm run build)
-          (cd installer/windows/frontend && npm ci && npm run build)
+          (cd app/frontend && npm install && npm run build)
+          (cd installer/windows/frontend && npm install && npm run build)
           # CMake configure + build
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
@@ -187,8 +191,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y \
             libgtk-3-dev libwebkit2gtk-4.1-dev \
-            cmake ninja-build libssl-dev \
+            ninja-build libssl-dev \
             pkg-config curl zip unzip tar
+          # cmake 4.x from Kitware (vcpkg 2025+ requires cmake >= 4.x)
+          wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] \
+            https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/kitware.list
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake
 
       - uses: actions/setup-node@v4
         with:
@@ -202,8 +214,11 @@ jobs:
 
       - name: Build
         run: |
-          (cd app/frontend && npm ci && npm run build)
-          (cd installer/windows/frontend && npm ci && npm run build)
+          # Delete Windows-generated package-lock.json for Linux Rollup binary
+          rm -f app/frontend/package-lock.json
+          rm -f installer/windows/frontend/package-lock.json
+          (cd app/frontend && npm install && npm run build)
+          (cd installer/windows/frontend && npm install && npm run build)
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             "-DVCPKG_OVERLAY_PORTS=cpp/ports"
