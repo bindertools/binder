@@ -95,7 +95,7 @@ export async function loadInstalledPlugins(): Promise<Plugin[]> {
         // IIFE bundles assign the plugin object to window[GLOBAL_KEY] and
         // reference global React set up by main.tsx.
         ;(window as any)[GLOBAL_KEY] = undefined
-        // eslint-disable-next-line no-new-func
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
         new Function(code)()
         const plugin = (window as any)[GLOBAL_KEY]
         ;(window as any)[GLOBAL_KEY] = undefined

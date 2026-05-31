@@ -12,7 +12,7 @@ type StoreTab = 'browse' | 'external'
 
 interface Props { onPluginChange: () => void }
 
-const CATEGORY_ICONS: Record<PluginCategory | string, string> = {
+const CATEGORY_ICONS: Record<string, string> = {
   development:  '⌨',
   productivity: '◈',
   utilities:    '⚒',
