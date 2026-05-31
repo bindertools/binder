@@ -57,3 +57,4 @@ target_link_libraries(cmdide-backend PRIVATE cmdide-backend-lib)
 
 # ── WebView host and installer ─────────────────────────────────────────────────
 add_subdirectory(host)
+add_subdirectory(installer)
