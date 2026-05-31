@@ -103,31 +103,46 @@ static std::string FindFile(const std::string& dir, const std::string& ext) {
     return "";
 }
 
-// ── Build self-contained HTML (inline CSS + JS) ───────────────────────────────
-// WebView2's AppContainer sandbox blocks loopback (127.0.0.1) HTTP connections.
-// The fix: inline all CSS and JS directly into the HTML so no network requests
-// are needed — everything is served via wv.set_html() in-process.
+// ── Build self-contained HTML (inline CSS + JS + SVG assets) ─────────────────
+// WebView2's AppContainer sandbox blocks loopback HTTP.
+// All assets are inlined — CSS as <style>, JS as <script type="module">,
+// SVGs as data: URIs patched directly into the JS bundle.
 static std::string BuildInlineHtml(const std::string& extractDir) {
     std::string assetsDir = extractDir + "/assets";
 
-    std::string jsPath  = FindFile(assetsDir, ".js");
-    std::string cssPath = FindFile(assetsDir, ".css");
-
-    // Find the main bundle (largest .js file — not the small shim files)
+    std::string jsPath, cssPath;
     size_t maxSize = 0;
     for (auto& entry : fs::directory_iterator(assetsDir)) {
         if (entry.path().extension() == ".js") {
             size_t sz = static_cast<size_t>(entry.file_size());
             if (sz > maxSize) { maxSize = sz; jsPath = entry.path().string(); }
+        } else if (entry.path().extension() == ".css") {
+            cssPath = entry.path().string();
         }
     }
 
     std::string js  = ReadFile(jsPath);
     std::string css = ReadFile(cssPath);
 
-    // Replace `import.meta.url` references that break inline scripts
-    // (Vite uses import.meta.url for asset references in module mode)
-    // We navigate with set_html so there's no document URL — just handle it.
+    // Inline SVG assets as data: URIs — absolute paths like /lockup-dark.svg
+    // can't load from a data: URI context, so we patch them directly in the JS.
+    auto inlineSvg = [&](const std::string& name) {
+        std::string path = extractDir + "/" + name;
+        std::string content = ReadFile(path);
+        if (content.empty()) return;
+        std::string dataUri = "data:image/svg+xml;base64," + Base64Encode(content);
+        // Replace all occurrences of the absolute path in the JS bundle
+        std::string needle = "/" + name;
+        size_t pos = 0;
+        while ((pos = js.find(needle, pos)) != std::string::npos) {
+            js.replace(pos, needle.length(), dataUri);
+            pos += dataUri.length();
+        }
+    };
+    inlineSvg("lockup-dark.svg");
+    inlineSvg("lockup-light.svg");
+    inlineSvg("logo-dark.svg");
+    inlineSvg("logo-light.svg");
 
     std::ostringstream html;
     html << "<!DOCTYPE html><html lang=\"en\"><head>"
@@ -236,10 +251,17 @@ int main(int, char**) {
         ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Installer Error: Could not extract assets</h2></body></html>"
         : BuildInlineHtml(root);
 
-    webview::webview wv(true, nullptr);
+    webview::webview wv(false, nullptr);  // debug=false for release
     wv.set_title("cmdIDE Installer");
-    wv.set_size(460, 330, WEBVIEW_HINT_NONE);
-    // NO frameless — test set_html rendering
+    wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
+
+#ifdef _WIN32
+    {
+        auto hwnd_res = wv.window();
+        if (hwnd_res.ok())
+            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 460, 330);
+    }
+#endif
 
     InstallerApp app(wv);
     BindCtx ctx{&wv, &app};
