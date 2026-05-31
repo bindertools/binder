@@ -1,0 +1,5 @@
+// cmdIDE installer resources
+#include <windows.h>
+
+// Installer frontend assets embedded as a zip
+FRONTEND_ZIP RCDATA "generated/frontend.zip"

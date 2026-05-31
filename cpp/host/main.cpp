@@ -94,9 +94,13 @@ int main(int, char**) {
     wv.init(kWailsProxy);
 
     const char* dev_env = std::getenv("CMDIDE_DEV");
-    std::string url = (dev_env && std::string(dev_env) == "1")
-        ? GetDevUrl()
-        : GetFrontendUrl(wv);
+    std::string url;
+    if (dev_env && std::string(dev_env) == "1") {
+        url = GetDevUrl();
+    } else {
+        std::string root = ExtractAssets();
+        url = GetFrontendUrl(wv, root);
+    }
 
     wv.navigate(url);
     wv.run();
