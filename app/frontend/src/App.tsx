@@ -13,12 +13,10 @@ import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import { buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins } from './plugins'
-import type { InstalledPluginCommand, Plugin, PluginContext } from './plugins'
+import { buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins, type InstalledPluginCommand, type Plugin, type PluginContext } from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn, EventsOff, Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
-import { Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 import { useDragRegions } from './lib/useDragRegions'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
@@ -320,7 +318,7 @@ export default function App() {
     setPluginCommands(buildInstalledPluginCommandMap(loaded))
   }, [])
 
-  useEffect(() => { reloadPlugins() }, [reloadPlugins])
+  useEffect(() => { void reloadPlugins() }, [reloadPlugins])
 
   const leftTabs = useMemo(
     () => tabs.filter(t => (tabPanels[t.id] ?? 'left') === 'left'),
@@ -623,7 +621,7 @@ export default function App() {
   }, [tabPanels, rightTabs, rightActiveId])
 
   // ── drag-drop between panels ──────────────────────────────────────────────────
-  const handleTabDrop = useCallback((tabId: string, targetPanel: 'left' | 'right') => {
+  const _handleTabDrop = useCallback((tabId: string, targetPanel: 'left' | 'right') => {
     const current = tabPanels[tabId] ?? 'left'
     if (current === targetPanel) return
     if (targetPanel === 'right') handleMoveRight(tabId)
@@ -631,7 +629,7 @@ export default function App() {
   }, [tabPanels, handleMoveRight, handleMoveLeft])
 
   // ── close others (within same panel) ─────────────────────────────────────────
-  const handleCloseOthers = useCallback((id: string) => {
+  const _handleCloseOthers = useCallback((id: string) => {
     const panel = tabPanels[id] ?? 'left'
     const samePanel = tabs.filter(t => (tabPanels[t.id] ?? 'left') === panel && t.id !== id)
     for (const t of samePanel) {
@@ -645,13 +643,13 @@ export default function App() {
   }, [tabs, tabPanels])
 
   // ── close right-panel tab ─────────────────────────────────────────────────────
-  const handleRightClose = useCallback((id: string) => {
+  const _handleRightClose = useCallback((id: string) => {
     dispatch({ type: 'close', id })
     // rightActiveId useEffect handles updating rightActiveId / disabling split
   }, [])
 
   // ── sibling terminal (panel-aware) ────────────────────────────────────────────
-  const handleAddSiblingTerminal = useCallback(async (parentId: string) => {
+  const _handleAddSiblingTerminal = useCallback(async (parentId: string) => {
     const cwd   = await GetTerminalCwd(parentId).catch(() => '')
     const panel = tabPanels[parentId] ?? 'left'
 

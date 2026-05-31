@@ -77,8 +77,17 @@ jobs:
           C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
           echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
 
+      # The package-lock.json is committed from Windows and only contains
+      # Windows-specific Rollup native binaries. Delete it on non-Windows so
+      # npm install re-resolves the correct platform binary (Vite 7 / Rollup v4).
+      - name: Remove Windows-specific package-lock (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: rm -f package-lock.json
+        working-directory: app/frontend
+
       - name: Build app frontend
-        run: ${{ matrix.npm }} ci && ${{ matrix.npm }} run build
+        run: ${{ matrix.npm }} install && ${{ matrix.npm }} run build
         working-directory: app/frontend
 
       - name: CMake configure

@@ -25,6 +25,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - uses: actions/setup-node@v4
         with:
@@ -48,6 +51,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - uses: actions/setup-node@v4
         with:
@@ -60,7 +66,5 @@ jobs:
         working-directory: app/frontend
 
       - name: ESLint
-        # --max-warnings 0 treats warnings as errors; lower to a number if the
-        # existing codebase has outstanding warnings you're working through.
         run: npx eslint src --max-warnings 20
         working-directory: app/frontend

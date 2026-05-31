@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   codeql:
+    name: CodeQL — ${{ matrix.language }}
     runs-on: windows-latest
     timeout-minutes: 45
 
@@ -29,13 +30,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: go
-            build-mode: manual
+          # Go analysis removed — no Go code remains after Phase N
           - language: javascript-typescript
             build-mode: none
-
-    env:
-      GOCACHE: ${{ github.workspace }}\.cache\go-build
 
     defaults:
       run:
@@ -46,10 +43,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          # GH_PAT must be a PAT (classic or fine-grained) with read access to
-          # all private submodule repos in the Command-IDE org. The default
-          # GITHUB_TOKEN is scoped to this repo only and cannot clone private
-          # submodules owned by the same organisation.
           token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Initialize CodeQL
@@ -64,39 +57,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Set up Go
-        if: matrix.language == 'go'
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      # Go embeds frontend/dist at compile time — must be built before go build
       - name: Install app frontend dependencies
-        if: matrix.language == 'go'
-        run: npm.cmd ci
-        working-directory: app/frontend
-
-      - name: Build app frontend
-        if: matrix.language == 'go'
-        run: npm.cmd run build
-        working-directory: app/frontend
-
-      - name: Build app Go module for analysis
-        if: matrix.language == 'go'
-        run: go build ./...
-        working-directory: app
-
-      # JS/TS: CodeQL analyzes source directly (build-mode: none)
-      - name: Install app frontend dependencies
-        if: matrix.language == 'javascript-typescript'
         run: npm.cmd ci
         working-directory: app/frontend
 
       - name: Install installer frontend dependencies
-        if: matrix.language == 'javascript-typescript'
         run: npm.cmd ci
-        working-directory: installer/frontend
+        working-directory: installer/windows/frontend
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4
