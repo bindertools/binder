@@ -21,27 +21,6 @@ concurrency:
 
 jobs:
 
-  # ── Go vulnerability scanner ──────────────────────────────────────────────────
-  govulncheck:
-    name: Go — govulncheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run govulncheck
-        run: govulncheck ./...
-        working-directory: app
-
   # ── npm audit — app frontend ──────────────────────────────────────────────────
   npm-audit-app:
     name: npm audit — app/frontend
@@ -79,11 +58,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        working-directory: installer/frontend
+        working-directory: installer/windows/frontend
 
       - name: Run npm audit
         run: npm audit --audit-level=high
-        working-directory: installer/frontend
+        working-directory: installer/windows/frontend
 
   # ── Secret / credential scanning ─────────────────────────────────────────────
   gitleaks:

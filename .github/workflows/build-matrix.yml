@@ -1,6 +1,6 @@
 name: Build Matrix
 
-# Compile the Go binary on every platform on each PR.
+# Compile the C++ backend on every platform on each PR.
 # Catches Windows-only vs Unix-only compilation errors before merge.
 
 on:
@@ -22,7 +22,7 @@ jobs:
 
   compile:
     name: Compile — ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
@@ -31,19 +31,14 @@ jobs:
           - os: windows-latest
             shell: pwsh
             npm: npm.cmd
-            go-cache: ${{ github.workspace }}\.cache\go-build
           - os: ubuntu-latest
             shell: bash
             npm: npm
-            go-cache: /home/runner/.cache/go-build
           - os: macos-latest
             shell: bash
             npm: npm
-            go-cache: /Users/runner/.cache/go-build
 
     runs-on: ${{ matrix.os }}
-    env:
-      GOCACHE: ${{ matrix.go-cache }}
 
     defaults:
       run:
@@ -59,34 +54,44 @@ jobs:
         with:
           node-version: 20
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            cmake ninja-build libssl-dev
 
-      # The Go package embeds frontend/dist — must exist before go build
-      - name: Install frontend dependencies
-        run: ${{ matrix.npm }} ci
+      - name: Bootstrap vcpkg (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          git clone --depth=1 https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
+
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth=1 https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+
+      - name: Build app frontend
+        run: ${{ matrix.npm }} ci && ${{ matrix.npm }} run build
         working-directory: app/frontend
 
-      - name: Build frontend
-        run: ${{ matrix.npm }} run build
+      - name: CMake configure
+        shell: bash
+        run: |
+          cmake -B cpp/build -S cpp \
+            "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports"
+
+      - name: CMake build (compile check)
+        shell: bash
+        run: cmake --build cpp/build --config Release --target cmdide-host
+
+      - name: TypeScript type check
+        run: ${{ matrix.npm }} run typecheck
         working-directory: app/frontend
-
-      - name: go build (compile check)
-        run: go build ./...
-        working-directory: app
-
-      - name: go vet (quick static check)
-        run: go vet ./...
-        working-directory: app
-
-      - name: go test (unit tests)
-        run: go test ./... -timeout 60s
-        working-directory: app

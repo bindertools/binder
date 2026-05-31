@@ -17,48 +17,6 @@ concurrency:
 
 jobs:
 
-  # ── Go — golangci-lint ────────────────────────────────────────────────────────
-  go-lint:
-    name: Go — golangci-lint
-    runs-on: windows-latest
-    timeout-minutes: 20
-    env:
-      GOCACHE: ${{ github.workspace }}\.cache\go-build
-    defaults:
-      run:
-        shell: pwsh
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.GH_PAT || github.token }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      # Go embeds frontend/dist at compile time — must be built before analysis
-      - name: Install frontend dependencies
-        run: npm.cmd ci
-        working-directory: app/frontend
-
-      - name: Build frontend
-        run: npm.cmd run build
-        working-directory: app/frontend
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: app
-          args: --config ../.golangci.yml --timeout 15m
-
   # ── TypeScript — type check ───────────────────────────────────────────────────
   ts-typecheck:
     name: TypeScript — tsc --noEmit

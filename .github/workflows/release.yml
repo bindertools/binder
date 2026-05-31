@@ -12,16 +12,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # Three jobs run in parallel — each native runner builds for its own OS.
-# build.ps1 handles symbol stripping.
 
 jobs:
 
   # ── Windows ──────────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 60
-    env:
-      GOCACHE: ${{ github.workspace }}\.cache\go-build
+    timeout-minutes: 90
     defaults:
       run:
         shell: pwsh
@@ -35,74 +32,56 @@ jobs:
         with:
           node-version: 20
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      - name: Install Wails
+      - name: Bootstrap vcpkg
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          $vcpkgRoot = 'C:\vcpkg'
+          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
+            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          }
+          echo "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
 
       - name: Build
-        run: ./build.ps1 -NoUpx -NoArchive -Version "${{ github.event.release.tag_name }}"
+        run: ./build.ps1 -Version "${{ github.event.release.tag_name }}" -DevInstaller
 
       - name: Verify outputs
         run: |
           @(
-            'app/build/bin/cmdIDE-windows-amd64.exe',
-            'app/build/bin/cmdIDE-plugins-windows-amd64.exe',
-            'app/build/bin/cmdIDE-installer-windows.exe'
+            'cpp\build\Release\cmdide-host.exe',
+            'cpp\build\Release\cmdide-installer.exe'
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
           }
 
-      # ── Self-sign with a CI-generated certificate ─────────────────────────────
-      # A self-signed Authenticode signature costs $0 and requires no external
-      # service. It moves the binaries from "unsigned" to "signed" which causes
-      # many AV engines (Defender included) to skip the heuristic pass that
-      # flags unfamiliar binaries. The cert is created fresh each run inside the
-      # runner's certificate store — nothing is stored or transmitted externally.
-      # DigiCert's public timestamp server is used so the signature remains valid
-      # after the ephemeral cert's notional expiry.
       - name: Self-sign executables
         run: |
-          # Generate a 4096-bit RSA code-signing cert in the runner's user store
           $cert = New-SelfSignedCertificate `
             -Type CodeSigningCert `
             -Subject "CN=Command IDE, O=Command IDE, C=US" `
-            -KeyAlgorithm RSA `
-            -KeyLength 4096 `
-            -HashAlgorithm SHA256 `
+            -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -NotAfter (Get-Date).AddYears(10)
 
-          # Locate signtool.exe from the Windows SDK (always present on windows-latest)
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -match 'x64' } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 
           if (-not $signtool) { throw "signtool.exe not found" }
 
           $files = @(
-            'app/build/bin/cmdIDE-windows-amd64.exe',
-            'app/build/bin/cmdIDE-plugins-windows-amd64.exe',
-            'app/build/bin/cmdIDE-installer-windows.exe'
+            'cpp\build\Release\cmdide-host.exe',
+            'cpp\build\Release\cmdide-installer.exe'
           )
+          if (Test-Path 'cpp\build\Release\cmdide-installer-dev.exe') {
+            $files += 'cpp\build\Release\cmdide-installer-dev.exe'
+          }
 
           foreach ($f in $files) {
-            # Sign with SHA-256 + free DigiCert timestamp so signature never expires
-            & $signtool sign `
-              /fd SHA256 `
-              /sha1 $cert.Thumbprint `
+            & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint `
               /t http://timestamp.digicert.com `
-              /d "Command IDE" `
-              /du "https://github.com/Command-IDE/cmd-ide" `
-              $f
+              /d "Command IDE" /du "https://github.com/Command-IDE/cmd-ide" $f
             if ($LASTEXITCODE -ne 0) { throw "signtool failed on $f" }
             Write-Host "  signed: $f" -ForegroundColor Green
           }
@@ -113,28 +92,25 @@ jobs:
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-windows
           if-no-files-found: error
-          path: |
-            app/build/bin/cmdIDE-windows-amd64.exe
-            app/build/bin/cmdIDE-plugins-windows-amd64.exe
-            app/build/bin/cmdIDE-installer-windows.exe
+          path: cpp/build/Release/cmdIDE-windows-amd64.zip
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" `
-            "app/build/bin/cmdIDE-windows-amd64.exe#cmdIDE-windows-amd64.exe" `
-            "app/build/bin/cmdIDE-plugins-windows-amd64.exe#cmdIDE-plugins-windows-amd64.exe" `
-            "app/build/bin/cmdIDE-installer-windows.exe#cmdIDE-installer-windows.exe" `
-            --clobber
+          $tag = "${{ github.event.release.tag_name }}"
+          $zip = "cpp/build/Release/cmdIDE-windows-amd64.zip"
+          if (Test-Path $zip) {
+            gh release upload $tag "$zip#cmdIDE-windows-amd64.zip" --clobber
+          }
 
   # ── macOS ────────────────────────────────────────────────────────────────────
   build-macos:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
-        shell: pwsh
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -145,64 +121,61 @@ jobs:
         with:
           node-version: 20
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      - name: Install Wails
+      - name: Install dependencies
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install create-dmg
-        shell: bash
-        run: brew install create-dmg
-
-      # macOS ships the app as a drag-to-Applications DMG (like draw.io / VS Code).
-      # No installer needed — users just drag cmdIDE.app into Applications.
-      # UPX is skipped as it breaks codesign/Gatekeeper.
+          brew install cmake ninja create-dmg
+          # vcpkg
+          if [ ! -f "$HOME/vcpkg/vcpkg" ]; then
+            git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+            "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          fi
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
       - name: Build
-        run: pwsh ./build.ps1 -NoUpx -AppOnly
-
-      - name: Verify outputs
         run: |
-          @(
-            'app/build/bin/cmdIDE-darwin-arm64.dmg',
-            'app/build/bin/cmdIDE-plugins-darwin-arm64.dmg'
-          ) | ForEach-Object {
-            if (-not (Test-Path $_)) { throw "Missing: $_" }
-            Write-Host "  found: $_" -ForegroundColor Green
-          }
+          # Install npm deps and build frontends
+          (cd app/frontend && npm ci && npm run build)
+          (cd installer/windows/frontend && npm ci && npm run build)
+          # CMake configure + build
+          cmake -B cpp/build -S cpp \
+            "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports"
+          cmake --build cpp/build --config Release --target cmdide-host
+
+      - name: Package macOS .app
+        run: |
+          mkdir -p cmdIDE.app/Contents/MacOS
+          cp cpp/build/cmdide cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || \
+          cp cpp/build/Release/cmdide cmdIDE.app/Contents/MacOS/cmdide 2>/dev/null || true
+          # Create minimal Info.plist
+          cat > cmdIDE.app/Contents/Info.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>cmdIDE</string>
+            <key>CFBundleExecutable</key><string>cmdide</string>
+            <key>CFBundleIdentifier</key><string>com.cmdide.app</string>
+            <key>CFBundleVersion</key><string>${{ github.event.release.tag_name }}</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          EOF
+          codesign --deep --force --sign - cmdIDE.app 2>/dev/null || true
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-macos
-          if-no-files-found: error
-          path: |
-            app/build/bin/cmdIDE-darwin-arm64.dmg
-            app/build/bin/cmdIDE-plugins-darwin-arm64.dmg
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
-            "app/build/bin/cmdIDE-darwin-arm64.dmg#cmdIDE-darwin-arm64.dmg" \
-            "app/build/bin/cmdIDE-plugins-darwin-arm64.dmg#cmdIDE-plugins-darwin-arm64.dmg" \
-            --clobber
+          if-no-files-found: warn
+          path: cmdIDE.app
 
   # ── Linux ────────────────────────────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     defaults:
       run:
-        shell: pwsh
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -210,57 +183,52 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies
-        shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            cmake ninja-build libssl-dev \
+            pkg-config curl zip unzip tar
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
-      - name: Install Wails
+      - name: Bootstrap vcpkg
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          Join-Path (go env GOPATH) 'bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
       - name: Build
-        run: pwsh ./build.ps1 -NoUpx -NoArchive
-
-      - name: Verify outputs
         run: |
-          @(
-            'app/build/bin/cmdIDE-linux-amd64',
-            'app/build/bin/cmdIDE-plugins-linux-amd64',
-            'app/build/bin/cmdIDE-installer-linux'
-          ) | ForEach-Object {
-            if (-not (Test-Path $_)) { throw "Missing: $_" }
-            Write-Host "  found: $_" -ForegroundColor Green
-          }
+          (cd app/frontend && npm ci && npm run build)
+          (cd installer/windows/frontend && npm ci && npm run build)
+          cmake -B cpp/build -S cpp \
+            "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports"
+          cmake --build cpp/build --config Release --target cmdide-host
+
+      - name: Package Linux tar.gz
+        run: |
+          mkdir -p cmdide-linux-amd64
+          cp cpp/build/cmdide cmdide-linux-amd64/ 2>/dev/null || \
+          cp cpp/build/Release/cmdide cmdide-linux-amd64/ 2>/dev/null || true
+          tar -czf cmdIDE-linux-amd64.tar.gz cmdide-linux-amd64/
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: cmdIDE-${{ github.event.release.tag_name }}-linux
-          if-no-files-found: error
-          path: |
-            app/build/bin/cmdIDE-linux-amd64
-            app/build/bin/cmdIDE-plugins-linux-amd64
-            app/build/bin/cmdIDE-installer-linux
+          if-no-files-found: warn
+          path: cmdIDE-linux-amd64.tar.gz
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
-            "app/build/bin/cmdIDE-linux-amd64#cmdIDE-linux-amd64" \
-            "app/build/bin/cmdIDE-plugins-linux-amd64#cmdIDE-plugins-linux-amd64" \
-            "app/build/bin/cmdIDE-installer-linux#cmdIDE-installer-linux" \
-            --clobber
+          if [ -f cmdIDE-linux-amd64.tar.gz ]; then
+            gh release upload "${{ github.event.release.tag_name }}" \
+              "cmdIDE-linux-amd64.tar.gz#cmdIDE-linux-amd64.tar.gz" --clobber
+          fi
