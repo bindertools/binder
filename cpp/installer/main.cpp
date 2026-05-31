@@ -179,14 +179,36 @@ static void MakeFrameless(void*, int, int) {}
 #endif
 
 static constexpr const char* kWailsProxy = R"js(
-// Stub window.go so Wails-style App.* calls fail gracefully
-window.go = window.go || new Proxy({}, {
-  get: (_,k) => new Proxy(function(){}, {
-    get: (_,k2) => new Proxy(function(){}, {
-      get: (_,k3) => () => Promise.reject('Wails not available in C++ installer')
-    })
-  })
-});
+// ── IPC invoke helper ──────────────────────────────────────────────────────────
+// The wails-shim.ts fails to load from data: URI context (dynamic import of a
+// relative chunk URL fails). We replicate its functionality here in the init
+// script, which runs reliably via WebView2's AddScriptToExecuteOnDocumentCreated.
+function __ipcInvoke(type, args) {
+  if (!window.__cmdide_invoke) return Promise.reject(new Error('IPC not available'));
+  var reqId = Math.random().toString(36).slice(2);
+  return window.__cmdide_invoke(type, JSON.stringify(args || {}), reqId)
+    .then(function(result) {
+      // webview/webview automatically JSON.parses the resolve value,
+      // so result is already a JS object: {ok: bool, data: ...}
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    });
+}
+
+// ── Patch window.go.main.App.* to call the C++ InstallerApp via IPC ───────────
+// This replaces what wails-shim.ts would normally do.
+window.go = {
+  main: {
+    App: {
+      GetReleases:    function() { return __ipcInvoke('installer.getReleases', {}); },
+      GetChannel:     function() { return __ipcInvoke('installer.getChannel', {}); },
+      GetInstallDir:  function() { return __ipcInvoke('installer.getInstallDir', {}); },
+      Install:        function(v, d) { return __ipcInvoke('installer.install', {version: v, createDesktop: d}); },
+      LaunchAndClose: function() { return __ipcInvoke('installer.launch', {}); },
+      CloseInstaller: function() { return __ipcInvoke('installer.close', {}); },
+    }
+  }
+};
 // Stub window.runtime so EventsOn/EventsOff calls don't throw.
 // The wails-shim will patch these properly if it loads; otherwise
 // these no-ops prevent React from crashing in useEffect.
