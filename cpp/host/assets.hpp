@@ -54,8 +54,12 @@ inline std::string ExtractAssets() {
     GetTempPathA(MAX_PATH, tmp);
     char hashStr[12];
     sprintf_s(hashStr, "%08x", hash);
-    std::string extractDir = std::string(tmp) + "cmdide-" + hashStr;
-    std::string marker     = extractDir + "\\.extracted";
+    // Normalize to forward slashes so file:// URLs work without conversion
+    std::string tmpPath(tmp);
+    for (char& c : tmpPath) if (c == '\\') c = '/';
+    if (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
+    std::string extractDir = tmpPath + "/cmdide-" + hashStr;
+    std::string marker     = extractDir + "/.extracted";
 
     // Skip extraction if already done (same version)
     if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -123,7 +127,12 @@ inline std::string GetFrontendUrl(webview::webview& wv, const std::string& extra
             wv2->Release();
         }
     }
-    return "file:///" + extractedRoot + "/index.html";
+    // Fallback: file:// URL with forward slashes (required for valid URLs on Windows)
+    std::string url = "file:///";
+    for (char c : extractedRoot) url += (c == '\\') ? '/' : c;
+    if (url.back() != '/') url += '/';
+    url += "index.html";
+    return url;
 }
 
 #elif __APPLE__

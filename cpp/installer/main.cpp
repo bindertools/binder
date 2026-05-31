@@ -41,8 +41,12 @@ static std::string ExtractInstallerAssets() {
     GetTempPathA(MAX_PATH, tmp);
     char hashStr[12];
     sprintf_s(hashStr, "%08x", hash);
-    std::string extractDir = std::string(tmp) + "cmdide-inst-" + hashStr;
-    std::string marker = extractDir + "\\.extracted";
+    // Use forward slashes throughout so URLs work without conversion
+    std::string tmpPath(tmp);
+    for (char& c : tmpPath) if (c == '\\') c = '/';
+    if (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
+    std::string extractDir = tmpPath + "/cmdide-inst-" + hashStr;
+    std::string marker = extractDir + "/.extracted";
 
     if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES)
         return extractDir;
@@ -73,8 +77,17 @@ static std::string ExtractInstallerAssets() {
     return extractDir;
 }
 
+// Convert Windows backslashes to forward slashes for a valid file:// URL.
+static std::string ToFileUrl(const std::string& path) {
+    std::string url = "file:///";
+    for (char c : path) url += (c == '\\') ? '/' : c;
+    if (url.back() != '/') url += '/';
+    url += "index.html";
+    return url;
+}
+
 static std::string GetInstallerUrl(const std::string& root) {
-    return "file:///" + root + "/index.html";
+    return ToFileUrl(root);
 }
 
 static void MakeInstallerFrameless(HWND hwnd) {
