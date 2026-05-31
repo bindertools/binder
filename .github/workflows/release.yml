@@ -164,18 +164,18 @@ jobs:
           # Copy www/ assets into the bundle
           [ -d cpp/build/Release/www ] && cp -r cpp/build/Release/www cmdIDE.app/Contents/Resources/ || true
 
-          cat > cmdIDE.app/Contents/Info.plist <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleName</key><string>cmdIDE</string>
-  <key>CFBundleDisplayName</key><string>cmdIDE</string>
-  <key>CFBundleExecutable</key><string>cmdide</string>
-  <key>CFBundleIdentifier</key><string>com.cmdide.app</string>
-  <key>NSHighResolutionCapable</key><true/>
-  <key>LSMinimumSystemVersion</key><string>12.0</string>
-</dict></plist>
-PLIST
+          {
+            echo '<?xml version="1.0" encoding="UTF-8"?>'
+            echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+            echo '<plist version="1.0"><dict>'
+            echo '  <key>CFBundleName</key><string>cmdIDE</string>'
+            echo '  <key>CFBundleDisplayName</key><string>cmdIDE</string>'
+            echo '  <key>CFBundleExecutable</key><string>cmdide</string>'
+            echo '  <key>CFBundleIdentifier</key><string>com.cmdide.app</string>'
+            echo '  <key>NSHighResolutionCapable</key><true/>'
+            echo '  <key>LSMinimumSystemVersion</key><string>12.0</string>'
+            echo '</dict></plist>'
+          } > cmdIDE.app/Contents/Info.plist
           codesign --deep --force --sign - cmdIDE.app 2>/dev/null || true
 
           # Create DMG
