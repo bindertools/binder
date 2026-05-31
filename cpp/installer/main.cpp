@@ -105,24 +105,45 @@ static std::string SetupInstallerUrl(webview::webview& wv, const std::string& ro
     return url + "index.html";
 }
 
-// ── Window helpers ─────────────────────────────────────────────────────────────
-static void MakeInstallerFrameless(HWND hwnd) {
-    // Hide during style changes to avoid the flash of a window with OS decorations
-    ShowWindow(hwnd, SW_HIDE);
-    SetWindowLongPtrW(hwnd, GWL_STYLE,
-                      WS_POPUP | WS_VISIBLE | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+// ── Pre-create the installer window (frameless from the start) ─────────────────
+// By creating the window BEFORE webview::webview, we avoid the flash of a
+// standard window with OS decorations. We pass this HWND to the webview
+// constructor so it embeds its content directly into our frameless window.
+static HWND CreateInstallerWindow(int w, int h) {
+    static const wchar_t* kClass = L"cmdIDEInstallerWnd";
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+
+    WNDCLASSEXW wc{};
+    wc.cbSize        = sizeof(wc);
+    wc.lpfnWndProc   = DefWindowProcW;
+    wc.hInstance     = hInst;
+    wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    wc.lpszClassName = kClass;
+    wc.hIcon         = LoadIconW(hInst, MAKEINTRESOURCEW(100));
+    RegisterClassExW(&wc);
+
+    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    HWND hwnd = CreateWindowExW(
+        WS_EX_APPWINDOW,            // show in taskbar
+        kClass, L"cmdIDE Installer",
+        WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,  // NO WS_VISIBLE yet
+        (sw - w) / 2, (sh - h) / 2, w, h,
+        nullptr, nullptr, hInst, nullptr);
+
+    if (!hwnd) return nullptr;
+
+    // Drop shadow via DWM
     MARGINS m = {1, 1, 1, 1};
     DwmExtendFrameIntoClientArea(hwnd, &m);
-    // Re-show after styling applied — no more flash
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
-}
-static void CenterWindow(HWND hwnd, int w, int h) {
-    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
-    SetWindowPos(hwnd, nullptr, (sw - w) / 2, (sh - h) / 2, w, h,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+
+    // Icons in taskbar / Alt+Tab
+    HICON hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(100));
+    if (hIcon) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
+    }
+    return hwnd;
 }
 
 #else // non-Windows stubs
@@ -149,24 +170,20 @@ int main(int, char**) {
 #endif
     std::string root = ExtractInstallerAssets();
 
-    webview::webview wv(false, nullptr);
-    wv.set_title("cmdIDE Installer");
-    wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
-
 #ifdef _WIN32
-    auto hwnd_res = wv.window();
-    if (hwnd_res.ok()) {
-        HWND hwnd = static_cast<HWND>(hwnd_res.value());
-        MakeInstallerFrameless(hwnd);
-        CenterWindow(hwnd, 460, 330);
-        // Set the taskbar / Alt+Tab icon
-        HICON hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(100));
-        if (hIcon) {
-            SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
-            SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
-        }
-    }
+    // Pre-create a frameless window so there is NEVER a flash of OS decorations.
+    // The webview embeds its WebView2 control into our window and sizes it correctly
+    // from the start since our window is already the right size with the right style.
+    HWND hwnd = CreateInstallerWindow(460, 330);
+    // debug=true enables F12 DevTools in this window — helps diagnose JS errors
+    webview::webview wv(true, hwnd);  // pass our window; webview uses it, doesn't own it
+    // Show the window now that WebView2 is initialised inside it
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+#else
+    webview::webview wv(false, nullptr);
 #endif
+    wv.set_title("cmdIDE Installer");
 
     InstallerApp app(wv);
     BindCtx ctx{&wv, &app};
