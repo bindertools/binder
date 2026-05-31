@@ -35,11 +35,21 @@ target_link_libraries(cmdide-backend-lib PUBLIC
     cmark::cmark
     unofficial::sqlite3::sqlite3
     libzip::zip
-    iphlpapi
-    psapi
 )
 
-# WinHTTP was removed in K.4 — replaced by cpp-httplib with OpenSSL.
+if(WIN32)
+    target_link_libraries(cmdide-backend-lib PUBLIC
+        iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable
+        psapi      # EnumProcesses, GetProcessMemoryInfo
+    )
+endif()
+
+if(UNIX AND NOT APPLE)
+    # OpenSSL is needed by cpp-httplib on Linux
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(cmdide-backend-lib PUBLIC
+        OpenSSL::SSL OpenSSL::Crypto util)
+endif()
 
 if(WIN32)
     target_compile_definitions(cmdide-backend-lib PUBLIC

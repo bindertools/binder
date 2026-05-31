@@ -38,7 +38,6 @@ if(WIN32)
         shlwapi
         dwmapi
     )
-    # Copy WebView2Loader.dll and other runtime DLLs to the output directory
     add_custom_command(TARGET cmdide-host POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_RUNTIME_DLLS:cmdide-host>
@@ -46,6 +45,21 @@ if(WIN32)
         COMMAND_EXPAND_LISTS
         COMMENT "Copying runtime DLLs"
     )
+elseif(UNIX AND NOT APPLE)
+    # Linux: GTK3 and WebKit2GTK headers + libraries for webview/webview
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+    pkg_check_modules(WEBKIT2GTK REQUIRED webkit2gtk-4.1)
+    target_compile_options(cmdide-host PRIVATE ${GTK3_CFLAGS_OTHER} ${WEBKIT2GTK_CFLAGS_OTHER})
+    target_include_directories(cmdide-host PRIVATE
+        ${GTK3_INCLUDE_DIRS} ${WEBKIT2GTK_INCLUDE_DIRS})
+    target_link_libraries(cmdide-host PRIVATE
+        ${GTK3_LIBRARIES} ${WEBKIT2GTK_LIBRARIES})
+elseif(APPLE)
+    # macOS: WebKit via system framework
+    target_link_libraries(cmdide-host PRIVATE
+        "-framework WebKit"
+        "-framework Cocoa")
 endif()
 
 # ── Copy frontend assets alongside the executable ────────────────────────────
