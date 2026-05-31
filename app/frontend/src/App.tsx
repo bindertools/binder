@@ -166,7 +166,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       }
       const tab: Tab = {
         id: nextId(),
-        type: action.tabType as any,
+        type: action.tabType as Tab['type'],
         title: action.title,
         parentId: action.terminalId,
         ...(action.cwd ? { meta: { cwd: action.cwd } } : {}),
@@ -509,7 +509,7 @@ export default function App() {
 
   useEffect(() => {
     EventsOn('app:open-config', (...args: any[]) => {
-      const terminalId = (args[0] as any)?.terminalId as string | undefined
+      const terminalId = (args[0] as { terminalId?: string } | undefined)?.terminalId
       dispatch({ type: 'open-config', terminalId })
     })
     return () => EventsOff('app:open-config')
@@ -530,9 +530,10 @@ export default function App() {
   useEffect(() => {
     const handler = (e: Event) => {
       if (!__PLUGINS__) return
-      const { type, title, terminalId, cwd } = (e as CustomEvent).detail ?? {}
-      if (!type) return
-      dispatch({ type: 'open-tab', tabType: type, title, terminalId, cwd })
+      type Detail = { type: string; title: string; terminalId?: string; cwd?: string }
+      const detail = (e as CustomEvent<Detail>).detail
+      if (!detail?.type) return
+      dispatch({ type: 'open-tab', tabType: detail.type, title: detail.title, terminalId: detail.terminalId, cwd: detail.cwd })
     }
     window.addEventListener('terminal:open-plugin-tab', handler)
     return () => window.removeEventListener('terminal:open-plugin-tab', handler)
@@ -682,7 +683,8 @@ export default function App() {
   }, [])
 
   const handleSaveSettings = useCallback(async (cfg: AppConfig) => {
-    await SaveAppConfig(cfg as any)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    await SaveAppConfig(cfg as Parameters<typeof SaveAppConfig>[0])
   }, [])
 
   // ── derive active terminal ID + search placeholder ───────────────────────────
@@ -731,10 +733,11 @@ export default function App() {
   const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
     const result = await ScanProblems(cwd).catch(() => null)
     if (!result) return
-    dispatch({ type: 'update-problems', id: tabId, sources: (result as any).sources ?? [], items: (result as any).items ?? [] })
+    const r = result as { sources?: string[]; items?: ProbItem[] }
+    dispatch({ type: 'update-problems', id: tabId, sources: r.sources ?? [], items: r.items ?? [] })
   }, [])
 
-  const handleOpenFileAtLine = useCallback(async (path: string, line: number, col: number) => {
+  const handleOpenFileAtLine = useCallback(async (path: string, line: number, _col: number) => {
     try {
       const content = await ReadFile(path)
       const lang    = await GetFileLanguage(path)
@@ -774,7 +777,7 @@ export default function App() {
           xtermTheme={resolvedTheme.xtermTheme}
           initialCwd={tab.initialCwd}
           defaultZoom={currentZoom}
-          commandAlignment={(appConfig.command_alignment || 'default') as 'default' | 'top' | 'bottom'}
+          commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
           pluginCommands={pluginCommands}
           onCwdChange={cwd => setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))}
         />
@@ -790,7 +793,7 @@ export default function App() {
           active={isActive}
           indentGuides={appConfig.indent_guides}
           monacoTheme={resolvedTheme.monacoThemeId}
-          monacoThemeDef={resolvedTheme.monacoThemeDef as any}
+          monacoThemeDef={resolvedTheme.monacoThemeDef}
           minimap={appConfig.minimap}
           defaultZoom={currentZoom}
           gotoLine={tab.gotoLine}
@@ -806,8 +809,8 @@ export default function App() {
           sources={tab.problemsSources ?? []}
           items={tab.problemsItems ?? []}
           scanning={false}
-          onRescan={handleRescanProblems}
-          onOpenFile={handleOpenFileAtLine}
+          onRescan={(id, cwd) => { void handleRescanProblems(id, cwd) }}
+          onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }}
         />
       )
     }
