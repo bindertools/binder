@@ -1,9 +1,14 @@
 #include "session.hpp"
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#else
+#include <filesystem>
+#include <cstdlib>
+#endif
 
 #include <sqlite3.h>
 #include <spdlog/spdlog.h>
@@ -23,12 +28,21 @@ static sqlite3*    g_db = nullptr;
 static std::mutex  g_db_mu;
 static bool        g_db_ok = false;
 
+#ifdef _WIN32
 // %APPDATA%\cmdIDE\sessions.db  (same directory as config.json)
 static std::wstring db_path_w() {
     wchar_t appdata[MAX_PATH] = {};
     GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
     return std::wstring(appdata) + L"\\cmdIDE\\sessions.db";
 }
+#else
+// $HOME/.config/cmdide/sessions.db
+static std::string db_path_u() {
+    const char* home = getenv("HOME");
+    if (!home || !*home) home = "/tmp";
+    return std::string(home) + "/.config/cmdide/sessions.db";
+}
+#endif
 
 static sqlite3* db() {
     // Double-checked initialisation inside the mutex.
@@ -36,6 +50,7 @@ static sqlite3* db() {
     std::lock_guard<std::mutex> lk(g_db_mu);
     if (g_db_ok) return g_db;
 
+#ifdef _WIN32
     // Ensure directory exists.
     wchar_t appdata[MAX_PATH] = {};
     GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
@@ -50,6 +65,19 @@ static sqlite3* db() {
         g_db = nullptr;
         return nullptr;
     }
+#else
+    // Ensure directory exists.
+    std::string path = db_path_u();
+    std::filesystem::create_directories(
+        std::filesystem::path(path).parent_path());
+
+    if (sqlite3_open(path.c_str(), &g_db) != SQLITE_OK) {
+        spdlog::error("[session] sqlite3_open failed: {}", sqlite3_errmsg(g_db));
+        sqlite3_close(g_db);
+        g_db = nullptr;
+        return nullptr;
+    }
+#endif
 
     // WAL mode for better concurrent read performance.
     sqlite3_exec(g_db, "PRAGMA journal_mode=WAL;", nullptr, nullptr, nullptr);

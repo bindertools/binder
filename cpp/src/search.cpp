@@ -1,9 +1,11 @@
 #include "search.hpp"
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
 #include <spdlog/spdlog.h>
 
@@ -48,12 +50,16 @@ std::string lower(std::string s) {
     return s;
 }
 
+#ifdef _WIN32
 fs::path from_u8(const std::string& s) {
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
     std::wstring w(n, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
     return fs::path(std::move(w));
 }
+#else
+fs::path from_u8(const std::string& s) { return fs::path(s); }
+#endif
 
 bool is_binary(const std::string& ext_lower) {
     return kBinaryExts.count(ext_lower) > 0;
@@ -170,6 +176,9 @@ json content_impl(const std::string& root_path, const std::string& query,
                   int max_results, std::string& warning) {
     json results = json::array();
 
+    std::string output;
+
+#ifdef _WIN32
     // Check if rg is available
     wchar_t rg_path[MAX_PATH] = {};
     if (!SearchPathW(nullptr, L"rg.exe", nullptr, MAX_PATH, rg_path, nullptr)) {
@@ -210,7 +219,6 @@ json content_impl(const std::string& root_path, const std::string& query,
     CloseHandle(pi.hThread);
 
     // Read output
-    std::string output;
     char buf[4096];
     DWORD n;
     while (ReadFile(rd, buf, sizeof(buf), &n, nullptr) && n > 0)
@@ -218,8 +226,39 @@ json content_impl(const std::string& root_path, const std::string& query,
     CloseHandle(rd);
     WaitForSingleObject(pi.hProcess, 5000);
     CloseHandle(pi.hProcess);
+#else
+    // Build command: rg --json --max-count=1 <query> <path>
+    // Basic shell-quoting: wrap in single quotes, escape embedded single quotes.
+    auto shell_quote = [](const std::string& s) -> std::string {
+        std::string r = "'";
+        for (char c : s) { if (c == '\'') r += "'\\''"; else r += c; }
+        r += "'";
+        return r;
+    };
+    std::string cmd = "rg --json --max-count=1 " +
+                      shell_quote(query) + " " + shell_quote(root_path) + " 2>/dev/null";
+    FILE* f = popen(cmd.c_str(), "r");
+    if (!f) {
+        warning = "ripgrep not found";
+        return results;
+    }
+    char buf[4096];
+    while (fgets(buf, sizeof(buf), f)) output += buf;
+    int rc = pclose(f);
+    // rg exits 1 when no matches, 2 on error
+    if (rc == 2 * 256 /* WEXITSTATUS(rc)==2 */ || output.empty()) {
+        // Check if rg is actually missing vs just no results
+        FILE* check = popen("rg --version 2>/dev/null", "r");
+        if (!check || fgets(buf, sizeof(buf), check) == nullptr) {
+            if (check) pclose(check);
+            warning = "ripgrep not found";
+            return results;
+        }
+        pclose(check);
+    }
+#endif
 
-    // Parse NDJSON
+    // Parse NDJSON (shared between platforms)
     std::istringstream ss(output);
     std::string line;
     while (std::getline(ss, line) && (int)results.size() < max_results) {

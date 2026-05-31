@@ -3,12 +3,15 @@
 
 #include <spdlog/spdlog.h>
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
@@ -24,15 +27,21 @@ namespace {
 
 // Build a std::filesystem::path from a UTF-8 encoded string.
 fs::path from_u8(const std::string& s) {
+#ifdef _WIN32
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
                                 nullptr, 0);
     std::wstring w(n, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
                         w.data(), n);
     return fs::path(std::move(w));
+#else
+    // On macOS/Linux std::filesystem::path accepts UTF-8 directly.
+    return fs::path(s);
+#endif
 }
 
 int64_t get_mtime(const fs::path& p) {
+#ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA fad{};
     if (!GetFileAttributesExW(p.wstring().c_str(), GetFileExInfoStandard, &fad))
         return 0;
@@ -41,6 +50,19 @@ int64_t get_mtime(const fs::path& p) {
     uli.HighPart = fad.ftLastWriteTime.dwHighDateTime;
     // 100-ns intervals since 1601-01-01 → Unix seconds
     return static_cast<int64_t>((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+#else
+    std::error_code ec;
+    auto ft = fs::last_write_time(p, ec);
+    if (ec) return 0;
+    // Convert file_time_type → Unix seconds
+    auto sc = std::chrono::duration_cast<std::chrono::seconds>(ft.time_since_epoch());
+    // file_time_type epoch is implementation-defined; subtract the Unix epoch offset.
+    // The simplest portable approach: cast via system_clock.
+    auto sys = std::chrono::file_clock::to_sys(ft);
+    return static_cast<int64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(
+            sys.time_since_epoch()).count());
+#endif
 }
 
 std::string lower(std::string s) {
