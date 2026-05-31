@@ -10,6 +10,13 @@ import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App'
 import './App.css'
 import '../../themes/index.scss'
+import { isWebViewHost } from './lib/ipc'
+
+// Inject Wails compatibility shim so window.go.* routes through the C++ IPC.
+// Must happen before React renders any components that call window.go.*.
+if (isWebViewHost()) {
+  await import('./lib/wails-shim')
+}
 
 // Expose React globally so plugin IIFE bundles can reference the host's React
 // instance rather than bundling their own. This prevents "Invalid hook call"
