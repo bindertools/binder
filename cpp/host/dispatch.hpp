@@ -1,29 +1,48 @@
 #pragma once
+#include "../src/terminal.hpp"
 #include <nlohmann/json.hpp>
 #include <webview.h>
+
+#include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-// Handles all IPC calls arriving from the frontend via __cmdide_invoke.
-// In Phase H.3, this is a stub that responds to "ping" and returns
-// "not yet implemented" for everything else.
-// Full implementation arrives in Phase I.3.
+// Routes all __cmdide_invoke calls to backend modules.
+// Terminal output events are pushed to the frontend via emit().
 class Dispatcher {
 public:
     explicit Dispatcher(webview::webview& wv);
+    ~Dispatcher();
 
-    // Called from the __cmdide_invoke bind callback (may be any thread).
-    // seq   — webview's internal promise sequence ID (for wv_.resolve)
-    // type  — IPC message type string (e.g. "ping", "terminal.start")
-    // args  — JSON-encoded arguments string
+    // Called from the __cmdide_invoke bind callback (any thread).
     void dispatch(const std::string& seq,
                   const std::string& type,
                   const std::string& args);
 
-    // Push an event to the frontend (C++ → JS).
-    // Schedules wv_.eval on the main thread — safe to call from any thread.
+    // Push a C++ → JS event (thread-safe).
     void emit(const std::string& event, const nlohmann::json& data);
 
 private:
+    // Actual dispatch logic, runs on a worker thread.
+    void dispatch_worker(const std::string& seq,
+                         const std::string& type,
+                         const nlohmann::json& args);
+
+    // Convert an old-style response JSON to new IPC envelope.
+    nlohmann::json old_to_new(const std::string& type,
+                              const nlohmann::json& args,
+                              const std::string& req_id);
+
+    // Resolve seq with success payload.
+    void resolve_ok(const std::string& seq, const nlohmann::json& data);
+    // Resolve seq with error.
+    void resolve_err(const std::string& seq, const std::string& error);
+
     webview::webview& wv_;
+
+    // Active terminal sessions
+    std::unordered_map<std::string, std::unique_ptr<Terminal>> terminals_;
+    std::mutex terminals_mu_;
 };
