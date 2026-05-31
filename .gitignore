@@ -28,3 +28,6 @@ settings.local.json
 
 # C++ build artifacts
 cpp/build/
+# C++ host auto-generated assets
+cpp/host/generated/
+cpp/installer/generated/

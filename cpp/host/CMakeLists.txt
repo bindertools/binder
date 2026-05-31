@@ -15,7 +15,10 @@ set_target_properties(cmdide-host PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug"
 )
 
-target_include_directories(cmdide-host PRIVATE ${ZSERGE_WEBVIEW_INCLUDE_DIRS})
+target_include_directories(cmdide-host PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    ${ZSERGE_WEBVIEW_INCLUDE_DIRS}
+)
 
 target_link_libraries(cmdide-host PRIVATE cmdide-backend-lib)
 
@@ -41,4 +44,19 @@ if(WIN32)
         COMMAND_EXPAND_LISTS
         COMMENT "Copying runtime DLLs"
     )
+endif()
+
+# ── Copy frontend assets alongside the executable ────────────────────────────
+# The host loads the UI from <exe_dir>/www/index.html at runtime.
+# For the final distributable, these are embedded in the binary (Phase M).
+set(FRONTEND_DIST "${CMAKE_SOURCE_DIR}/../app/frontend/dist")
+if(EXISTS "${FRONTEND_DIST}")
+    add_custom_command(TARGET cmdide-host POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${FRONTEND_DIST}"
+            "${CMAKE_BINARY_DIR}/$<CONFIG>/www"
+        COMMENT "Copying frontend dist to www/"
+    )
+else()
+    message(WARNING "Frontend dist not found: ${FRONTEND_DIST}. Run 'npm run build' in app/frontend/.")
 endif()
