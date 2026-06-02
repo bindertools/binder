@@ -12,6 +12,13 @@ endif()
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+
+# CMake 4.x changed FindOpenSSL search logic; httplib's config calls find_dependency(OpenSSL)
+# and can no longer locate it in the vcpkg tree without an explicit root hint.
+if(WIN32 AND DEFINED _VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    set(OPENSSL_ROOT_DIR "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}" CACHE PATH "")
+endif()
+
 find_package(httplib CONFIG REQUIRED)
 find_package(cmark CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)

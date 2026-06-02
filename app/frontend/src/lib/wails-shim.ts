@@ -5,15 +5,17 @@
 // IPC type names must match exactly what cpp/host/dispatch.cpp handles.
 // Full C++ implementation: Phase I.3.
 
-import { invoke, on, off } from './ipc'
+import { invoke, on, off, offAll } from './ipc'
 
 // ── window.go.main.App patch ──────────────────────────────────────────────────
 ;(window as any).go = {
   main: {
     App: {
       // ── Terminal ──────────────────────────────────────────────────────────
-      CreateTerminal: (id: string, shell: string) =>
-        invoke('terminal.start', { id, shell, cwd: '', cols: 80, rows: 24 }),
+      // Frontend calls CreateTerminal(id, cwd) — 2nd arg is working directory,
+      // NOT the shell. Let C++ auto-detect shell via COMSPEC.
+      CreateTerminal: (id: string, cwd: string, alignment?: string) =>
+        invoke('terminal.start', { id, shell: '', cwd, cols: 80, rows: 24, alignment: alignment ?? 'default' }),
 
       CloseTerminal: (id: string) =>
         invoke('terminal.stop', { id }),
@@ -37,7 +39,7 @@ import { invoke, on, off } from './ipc'
         invoke('terminal.setalignment', { id, alignment }),
 
       ExecuteCommand: (id: string, cmd: string) =>
-        invoke('terminal.input', { id, data: cmd + '\r' }),
+        invoke('terminal.execute', { id, cmd }),
 
       // ── File ops ──────────────────────────────────────────────────────────
       ExplorerGetTree: () =>
@@ -79,8 +81,8 @@ import { invoke, on, off } from './ipc'
       ExplorerReveal: (path: string) =>
         invoke('shell.reveal', { path }),
 
-      CtrlClickPath: (path: string, cwd: string) =>
-        invoke('shell.ctrlclick', { path, cwd }),
+      CtrlClickPath: (tabId: string, path: string) =>
+        invoke('shell.ctrlclick', { tabId, path }),
 
       GetFileLanguage: (path: string) =>
         invoke<string>('fs.language', { path }),
@@ -99,10 +101,10 @@ import { invoke, on, off } from './ipc'
       SearchFiles: (root: string, query: string) =>
         invoke('search.files', { root, query }),
 
-      GetCompletions: (type: string, path: string, partial: string) =>
-        type === 'path'
-          ? invoke('complete.path', { path, partial })
-          : invoke('complete.command', { cwd: path, partial }),
+      // Terminal.tsx calls GetCompletions(tabId, dir, partial) for filesystem completions.
+      // Route to complete.path so C++ can resolve paths relative to the session cwd.
+      GetCompletions: (tabId: string, dir: string, partial: string) =>
+        invoke<string[]>('complete.path', { tabId, dir, prefix: partial }),
 
       ExecSilent: (cmd: string, dir: string, args: string[]) =>
         invoke<string>('shell.exec', { cmd, dir, args }),
@@ -127,8 +129,15 @@ import { invoke, on, off } from './ipc'
         invoke<string>('sysinfo.ports.kill', { port }),
 
       // ── Session ───────────────────────────────────────────────────────────
+      // C++ returns {session:{tabs:[...]}} or {session:{}}; frontend expects a
+      // flat array of tab objects.
       LoadSession: () =>
-        invoke('session.load'),
+        invoke<any>('session.load').then((r: any) => {
+          if (Array.isArray(r)) return r           // already an array
+          if (Array.isArray(r?.session?.tabs)) return r.session.tabs
+          if (Array.isArray(r?.tabs)) return r.tabs
+          return []
+        }),
 
       SaveSession: (tabs: unknown[]) =>
         invoke('session.save', { tabs }),
@@ -173,16 +182,19 @@ import { invoke, on, off } from './ipc'
 ;(window as any).runtime = {
   EventsOn:  (event: string, cb: (data: unknown) => void) => on(event, cb),
   EventsOff: (event: string, ...names: string[]) => {
-    // wails EventsOff removes all listeners for the event (we pass undefined as handler to remove all)
-    // For simplicity, just use the first event name
-    off(event, (() => {}) as any)
-    names.forEach(n => off(n, (() => {}) as any))
+    // Remove ALL handlers for this event — Wails EventsOff does not take a
+    // handler reference, it removes every listener for the named event(s).
+    // Bug was: passing () => {} to off() which never matched the real handler.
+    offAll(event)
+    names.forEach(n => offAll(n))
   },
   EventsOnce: (event: string, cb: (data: unknown) => void) => {
     const unsub = on(event, (data) => { unsub(); cb(data) })
     return unsub
   },
   EventsOnMultiple: (event: string, cb: (data: unknown) => void, max: number) => {
+    // max < 0 means unlimited (Wails convention: -1 = EventsOn)
+    if (max < 0) return on(event, cb)
     let count = 0
     const unsub = on(event, (data) => {
       cb(data)
@@ -196,6 +208,8 @@ import { invoke, on, off } from './ipc'
   EventsOffAll: () => {
     console.warn('EventsOffAll not supported in C++ host')
   },
+  // Quit — called by the close button (Quit() from wailsjs/runtime/runtime)
+  Quit: () => invoke('window.close'),
   WindowSetTitle: (title: string) =>
     invoke('window.setTitle', { title }),
   WindowMinimise: () =>

@@ -355,10 +355,13 @@ export default function Terminal({
     }
     container.addEventListener('wheel', handleWheel, { passive: false })
 
-    CreateTerminal(tabId, initialCwd ?? '').catch(() => {})
+    CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
 
     const outEvent = `terminal:output:${tabId}`
-    EventsOn(outEvent, (data: string) => { term.write(data) })
+    // Use termRef.current (not the closure `term`) so that if the component
+    // remounts and creates a new xterm instance, the handler always writes to
+    // the currently-active terminal, not a stale/disposed one.
+    EventsOn(outEvent, (data: string) => { termRef.current?.write(data) })
 
     // PTY mode: switch to raw pass-through when an interactive process is running
     const ptyStartEvent = `terminal:pty:start:${tabId}`
@@ -967,7 +970,7 @@ export default function Terminal({
   const cwdLabel = React.useMemo(() => {
     const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
     if (parts.length === 0) return '~'
-    return parts.length <= 2 ? parts.join('/') : parts.slice(-2).join('/')
+    return parts.length <= 2 ? parts.join('/') : '.../' + parts.slice(-2).join('/')
   }, [cwd])
 
   // barPath: prefer Go's formatted path (respects minimal_pwd); fall back to

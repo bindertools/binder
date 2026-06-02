@@ -14,7 +14,7 @@ export function CheckForUpdate():Promise<string>;
 
 export function CloseTerminal(arg1:string):Promise<void>;
 
-export function CreateTerminal(arg1:string,arg2:string):Promise<void>;
+export function CreateTerminal(arg1:string,arg2:string,arg3?:string):Promise<void>;
 
 export function CtrlClickPath(arg1:string,arg2:string):Promise<void>;
 

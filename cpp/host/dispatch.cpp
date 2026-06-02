@@ -17,6 +17,14 @@
 
 #include <string>
 #include <thread>
+#include <filesystem>
+#include <fstream>
+#include <vector>
+#include <map>
+#include <set>
+#include <algorithm>
+#include <ctime>
+#include <cstdint>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -28,7 +36,18 @@
 #endif
 
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 static constexpr const char* kHostVersion = "1.0.0";
+
+#ifdef _WIN32
+static std::wstring dispatch_to_wide(const std::string& s) {
+    if (s.empty()) return {};
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
+    std::wstring w(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
+    return w;
+}
+#endif
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
 
@@ -122,6 +141,18 @@ void Dispatcher::dispatch(const std::string& seq,
     if (type == "app.ready") {
 #ifdef _WIN32
         if (splash_) splash_->Close();
+        // Show the main window now that content is ready — it was hidden in
+        // MakeFrameless to prevent the OS-decorated flash during WebView2 init.
+        {
+            auto hwnd_res = wv_.window();
+            if (hwnd_res.ok()) {
+                HWND hwnd = static_cast<HWND>(hwnd_res.value());
+                wv_.dispatch([hwnd]() {
+                    ShowWindow(hwnd, SW_SHOW);
+                    SetForegroundWindow(hwnd);
+                });
+            }
+        }
 #endif
         resolve_ok(seq, true);
         return;
@@ -129,6 +160,29 @@ void Dispatcher::dispatch(const std::string& seq,
     if (type == "shutdown") {
         resolve_ok(seq, true);
         wv_.dispatch([this] { wv_.terminate(); });
+        return;
+    }
+
+    // ── window.startDrag must be handled synchronously on the UI thread ──────────
+    // The IPC binding callback runs on the main UI thread.  Handling startDrag
+    // here (before the worker-thread spawn below) means PostMessage(SC_MOVE) is
+    // enqueued immediately — by the time the binding callback returns and the
+    // message loop resumes, SC_MOVE is already queued so the OS drag loop starts
+    // without the extra thread-hop latency that used to drop fast drag gestures.
+    if (type == "window.startDrag") {
+#ifdef _WIN32
+        auto hwnd_res = wv_.window();
+        if (hwnd_res.ok()) {
+            HWND hwnd = static_cast<HWND>(hwnd_res.value());
+            POINT pt;
+            GetCursorPos(&pt);
+            ReleaseCapture();
+            // SC_MOVE | 0x0002 = mouse-initiated move (low nibble != 0)
+            PostMessage(hwnd, WM_SYSCOMMAND, SC_MOVE | 0x0002,
+                        MAKELPARAM(pt.x, pt.y));
+        }
+#endif
+        resolve_ok(seq, true);
         return;
     }
 
@@ -153,36 +207,414 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     const std::string req_id = seq; // use seq as the backend request id
 
     // ── Terminal ──────────────────────────────────────────────────────────────
+
     if (type == "terminal.start") {
-        std::string id    = args.value("id",    std::string{});
-        std::string shell = args.value("shell", std::string{});
-        std::string cwd   = args.value("cwd",   std::string{});
-        int cols = args.value("cols", 80);
-        int rows = args.value("rows", 24);
+        std::string id  = args.value("id",  std::string{});
+        std::string cwd = args.value("cwd", std::string{});
 
-        auto on_output = [this](const std::string& tid, const std::string& b64) {
-            emit("terminal.output", {{"id", tid}, {"data", b64}});
-        };
-        auto on_exit = [this](const std::string& tid, int code) {
-            spdlog::info("terminal.exit id={} code={}", tid, code);
-            emit("terminal.exit", {{"id", tid}, {"code", code}});
-        };
-
-        auto t  = std::make_unique<Terminal>(id, on_output, on_exit);
-        bool ok = t->Start(shell, cwd, cols, rows);
-        {
-            std::lock_guard<std::mutex> lk(terminals_mu_);
-            if (ok) terminals_[id] = std::move(t);
+        // Resolve starting directory
+        if (cwd.empty())
+            cwd = Config::instance().get().value("default_directory", std::string{});
+        if (cwd.empty()) {
+            try { cwd = fs::current_path().string(); } catch (...) {}
         }
-        resolve_ok(seq, {{"ok", ok}});
+        if (cwd.empty()) cwd = "C:\\";
+
+        {
+            std::string alignment = args.value("alignment", std::string{"default"});
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            term_sessions_[id].cwd = cwd;
+            // Only set alignment if not already written by a concurrent setalignment call
+            if (term_sessions_[id].alignment.empty() ||
+                term_sessions_[id].alignment == "default")
+                term_sessions_[id].alignment = alignment;
+        }
+        emit_prompt(id, cwd);
+        resolve_ok(seq, {{"ok", true}});
+        return;
+    }
+
+    // terminal.execute — run a command in the session's CWD, handle slash commands
+    if (type == "terminal.execute") {
+        std::string id  = args.value("id",  std::string{});
+        std::string cmd = args.value("cmd", std::string{});
+
+        // Trim whitespace
+        while (!cmd.empty() && (cmd.front()==' '||cmd.front()=='\t'||
+                                 cmd.front()=='\r'||cmd.front()=='\n'))
+            cmd.erase(cmd.begin());
+        while (!cmd.empty() && (cmd.back()==' '||cmd.back()=='\t'||
+                                 cmd.back()=='\r'||cmd.back()=='\n'))
+            cmd.pop_back();
+
+        // Get session CWD (create on demand)
+        std::string cwd;
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            auto it = term_sessions_.find(id);
+            if (it == term_sessions_.end()) {
+                try { cwd = fs::current_path().string(); } catch (...) { cwd = "C:\\"; }
+                term_sessions_[id] = {cwd};
+            } else {
+                cwd = it->second.cwd;
+            }
+        }
+
+        if (cmd.empty()) {
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
+        // ── Slash commands ────────────────────────────────────────────────────
+        if (cmd[0] == '/') {
+            std::string rest = cmd.substr(1);
+            std::string name;
+            std::string slash_args;
+            {
+                auto sp = rest.find(' ');
+                name = (sp == std::string::npos) ? rest : rest.substr(0, sp);
+                slash_args = (sp == std::string::npos) ? "" : rest.substr(sp + 1);
+            }
+            for (char& c : name) c = (char)tolower((unsigned char)c);
+
+            if (name == "config") {
+                emit("app:open-config", json({{"terminalId", id}}));
+            } else if (name == "themes") {
+                emit("terminal:output:" + id, json(std::string(
+                    "\r\nAvailable themes: dark  minimal  dracula  nord  solarized-dark"
+                    "  solarized-light  monokai  tokyo-night  catppuccin-mocha  one-dark\r\n")));
+            } else if (name == "preview") {
+                if (!slash_args.empty())
+                    emit("app:open-preview", json({{"type","url"},{"url",slash_args},
+                                                    {"path",slash_args},{"terminalId",id}}));
+            } else if (name == "problems") {
+                emit("app:open-problems", json({{"cwd",cwd},{"terminalId",id},
+                                                {"sources",json::array()},{"items",json::array()}}));
+            } else if (name == "debug") {
+                std::string info = "\r\ncmdIDE v" + std::string(kHostVersion) + " (C++ host)\r\n";
+                info += "CWD: " + cwd + "\r\n";
+#ifdef _WIN32
+                char comp[256]={}; DWORD sz=256;
+                GetComputerNameA(comp,&sz);
+                info += "Host: " + std::string(comp) + "\r\n";
+#endif
+                emit("terminal:output:" + id, json(info));
+            } else if (name == "kill") {
+                if (!slash_args.empty()) {
+                    json kill_args={{"port",slash_args}};
+                    json kill_resp; std::string dummy=seq;
+                    sysinfo_ops::dispatch("sysinfo.ports.kill", kill_args, dummy, kill_resp);
+                    auto res = kill_resp.value("result", std::string{});
+                    if (!res.empty()) emit("terminal:output:" + id, json("\r\n" + res + "\r\n"));
+                }
+            } else if (name == "explorer") {
+#ifdef _WIN32
+                ShellExecuteW(nullptr, L"open", dispatch_to_wide(cwd).c_str(),
+                              nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+            } else if (name == "ports") {
+                emit("app:open-tab", json({{"type","ports"},{"title","ports"},{"terminalId",id}}));
+            } else if (name == "performance") {
+                emit("app:open-tab", json({{"type","perf"},{"title","performance"},{"terminalId",id}}));
+            } else if (name == "fullscreen" || name == "fs") {
+                emit("app:open-tab", json({{"type","fullscreen"},{"title","explorer"},
+                                           {"terminalId",id},{"cwd",cwd}}));
+            } else if (name == "plugins") {
+                emit("app:open-tab", json({{"type","plugins"},{"title","plugins"},{"terminalId",id}}));
+            } else if (name == "pack") {
+                json pack_args={{"path",cwd},{"dry_run",false}};
+                json pack_resp; std::string dummy2=seq;
+                pack_ops::dispatch("pack.zip", pack_args, dummy2, pack_resp);
+            } else if (name == "uptime") {
+#ifdef _WIN32
+                ULONGLONG ms = GetTickCount64();
+                unsigned long long s=ms/1000, d=s/86400; s%=86400;
+                unsigned long long h=s/3600; s%=3600; unsigned long long m=s/60; s%=60;
+                char buf[128]; snprintf(buf,sizeof(buf),"\r\nUptime: %llud %lluh %llum %llus\r\n",d,h,m,s);
+                emit("terminal:output:" + id, json(std::string(buf)));
+#endif
+            } else if (name == "lang-map") {
+                std::string target = slash_args.empty() ? cwd : slash_args;
+                if (!fs::path(target).is_absolute())
+                    try { target = fs::weakly_canonical(fs::path(cwd) / target).string(); } catch (...) {}
+
+                static const std::map<std::string,const char*> kExtLang = {
+                    {".go","Go"},{".ts","TypeScript"},{".tsx","TypeScript"},
+                    {".js","JavaScript"},{".jsx","JavaScript"},{".mjs","JavaScript"},{".cjs","JavaScript"},
+                    {".py","Python"},{".rs","Rust"},{".java","Java"},
+                    {".cpp","C++"},{".cc","C++"},{".cxx","C++"},{".hpp","C++"},{".c","C"},{".h","C"},
+                    {".cs","C#"},{".rb","Ruby"},{".php","PHP"},{".swift","Swift"},
+                    {".kt","Kotlin"},{".kts","Kotlin"},{".scala","Scala"},
+                    {".sh","Shell"},{".bash","Shell"},{".zsh","Shell"},{".fish","Shell"},
+                    {".ps1","PowerShell"},{".sql","SQL"},{".html","HTML"},{".htm","HTML"},
+                    {".vue","Vue"},{".svelte","Svelte"},
+                    {".css","CSS"},{".scss","CSS"},{".less","CSS"},
+                    {".lua","Lua"},{".r","R"},{".dart","Dart"},
+                    {".ex","Elixir"},{".exs","Elixir"},{".tf","HCL"},{".hcl","HCL"},
+                    {".proto","Protobuf"},{".graphql","GraphQL"},{".gql","GraphQL"},
+                };
+                static const std::map<std::string,const char*> kLangColor = {
+                    {"Go","\x1b[38;5;81m"},{"TypeScript","\x1b[38;5;68m"},
+                    {"JavaScript","\x1b[38;5;220m"},{"Python","\x1b[38;5;33m"},
+                    {"Rust","\x1b[38;5;180m"},{"C","\x1b[38;5;240m"},{"C++","\x1b[38;5;204m"},
+                    {"C#","\x1b[38;5;34m"},{"Java","\x1b[38;5;130m"},{"Ruby","\x1b[38;5;124m"},
+                    {"PHP","\x1b[38;5;97m"},{"Swift","\x1b[38;5;208m"},{"Kotlin","\x1b[38;5;141m"},
+                    {"Scala","\x1b[38;5;160m"},{"Shell","\x1b[38;5;112m"},{"PowerShell","\x1b[38;5;68m"},
+                    {"HTML","\x1b[38;5;166m"},{"CSS","\x1b[38;5;55m"},{"Vue","\x1b[38;5;71m"},
+                    {"Svelte","\x1b[38;5;202m"},{"SQL","\x1b[38;5;215m"},{"Lua","\x1b[38;5;18m"},
+                    {"R","\x1b[38;5;26m"},{"Dart","\x1b[38;5;37m"},{"Elixir","\x1b[38;5;97m"},
+                    {"HCL","\x1b[38;5;97m"},{"GraphQL","\x1b[38;5;205m"},{"Protobuf","\x1b[38;5;246m"},
+                };
+                static const std::set<std::string> kSkipDirs = {
+                    "node_modules",".git",".svn",".hg","dist","build",".next","__pycache__",
+                    "vendor","target",".cache","coverage",".angular",".turbo",".gradle",
+                    "out",".idea",".vscode",
+                };
+
+                auto fmt_bytes = [](int64_t b) -> std::string {
+                    char buf[32];
+                    if      (b < 1024LL)              snprintf(buf,sizeof(buf),"%lld B",  (long long)b);
+                    else if (b < 1024LL*1024)         snprintf(buf,sizeof(buf),"%.1f KB", b/1024.0);
+                    else if (b < 1024LL*1024*1024)    snprintf(buf,sizeof(buf),"%.1f MB", b/(1024.0*1024));
+                    else                              snprintf(buf,sizeof(buf),"%.1f GB", b/(1024.0*1024*1024));
+                    return buf;
+                };
+
+                struct LStat { int64_t bytes = 0; int files = 0; };
+                std::map<std::string, LStat> counts;
+                int64_t total_bytes = 0;
+
+                try {
+                    fs::recursive_directory_iterator it(
+                        target, fs::directory_options::skip_permission_denied);
+                    for (; it != fs::recursive_directory_iterator(); ++it) {
+                        auto fname = it->path().filename().string();
+                        if (it->is_directory()) {
+                            if (!fname.empty() && (fname[0]=='.' || kSkipDirs.count(fname)))
+                                it.disable_recursion_pending();
+                            continue;
+                        }
+                        if (!it->is_regular_file()) continue;
+                        if (!fname.empty() && fname[0] == '.') continue;
+                        std::string ext = it->path().extension().string();
+                        for (char& c : ext) c = (char)tolower((unsigned char)c);
+                        auto lit = kExtLang.find(ext);
+                        if (lit == kExtLang.end()) continue;
+                        std::error_code fec;
+                        auto fsize = fs::file_size(it->path(), fec);
+                        if (fec) fsize = 0;
+                        counts[lit->second].bytes += (int64_t)fsize;
+                        counts[lit->second].files++;
+                        total_bytes += (int64_t)fsize;
+                    }
+                } catch (...) {}
+
+                if (total_bytes == 0) {
+                    std::string dn = target;
+                    for (char& c : dn) if (c=='\\') c='/';
+                    emit("terminal:output:" + id, json(
+                        "\r\n\x1b[38;5;246mNo recognized source files found in " + dn + "\x1b[0m\r\n"));
+                } else {
+                    struct Row { std::string lang; int64_t bytes; int files; };
+                    std::vector<Row> rows;
+                    rows.reserve(counts.size());
+                    for (auto& [lang, s] : counts) rows.push_back({lang, s.bytes, s.files});
+                    std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b){
+                        return a.bytes != b.bytes ? a.bytes > b.bytes : a.lang < b.lang;
+                    });
+
+                    // Home-relative label
+                    std::string label = target;
+                    const char* home_env = std::getenv("USERPROFILE");
+                    if (!home_env) home_env = std::getenv("HOME");
+                    if (home_env) {
+                        std::string h = home_env;
+                        if (label.size() > h.size() && label.rfind(h, 0) == 0)
+                            label = "~" + label.substr(h.size());
+                    }
+                    for (char& c : label) if (c=='\\') c='/';
+
+                    // Cap at 12, roll remainder into "Other"
+                    const int kMax = 12, kBarW = 26;
+                    int64_t other_bytes = 0; int other_files = 0;
+                    if ((int)rows.size() > kMax) {
+                        for (int i = kMax; i < (int)rows.size(); i++) {
+                            other_bytes += rows[i].bytes;
+                            other_files += rows[i].files;
+                        }
+                        rows.resize(kMax);
+                    }
+
+                    size_t col = 5;
+                    for (auto& r : rows) if (r.lang.size() > col) col = r.lang.size();
+
+                    std::string out = "\r\n\x1b[38;5;75mLanguage breakdown\x1b[0m  \x1b[38;5;246m"
+                                    + label + "\x1b[0m\r\n\r\n";
+
+                    auto write_row = [&](const std::string& lang, const char* color,
+                                         int64_t bytes, int files) {
+                        double pct = (double)bytes / (double)total_bytes * 100.0;
+                        int filled = (int)(pct / 100.0 * kBarW + 0.5);
+                        if (filled < 1 && bytes > 0) filled = 1;
+                        if (filled > kBarW) filled = kBarW;
+                        std::string bar;
+                        for (int i = 0; i < filled;       i++) bar += "\xe2\x96\x88"; // █
+                        for (int i = filled; i < kBarW;   i++) bar += "\xe2\x96\x91"; // ░
+                        const char* fw = (files == 1) ? "file" : "files";
+                        char buf[640];
+                        snprintf(buf, sizeof(buf),
+                            "  %s%-*s\x1b[0m  %s%s\x1b[0m  %5.1f%%  \x1b[38;5;246m%d %s  %s\x1b[0m\r\n",
+                            color, (int)col, lang.c_str(),
+                            color, bar.c_str(),
+                            pct, files, fw, fmt_bytes(bytes).c_str());
+                        out += buf;
+                    };
+
+                    for (auto& r : rows) {
+                        const char* color = "\x1b[38;5;246m";
+                        auto cit = kLangColor.find(r.lang);
+                        if (cit != kLangColor.end()) color = cit->second;
+                        write_row(r.lang, color, r.bytes, r.files);
+                    }
+                    if (other_bytes > 0)
+                        write_row("Other", "\x1b[38;5;240m", other_bytes, other_files);
+
+                    out += "\r\n  \x1b[38;5;246mTotal  " + fmt_bytes(total_bytes) + "\x1b[0m\r\n";
+                    emit("terminal:output:" + id, json(out));
+                }
+            } else if (name == "version") {
+                emit("terminal:output:" + id, json(
+                    "\r\ncmdIDE v" + std::string(kHostVersion) + " (C++ WebView host)\r\n"));
+            } else if (name == "help") {
+                emit("terminal:output:" + id, json(std::string(
+                    "\r\nBuilt-in commands:\r\n"
+                    "  /config           open settings & theme UI\r\n"
+                    "  /themes           list available themes\r\n"
+                    "  /preview <url>    preview a URL or file\r\n"
+                    "  /problems         show project diagnostics\r\n"
+                    "  /debug            show debug info\r\n"
+                    "  /kill <port>      kill process on a port\r\n"
+                    "  /explorer         open native file explorer\r\n"
+                    "  /pack             zip current directory\r\n"
+                    "  /ports            open ports monitor tab\r\n"
+                    "  /performance      open performance monitor tab\r\n"
+                    "  /fullscreen /fs   open fullscreen IDE explorer\r\n"
+                    "  /plugins          open plugin store\r\n"
+                    "  /uptime           show system uptime\r\n"
+                    "  /version          show version info\r\n"
+                    "  /help             show this help\r\n")));
+            } else {
+                emit("terminal:output:" + id, json(
+                    "\r\n\x1b[31mUnknown command: /" + name + "\x1b[0m\r\n"));
+            }
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
+        // ── Built-in shell commands ───────────────────────────────────────────
+        std::string lower = cmd;
+        for (char& c : lower) c = (char)tolower((unsigned char)c);
+
+        if (lower == "cls" || lower == "clear") {
+            emit("terminal:output:" + id, json(std::string("\x1b[2J\x1b[H")));
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+        if (lower == "exit") {
+            emit("terminal:output:" + id, json(std::string(
+                "\r\n\x1b[33m[close the tab to exit]\x1b[0m\r\n")));
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
+        // cd command — track CWD in session
+        bool is_cd = (lower == "cd") ||
+                     (lower.size() > 2 && lower[0]=='c' && lower[1]=='d' &&
+                      (lower[2]==' ' || lower[2]=='\t'));
+        if (is_cd) {
+            std::string path_part = cmd.size() > 3 ? cmd.substr(3) : "";
+            while (!path_part.empty() && (path_part.front()==' '||path_part.front()=='\t'))
+                path_part.erase(path_part.begin());
+            while (!path_part.empty() && (path_part.back()==' '||path_part.back()=='\t'))
+                path_part.pop_back();
+
+            std::string new_cwd;
+            try {
+                if (path_part.empty() || path_part == "~") {
+                    const char* home = std::getenv("USERPROFILE");
+                    if (!home) home = std::getenv("HOME");
+                    new_cwd = home ? home : cwd;
+                } else {
+                    fs::path p = path_part;
+                    if (!p.is_absolute()) p = fs::path(cwd) / p;
+                    p = fs::weakly_canonical(p);
+                    if (fs::is_directory(p)) {
+                        new_cwd = p.string();
+                    } else {
+                        emit("terminal:output:" + id, json(std::string(
+                            "\r\n\x1b[31mThe system cannot find the path specified.\x1b[0m\r\n")));
+                        emit_prompt(id, cwd);
+                        resolve_ok(seq, true);
+                        return;
+                    }
+                }
+            } catch (const std::exception& e) {
+                emit("terminal:output:" + id, json(
+                    std::string("\r\n\x1b[31mcd: ") + e.what() + "\x1b[0m\r\n"));
+                emit_prompt(id, cwd);
+                resolve_ok(seq, true);
+                return;
+            }
+            {
+                std::lock_guard<std::mutex> lk(sessions_mu_);
+                auto it = term_sessions_.find(id);
+                if (it != term_sessions_.end()) it->second.cwd = new_cwd;
+            }
+            cwd = new_cwd;
+            emit("terminal:cwd:" + id, json(cwd));
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
+        // Regular command — run via shell, stream output
+        // ── Unix-path normalisation & PowerShell script detection ────────────────
+        // cmd.exe doesn't understand ./ (Unix-style current-dir prefix).
+        // Normalise it to .\ so file associations and relative paths work.
+        {
+            std::string norm = cmd;
+            for (char& c : norm) if (c == '/') c = '\\';
+            // ".ps1" files need to be run via PowerShell — cmd.exe won't execute them.
+            // Match: [./\]?anything.ps1 [args]
+            auto first_ws = norm.find_first_of(" \t");
+            std::string prog  = (first_ws == std::string::npos) ? norm : norm.substr(0, first_ws);
+            std::string pargs = (first_ws == std::string::npos) ? "" : norm.substr(first_ws);
+            std::string prog_l = prog;
+            for (char& c : prog_l) c = (char)tolower((unsigned char)c);
+            if (prog_l.size() > 4 && prog_l.compare(prog_l.size()-4, 4, ".ps1") == 0) {
+                // Strip leading .\ so PowerShell resolves it relative to cwd
+                if (prog.size() > 2 && prog[0]=='.' && prog[1]=='\\') prog = prog.substr(2);
+                cmd = "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File \"" + prog + "\"" + pargs;
+            } else {
+                cmd = norm;  // just apply the / -> \ normalisation
+            }
+        }
+
+        run_command(id, cmd, cwd);
+        emit_prompt(id, cwd);
+        resolve_ok(seq, true);
         return;
     }
 
     if (type == "terminal.input") {
+        // Raw PTY input (only used when a ConPTY session is active for interactive programs)
         std::string id   = args.value("id",   std::string{});
         std::string data = args.value("data", std::string{});
-        // Frontend sends raw text; base64-encode before passing to Terminal::Write
-        std::string b64 = base64::encode(data);
+        std::string b64  = base64::encode(data);
         std::lock_guard<std::mutex> lk(terminals_mu_);
         auto it = terminals_.find(id);
         if (it != terminals_.end()) it->second->Write(b64);
@@ -191,7 +623,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     }
 
     if (type == "terminal.resize") {
-        std::string id = args.value("id",   std::string{});
+        std::string id = args.value("id", std::string{});
         int cols = args.value("cols", 80);
         int rows = args.value("rows", 24);
         std::lock_guard<std::mutex> lk(terminals_mu_);
@@ -203,25 +635,28 @@ void Dispatcher::dispatch_worker(const std::string& seq,
 
     if (type == "terminal.interrupt") {
         std::string id = args.value("id", std::string{});
-        std::lock_guard<std::mutex> lk(terminals_mu_);
-        auto it = terminals_.find(id);
-        if (it != terminals_.end()) it->second->Interrupt();
+        {
+            std::lock_guard<std::mutex> lk(terminals_mu_);
+            auto it = terminals_.find(id);
+            if (it != terminals_.end()) { it->second->Interrupt(); }
+        }
         resolve_ok(seq, true);
         return;
     }
 
     if (type == "terminal.stop") {
         std::string id = args.value("id", std::string{});
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            term_sessions_.erase(id);
+        }
         std::unique_ptr<Terminal> t;
         {
             std::lock_guard<std::mutex> lk(terminals_mu_);
             auto it = terminals_.find(id);
-            if (it != terminals_.end()) {
-                t = std::move(it->second);
-                terminals_.erase(it);
-            }
+            if (it != terminals_.end()) { t = std::move(it->second); terminals_.erase(it); }
         }
-        if (t) t->Stop(); // blocks briefly to join reader thread
+        if (t) t->Stop();
         resolve_ok(seq, true);
         return;
     }
@@ -229,15 +664,44 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     if (type == "terminal.list") {
         std::vector<std::string> ids;
         {
-            std::lock_guard<std::mutex> lk(terminals_mu_);
-            for (auto& kv : terminals_) ids.push_back(kv.first);
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            for (auto& kv : term_sessions_) ids.push_back(kv.first);
         }
         resolve_ok(seq, ids);
         return;
     }
 
-    if (type == "terminal.cwd" || type == "terminal.setcwd" || type == "terminal.setalignment") {
-        // Not directly supported by ConPTY; resolve OK with no-op
+    if (type == "terminal.cwd") {
+        std::string id = args.value("id", std::string{});
+        std::string cwd;
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            auto it = term_sessions_.find(id);
+            if (it != term_sessions_.end()) cwd = it->second.cwd;
+        }
+        resolve_ok(seq, cwd);
+        return;
+    }
+
+    if (type == "terminal.setcwd") {
+        std::string id  = args.value("id",  std::string{});
+        std::string cwd = args.value("cwd", std::string{});
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            auto it = term_sessions_.find(id);
+            if (it != term_sessions_.end()) it->second.cwd = cwd;
+        }
+        resolve_ok(seq, true);
+        return;
+    }
+
+    if (type == "terminal.setalignment") {
+        std::string id        = args.value("id",        std::string{});
+        std::string alignment = args.value("alignment", std::string{"default"});
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            term_sessions_[id].alignment = alignment;  // create if not yet started
+        }
         resolve_ok(seq, true);
         return;
     }
@@ -253,18 +717,26 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             wv_.dispatch([this, title] { wv_.set_title(title); });
             resolve_ok(seq, true);
         } else if (type == "window.minimise" && hwnd) {
-            wv_.dispatch([hwnd] { ShowWindow(hwnd, SW_MINIMIZE); });
+            // Use PostMessage SC_MINIMIZE so Windows plays the native OS animation
+            wv_.dispatch([hwnd] {
+                PostMessage(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+            });
             resolve_ok(seq, true);
         } else if (type == "window.maximise" && hwnd) {
-            wv_.dispatch([hwnd] { ShowWindow(hwnd, SW_MAXIMIZE); });
+            wv_.dispatch([hwnd] {
+                PostMessage(hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+            });
             resolve_ok(seq, true);
         } else if (type == "window.unmaximise" && hwnd) {
-            wv_.dispatch([hwnd] { ShowWindow(hwnd, SW_RESTORE); });
+            wv_.dispatch([hwnd] {
+                PostMessage(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+            });
             resolve_ok(seq, true);
         } else if (type == "window.toggleMaximise" && hwnd) {
             bool zoomed = IsZoomed(hwnd);
             wv_.dispatch([hwnd, zoomed] {
-                ShowWindow(hwnd, zoomed ? SW_RESTORE : SW_MAXIMIZE);
+                PostMessage(hwnd, WM_SYSCOMMAND,
+                            zoomed ? SC_RESTORE : SC_MAXIMIZE, 0);
             });
             resolve_ok(seq, true);
         } else if (type == "window.isMaximised") {
@@ -405,10 +877,22 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
             resolve_ok(seq, output);
         } else if (type == "shell.ctrlclick") {
-            auto path = args.value("path", std::string{});
-            // Open the path with the default handler
-            std::wstring wpath(path.begin(), path.end());
-            ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            auto tabId = args.value("tabId", std::string{});
+            auto path  = args.value("path",  std::string{});
+            // Resolve relative paths using the session's cwd
+            if (!path.empty() && !fs::path(path).is_absolute()) {
+                std::string cwd;
+                {
+                    std::lock_guard<std::mutex> lk(sessions_mu_);
+                    auto it = term_sessions_.find(tabId);
+                    if (it != term_sessions_.end()) cwd = it->second.cwd;
+                }
+                if (!cwd.empty()) {
+                    try { path = (fs::path(cwd) / path).string(); } catch (...) {}
+                }
+            }
+            ShellExecuteW(nullptr, L"open", dispatch_to_wide(path).c_str(),
+                          nullptr, nullptr, SW_SHOWNORMAL);
             resolve_ok(seq, true);
         } else {
             resolve_ok(seq, true);
@@ -502,7 +986,200 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         return;
     }
 
+    // ── Completions (intercept before old_to_new to resolve paths via session cwd) ──
+    if (type == "complete.path") {
+        std::string tabId  = args.value("tabId",  std::string{});
+        std::string dir    = args.value("dir",    std::string{});
+        std::string prefix = args.value("prefix", std::string{});
+
+        std::string cwd;
+        {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            auto it = term_sessions_.find(tabId);
+            if (it != term_sessions_.end()) cwd = it->second.cwd;
+        }
+        if (cwd.empty()) {
+            try { cwd = fs::current_path().string(); } catch (...) { cwd = "C:\\"; }
+        }
+
+        json search_msg = {{"cwd", cwd}, {"dir", dir}, {"prefix", prefix}};
+        json resp;
+        search_ops::dispatch("complete.path", search_msg, req_id, resp);
+        resolve_ok(seq, resp.value("completions", json::array()));
+        return;
+    }
+
     // ── Delegate to backend dispatch modules ──────────────────────────────────
     json result = old_to_new(type, args, req_id);
     wv_.resolve(seq, 0, result.dump());
+}
+
+// ── Terminal helper implementations ──────────────────────────────────────────
+
+std::string Dispatcher::get_git_branch(const std::string& dir) {
+    try {
+        fs::path p = dir;
+        for (int i = 0; i < 20; i++) {
+            auto head = p / ".git" / "HEAD";
+            std::error_code ec;
+            if (fs::exists(head, ec)) {
+                std::ifstream f(head);
+                if (!f) return "";
+                std::string line;
+                std::getline(f, line);
+                const char prefix[] = "ref: refs/heads/";
+                if (line.rfind(prefix, 0) == 0) return line.substr(sizeof(prefix) - 1);
+                if (line.size() >= 7) return line.substr(0, 7);
+                return "";
+            }
+            auto parent = p.parent_path();
+            if (parent == p) break;
+            p = parent;
+        }
+    } catch (...) {}
+    return "";
+}
+
+std::string Dispatcher::format_cwd(const std::string& cwd, bool minimal) {
+    // Normalise to forward slashes for display
+    std::string norm = cwd;
+    for (char& c : norm) if (c == '\\') c = '/';
+    while (norm.size() > 1 && norm.back() == '/') norm.pop_back();
+
+    if (!minimal) return norm;
+
+    // Show last two path components when minimal_pwd is set
+    std::vector<std::string> parts;
+    std::string seg;
+    for (char c : norm) {
+        if (c == '/') { if (!seg.empty()) { parts.push_back(seg); seg.clear(); } }
+        else { seg += c; }
+    }
+    if (!seg.empty()) parts.push_back(seg);
+    if (parts.size() <= 2) return norm;
+    return ".../" + parts[parts.size()-2] + "/" + parts.back();
+}
+
+void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd) {
+    auto cfg      = Config::instance().get();
+    bool minimal  = cfg.value("minimal_pwd", false);
+    bool show_git = false;
+    if (cfg.contains("git_recognition"))
+        show_git = cfg["git_recognition"].value("show_git_branch", false);
+
+    std::string display = format_cwd(cwd, minimal);
+    std::string branch  = show_git ? get_git_branch(cwd) : "";
+
+    // Current time as HH:MM for the bar timestamp pill
+    char ts_buf[8] = {};
+    {
+        std::time_t now = std::time(nullptr);
+        std::tm* tm_info = std::localtime(&now);
+        if (tm_info) std::strftime(ts_buf, sizeof(ts_buf), "%H:%M", tm_info);
+    }
+
+    // Always emit structured bar-prompt data (consumed by bar-mode UI)
+    emit("terminal:bar-prompt:" + id,
+         json({{"path", display}, {"branch", branch}, {"ts", std::string(ts_buf)}}));
+
+    // Always notify the frontend of the updated CWD
+    emit("terminal:cwd:" + id, json(cwd));
+
+    // Suppress ANSI prompt in bar mode — the bar widget handles the prompt display
+    std::string alignment;
+    {
+        std::lock_guard<std::mutex> lk(sessions_mu_);
+        auto it = term_sessions_.find(id);
+        if (it != term_sessions_.end()) alignment = it->second.alignment;
+    }
+    if (alignment != "default") {
+        emit("terminal:output:" + id, json(std::string("\r\n")));
+        return;
+    }
+
+    std::string prompt = "\r\n\x1b[36m" + display + "\x1b[0m";
+    if (!branch.empty())
+        prompt += " \x1b[33m(" + branch + ")\x1b[0m";
+    prompt += " \x1b[32m❯\x1b[0m ";
+
+    emit("terminal:output:" + id, json(prompt));
+}
+
+void Dispatcher::run_command(const std::string& id,
+                              const std::string& cmd,
+                              const std::string& cwd) {
+#ifdef _WIN32
+    SECURITY_ATTRIBUTES sa{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    HANDLE hrd = INVALID_HANDLE_VALUE, hwr = INVALID_HANDLE_VALUE;
+    if (!CreatePipe(&hrd, &hwr, &sa, 0)) {
+        emit("terminal:output:" + id, json(std::string("\r\n\x1b[31merror: pipe failed\x1b[0m\r\n")));
+        return;
+    }
+    SetHandleInformation(hrd, HANDLE_FLAG_INHERIT, 0);
+
+    std::wstring wcmd = dispatch_to_wide("cmd.exe /d /c " + cmd);
+    std::wstring wcwd = dispatch_to_wide(cwd);
+
+    STARTUPINFOW si{sizeof(STARTUPINFOW)};
+    si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput  = hwr;
+    si.hStdError   = hwr;
+    si.hStdInput   = INVALID_HANDLE_VALUE;
+
+    PROCESS_INFORMATION pi{};
+    BOOL ok = CreateProcessW(nullptr, wcmd.data(), nullptr, nullptr, TRUE,
+                              CREATE_NO_WINDOW, nullptr,
+                              cwd.empty() ? nullptr : wcwd.data(), &si, &pi);
+    CloseHandle(hwr);
+
+    if (!ok) {
+        CloseHandle(hrd);
+        emit("terminal:output:" + id, json(std::string(
+            "\r\n\x1b[31m'" + cmd + "' is not recognized\x1b[0m\r\n")));
+        return;
+    }
+
+    char buf[4096];
+    DWORD n;
+    while (ReadFile(hrd, buf, sizeof(buf), &n, nullptr) && n > 0) {
+        // Normalise lone \n → \r\n (cmd.exe output is usually \r\n already)
+        std::string chunk(buf, n);
+        std::string out; out.reserve(chunk.size() + 32);
+        bool prev_cr = false;
+        for (char c : chunk) {
+            if (c == '\n' && !prev_cr) out += '\r';
+            out += c;
+            prev_cr = (c == '\r');
+        }
+        emit("terminal:output:" + id, json(out));
+    }
+    CloseHandle(hrd);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+#else
+    // Unix: popen with cd to target directory
+    std::string full = "cd '" + cwd + "' 2>/dev/null && " + cmd + " 2>&1";
+    FILE* f = popen(full.c_str(), "r");
+    if (!f) {
+        emit("terminal:output:" + id, json(std::string(
+            "\r\n\x1b[31merror: could not run command\x1b[0m\r\n")));
+        return;
+    }
+    char buf[4096]; size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        std::string chunk(buf, n);
+        std::string out; out.reserve(chunk.size() + 32);
+        bool prev_cr = false;
+        for (char c : chunk) {
+            if (c == '\n' && !prev_cr) out += '\r';
+            out += c;
+            prev_cr = (c == '\r');
+        }
+        emit("terminal:output:" + id, json(out));
+    }
+    pclose(f);
+#endif
 }

@@ -87,6 +87,7 @@ ordered_json Config::make_defaults() {
     d["minimal_pwd"]       = false;
     d["default_zoom"]      = 1;   // integer → serialises as "1" like Go
     // custom_theme omitted (Go omitempty, nil by default)
+    d["command_alignment"]  = "default";  // 'default' | 'top' | 'bottom'
     d["terminal_word_wrap"] = false;
     d["file_word_wrap"]     = false;
     d["scroll_speed"]       = 3;

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <map>
 
 #ifdef _WIN32
 #include "splash_windows.hpp"
@@ -59,7 +60,20 @@ private:
     SplashScreen*     splash_ = nullptr;
 #endif
 
-    // Active terminal sessions
+    // ── Terminal helpers ──────────────────────────────────────────────────────
+    void emit_prompt(const std::string& id, const std::string& cwd);
+    void run_command(const std::string& id,
+                     const std::string& cmd,
+                     const std::string& cwd);
+    static std::string get_git_branch(const std::string& dir);
+    static std::string format_cwd(const std::string& cwd, bool minimal);
+
+    // ConPTY sessions (used for interactive programs in PTY mode)
     std::unordered_map<std::string, std::unique_ptr<Terminal>> terminals_;
     std::mutex terminals_mu_;
+
+    // Command-execution sessions (default terminal mode)
+    struct TerminalSession { std::string cwd; std::string alignment = "default"; };
+    std::map<std::string, TerminalSession> term_sessions_;
+    std::mutex sessions_mu_;
 };
