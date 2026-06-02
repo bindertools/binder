@@ -5,7 +5,7 @@
 // IPC type names must match exactly what cpp/host/dispatch.cpp handles.
 // Full C++ implementation: Phase I.3.
 
-import { invoke, on, off, offAll } from './ipc'
+import { invoke, on, offAll } from './ipc'
 
 // ── window.go.main.App patch ──────────────────────────────────────────────────
 ;(window as any).go = {
