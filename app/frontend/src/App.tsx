@@ -1,5 +1,4 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import TabsMenu from './components/TabsMenu'
 import SplitModal from './components/SplitModal'
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
@@ -295,7 +294,6 @@ export default function App() {
   const [splitEnabled,  setSplitEnabled]  = useState(false)
   const [splitRatio,    setSplitRatio]    = useState(0.5)
   const [searchOpen,    setSearchOpen]    = useState(false)
-  const [tabsMenuOpen,   setTabsMenuOpen]   = useState(false)
   const [splitModalOpen, setSplitModalOpen] = useState(false)
   const [terminalCwds,  setTerminalCwds]  = useState<Record<string, string>>({})
   // tabType → Plugin; rebuilt whenever a plugin is installed/uninstalled
@@ -542,8 +540,7 @@ export default function App() {
   // ── keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v) }
-      if (e.ctrlKey && e.key === '`') { e.preventDefault(); setTabsMenuOpen(v => !v) }
+      if (e.ctrlKey && (e.key === 'k' || e.key === '`')) { e.preventDefault(); setSearchOpen(v => !v) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -727,13 +724,7 @@ export default function App() {
     else handleMoveLeft(tabId)
   }, [handleMoveRight, handleMoveLeft])
 
-  const handleSelectFromMenu = useCallback((id: string) => {
-    const panel = tabPanels[id] ?? 'left'
-    if (panel === 'right') handleRightSelect(id)
-    else handleLeftSelect(id)
-  }, [tabPanels, handleLeftSelect, handleRightSelect])
-
-  // ── problems helpers ──────────────────────────────────────────────────────────
+// ── problems helpers ──────────────────────────────────────────────────────────
   const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
     const result = await ScanProblems(cwd).catch(() => null)
     if (!result) return
@@ -917,18 +908,7 @@ export default function App() {
               <span className="text-[10px] opacity-40 tracking-normal font-ui shrink-0">Ctrl K</span>
             </button>
 
-            <button
-              className={"flex items-center justify-center w-[26px] h-[26px] rounded-md border bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border" + (tabsMenuOpen ? ' border-accent-border bg-surface-overlay text-[var(--tab-color-hover)]' : ' border-sep-strong')}
-              onClick={() => setTabsMenuOpen(v => !v)}
-              title="Tabs (Ctrl+`)"
-              aria-label="Open tabs menu"
-            >
-              <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
-                <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-            </button>
-
-            <button
+<button
               className="flex items-center justify-center w-[26px] h-[26px] rounded-md border border-sep-strong bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border"
               onClick={handleNewTab}
               title="New terminal tab"
@@ -1025,20 +1005,7 @@ export default function App() {
         onDismiss={() => setSplitModalOpen(false)}
       />
 
-      {/* ── Tabs drawer (hamburger menu) ──────────────────────────────────────── */}
-      <TabsMenu
-        open={tabsMenuOpen}
-        tabs={tabs}
-        activeId={activeId}
-        rightActiveId={rightActiveId}
-        tabPanels={tabPanels}
-        terminalCwds={terminalCwds}
-        onSelect={handleSelectFromMenu}
-        onClose={id => dispatch({ type: 'close', id })}
-        onDismiss={() => setTabsMenuOpen(false)}
-      />
-
-      {/* ── Search palette ────────────────────────────────────────────────────── */}
+{/* ── Search palette ────────────────────────────────────────────────────── */}
       {searchOpen && (
         <SearchPalette
           tabs={tabs}
