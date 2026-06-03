@@ -924,7 +924,7 @@ export default function App() {
               onClick={() => setSplitModalOpen(true)}
               title="Arrange split view layout"
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <rect x="1" y="1" width="6" height="6" rx="1.2"/>
                 <rect x="9" y="1" width="6" height="6" rx="1.2"/>
                 <rect x="1" y="9" width="6" height="6" rx="1.2"/>
