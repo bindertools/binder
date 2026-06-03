@@ -918,9 +918,8 @@ export default function App() {
           </button>
         </div>
 
-        {/* ── Right: tabs menu + new tab + action icons + window controls ────────── */}
-        <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-          {/* Hamburger — tabs menu (moved from left, sits right of search bar) */}
+        {/* ── Search-adjacent: hamburger + new-tab, flush right of search bar ──────── */}
+        <div className="flex items-center gap-0.5 pr-2 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           <button
             className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
             onClick={() => setTabsMenuOpen(v => !v)}
@@ -931,8 +930,6 @@ export default function App() {
               <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
           </button>
-
-          {/* New tab — boxed "+" */}
           <button
             className="flex items-center justify-center w-[26px] h-[26px] rounded-md border border-sep-strong bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border"
             onClick={handleNewTab}
@@ -943,10 +940,10 @@ export default function App() {
               <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
             </svg>
           </button>
+        </div>
 
-          {/* Separator */}
-          <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
-
+        {/* ── Right: action icons + window controls ───────────────────────────── */}
+        <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           {/* Update badge */}
           {updateTag && (
             <button
