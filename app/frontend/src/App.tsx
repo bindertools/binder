@@ -920,11 +920,11 @@ export default function App() {
             </button>
 
             <button
-              className={"flex items-center justify-center w-[26px] h-[26px] rounded-md border bg-transparent cursor-pointer transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border" + (splitEnabled ? ' border-accent-border text-accent' : ' border-sep-strong text-[var(--tab-color)]')}
+              className={"flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent border-0 cursor-pointer transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]" + (splitEnabled ? ' text-accent' : ' text-[var(--tab-color)]')}
               onClick={() => setSplitModalOpen(true)}
               title="Arrange split view layout"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                 <rect x="1" y="1" width="6" height="6" rx="1.2"/>
                 <rect x="9" y="1" width="6" height="6" rx="1.2"/>
                 <rect x="1" y="9" width="6" height="6" rx="1.2"/>
