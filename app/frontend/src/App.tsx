@@ -673,6 +673,10 @@ export default function App() {
     setFocusedPanel('right')
   }, [])
 
+  const handleNewTab = useCallback(() => {
+    dispatch({ type: 'add-terminal' })
+  }, [])
+
   // ── theme helpers ─────────────────────────────────────────────────────────────
   const handleApplyColors = useCallback((colors: Record<string, string>) => {
     setLiveColors(colors)
@@ -897,20 +901,6 @@ export default function App() {
         onDoubleClick={WindowToggleMaximise}
       >
 
-        {/* ── Left: Hamburger tabs button ─────────────────────────────────────── */}
-        <div className="flex items-center px-2 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-          <button
-            className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
-            onClick={() => setTabsMenuOpen(v => !v)}
-            title="Tabs (Ctrl+`)"
-            aria-label="Open tabs menu"
-          >
-            <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
-              <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
-
         {/* ── Center: Search bar with active path as placeholder ──────────────── */}
         <div className="flex-1 flex items-center justify-center px-3 min-w-0">
           <button
@@ -928,8 +918,35 @@ export default function App() {
           </button>
         </div>
 
-        {/* ── Right: action icons + window controls ───────────────────────────── */}
+        {/* ── Right: tabs menu + new tab + action icons + window controls ────────── */}
         <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          {/* Hamburger — tabs menu (moved from left, sits right of search bar) */}
+          <button
+            className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
+            onClick={() => setTabsMenuOpen(v => !v)}
+            title="Tabs (Ctrl+`)"
+            aria-label="Open tabs menu"
+          >
+            <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
+              <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          {/* New tab — boxed "+" */}
+          <button
+            className="flex items-center justify-center w-[26px] h-[26px] rounded-md border border-sep-strong bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border"
+            onClick={handleNewTab}
+            title="New terminal tab"
+            aria-label="New terminal tab"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+
           {/* Update badge */}
           {updateTag && (
             <button
