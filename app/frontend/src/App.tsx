@@ -901,45 +901,44 @@ export default function App() {
         onDoubleClick={WindowToggleMaximise}
       >
 
-        {/* ── Center: Search bar with active path as placeholder ──────────────── */}
-        <div className="flex-1 flex items-center justify-center px-3 min-w-0">
-          <button
-            className="flex items-center gap-1.5 h-[26px] w-full max-w-[500px] px-2.5 rounded-md border border-sep-strong bg-surface-raised cursor-pointer text-[var(--tab-color)] font-ui text-[11.5px] transition-[background,color,border-color] duration-[100ms] whitespace-nowrap select-none hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-accent-border"
-            onClick={() => setSearchOpen(true)}
-            title="Search files and tabs (Ctrl+K)"
-            style={{ ['--wails-draggable' as any]: 'no-drag' }}
-          >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            <span className="flex-1 text-left overflow-hidden text-ellipsis">{searchPlaceholder}</span>
-            <span className="text-[10px] opacity-40 tracking-normal font-ui shrink-0">Ctrl K</span>
-          </button>
-        </div>
+        {/* ── Center: search bar + hamburger + new-tab, all in one centered group ── */}
+        <div className="flex-1 flex items-center justify-center px-3 min-w-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          <div className="flex items-center gap-[10px] w-full max-w-[560px]">
+            <button
+              className="flex items-center gap-1.5 h-[26px] flex-1 min-w-0 px-2.5 rounded-md border border-sep-strong bg-surface-raised cursor-pointer text-[var(--tab-color)] font-ui text-[11.5px] transition-[background,color,border-color] duration-[100ms] whitespace-nowrap select-none hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-accent-border"
+              onClick={() => setSearchOpen(true)}
+              title="Search files and tabs (Ctrl+K)"
+            >
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span className="flex-1 text-left overflow-hidden text-ellipsis">{searchPlaceholder}</span>
+              <span className="text-[10px] opacity-40 tracking-normal font-ui shrink-0">Ctrl K</span>
+            </button>
 
-        {/* ── Search-adjacent: hamburger + new-tab, flush right of search bar ──────── */}
-        <div className="flex items-center gap-0.5 pr-2 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-          <button
-            className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
-            onClick={() => setTabsMenuOpen(v => !v)}
-            title="Tabs (Ctrl+`)"
-            aria-label="Open tabs menu"
-          >
-            <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
-              <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-          </button>
-          <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded-md border border-sep-strong bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border"
-            onClick={handleNewTab}
-            title="New terminal tab"
-            aria-label="New terminal tab"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-            </svg>
-          </button>
+            <button
+              className={iconBtnBase + (tabsMenuOpen ? ' bg-surface-overlay text-[var(--tab-color-hover)]' : '')}
+              onClick={() => setTabsMenuOpen(v => !v)}
+              title="Tabs (Ctrl+`)"
+              aria-label="Open tabs menu"
+            >
+              <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
+                <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+            </button>
+
+            <button
+              className="flex items-center justify-center w-[26px] h-[26px] rounded-md border border-sep-strong bg-transparent cursor-pointer text-[var(--tab-color)] transition-[background,color,border-color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] hover:border-accent-border"
+              onClick={handleNewTab}
+              title="New terminal tab"
+              aria-label="New terminal tab"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* ── Right: action icons + window controls ───────────────────────────── */}
