@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+﻿import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { ProbItem } from '../types'
 import './Problems.scss'
 
@@ -358,7 +358,7 @@ function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
         <div className="prob-cwe-detail-section-label">Impact</div>
         <div className="prob-cwe-impact">
           {item.cwe_id === 'CWE-78'  && 'Network / Local — Attacker can execute arbitrary OS commands'}
-          {item.cwe_id === ‘CWE-79’  && "Network — Attacker can inject and execute scripts in victim’s browser"}
+          {item.cwe_id === 'CWE-79'  && "Network — Attacker can inject and execute scripts in victim's browser"}
           {item.cwe_id === 'CWE-89'  && 'Network — Attacker can read, modify, or delete database records'}
           {item.cwe_id === 'CWE-120' && 'Local / Network — Memory corruption may lead to arbitrary code execution'}
           {item.cwe_id === 'CWE-134' && 'Network — Format string exploitation can overwrite stack memory'}

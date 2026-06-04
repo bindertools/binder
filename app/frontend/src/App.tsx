@@ -514,15 +514,6 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const handler = (e: Event) => {
-      const { path } = (e as CustomEvent<{ path: string }>).detail
-      if (path) void handleOpenFileAtLine(path, 0, 0)
-    }
-    window.addEventListener('ide:ctrl-click-file', handler)
-    return () => window.removeEventListener('ide:ctrl-click-file', handler)
-  }, [handleOpenFileAtLine])
-
-  useEffect(() => {
     EventsOn('app:open-problems', (...args: any[]) => {
       const payload = args[0] as OpenProblemsPayload
       if (!payload?.cwd) return
@@ -767,6 +758,15 @@ export default function App() {
       dispatch({ type: 'open-file', payload: { path, content, language: lang, gotoLine: line } })
     } catch { /* file gone */ }
   }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      if (path) void handleOpenFileAtLine(path, 0, 0)
+    }
+    window.addEventListener('ide:ctrl-click-file', handler)
+    return () => window.removeEventListener('ide:ctrl-click-file', handler)
+  }, [handleOpenFileAtLine])
 
   // ── divider drag ──────────────────────────────────────────────────────────────
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
