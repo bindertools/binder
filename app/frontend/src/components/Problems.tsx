@@ -58,7 +58,7 @@ function loadDismissed(): Set<string> {
 }
 
 function saveDismissed(s: Set<string>): void {
-  try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...s])) } catch {}
+  try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...s])) } catch { /* ignore */ }
 }
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────

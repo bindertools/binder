@@ -575,7 +575,7 @@ export default function App() {
     setActivePage('terminal')
   }, [])
 
-  const handleRightSelect = useCallback((id: string) => {
+  const _handleRightSelect = useCallback((id: string) => {
     setRightActiveId(id)
     setFocusedPanel('right')
     setActivePage('terminal')
@@ -863,8 +863,7 @@ export default function App() {
   }, [])
 
   // ── render ────────────────────────────────────────────────────────────────────
-  const iconBtnBase = "flex items-center justify-center w-7 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]"
-  const wcBtnBase   = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+  const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui">
@@ -995,7 +994,7 @@ export default function App() {
         {/* Sidebar */}
         <Sidebar
           activePage={activePage}
-          onNavigate={page => setActivePage(page)}
+          onNavigate={(page: PageId) => setActivePage(page)}
           onSearch={() => setSearchOpen(true)}
           showPlugins={__PLUGINS__}
         />
@@ -1097,7 +1096,7 @@ export default function App() {
                       const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
                       setProbSources(r.sources ?? [])
                       setProbItems(r.items ?? [])
-                    } catch {}
+                    } catch { /* ignore */ }
                     setProbScanning(false)
                   }}
                   onOpenFile={(path, line, col) => {
