@@ -16,6 +16,7 @@ interface Props {
   onNewTerminal:        () => void
   onAddSiblingTerminal: (parentId: string) => void
   onDrop:               (tabId: string) => void
+  onDuplicate:          (id: string) => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ interface CtxMenuState {
 export default function TabBar({
   panel: _panel, tabs, activeId, focused: _focused,
   onSelect, onClose, onCloseOthers, onMoveRight, onMoveLeft,
-  onNewTerminal, onAddSiblingTerminal: _onAddSibling, onDrop,
+  onNewTerminal, onAddSiblingTerminal: _onAddSibling, onDrop, onDuplicate,
 }: Props) {
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const ctxRef = useRef<HTMLDivElement>(null)
@@ -159,6 +160,8 @@ export default function TabBar({
         >
           <button className={ctxItemBase} onClick={() => { onMoveLeft(ctxMenu.tabId); setCtxMenu(null) }}>Move Left</button>
           <button className={ctxItemBase} onClick={() => { onMoveRight(ctxMenu.tabId); setCtxMenu(null) }}>Move Right</button>
+          <div className="h-px bg-sep my-[3px]" />
+          <button className={ctxItemBase} onClick={() => { onDuplicate(ctxMenu.tabId); setCtxMenu(null) }}>Duplicate Tab</button>
           <div className="h-px bg-sep my-[3px]" />
           <button className={ctxItemBase} onClick={() => { onClose(ctxMenu.tabId); setCtxMenu(null) }}>Close Tab</button>
           <button className={ctxItemBase} onClick={() => { onCloseOthers(ctxMenu.tabId); setCtxMenu(null) }}>Close Others</button>
