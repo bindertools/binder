@@ -970,7 +970,7 @@ export default function Terminal({
   const cwdLabel = React.useMemo(() => {
     const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
     if (parts.length === 0) return '~'
-    return parts.length <= 2 ? parts.join('/') : '.../' + parts.slice(-2).join('/')
+    return parts.length <= 2 ? parts.join('/') : parts.slice(-2).join('/')
   }, [cwd])
 
   // barPath: prefer Go's formatted path (respects minimal_pwd); fall back to
