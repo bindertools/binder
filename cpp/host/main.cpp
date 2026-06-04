@@ -46,6 +46,23 @@ int main(int, char**) {
 
 #ifdef _WIN32
     if (!AcquireSingleInstance()) return 0;
+
+    // Assign this process to a job object so all child processes (cmd.exe,
+    // powershell, git, npm, etc.) are automatically killed when this process
+    // exits. Without this they become orphans and keep running in the background.
+    {
+        HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
+        if (hJob) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{};
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            SetInformationJobObject(hJob, JobObjectExtendedLimitInformation,
+                                    &info, sizeof(info));
+            AssignProcessToJobObject(hJob, GetCurrentProcess());
+            // Intentionally leaked — the handle closes on process exit,
+            // which triggers the kill-on-close for all children.
+        }
+    }
+
     SplashScreen splash;
     splash.Show();
 
