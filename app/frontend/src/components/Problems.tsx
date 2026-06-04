@@ -8,15 +8,17 @@ type DiagFilter = 'all' | 'errors' | 'warnings'
 type MainTab    = 'diagnostics' | 'cwe'
 
 export interface CweItem {
-  cwe_id:      string
-  name:        string
-  description: string
-  severity:    'critical' | 'high' | 'medium' | 'low' | 'info'
-  file:        string
-  line:        number
-  col:         number
-  snippet:     string
-  mitre_url:   string
+  cwe_id:            string
+  name:              string
+  description:       string
+  severity:          'critical' | 'high' | 'medium' | 'low' | 'info'
+  file:              string
+  line:              number
+  col:               number
+  snippet:           string
+  snippet_match_idx?: number
+  mitre_url:         string
+  remediation?:      string
 }
 
 interface Props {
@@ -351,6 +353,21 @@ function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
         <p className="prob-cwe-detail-desc">{item.description}</p>
       </div>
 
+      {/* ── Impact ────────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">Impact</div>
+        <div className="prob-cwe-impact">
+          {item.cwe_id === 'CWE-78'  && 'Network / Local — Attacker can execute arbitrary OS commands'}
+          {item.cwe_id === ‘CWE-79’  && "Network — Attacker can inject and execute scripts in victim’s browser"}
+          {item.cwe_id === 'CWE-89'  && 'Network — Attacker can read, modify, or delete database records'}
+          {item.cwe_id === 'CWE-120' && 'Local / Network — Memory corruption may lead to arbitrary code execution'}
+          {item.cwe_id === 'CWE-134' && 'Network — Format string exploitation can overwrite stack memory'}
+          {item.cwe_id === 'CWE-95'  && 'Network — Arbitrary JavaScript execution in the application context'}
+          {item.cwe_id === 'CWE-502' && 'Network — Deserialization of attacker-controlled data can execute arbitrary code'}
+          {!['CWE-78','CWE-79','CWE-89','CWE-120','CWE-134','CWE-95','CWE-502'].includes(item.cwe_id) && 'Variable — See MITRE reference for full impact details'}
+        </div>
+      </div>
+
       {/* ── Location ──────────────────────────────────────────────────────────── */}
       <div className="prob-cwe-detail-section">
         <div className="prob-cwe-detail-section-label">Location</div>
@@ -376,7 +393,30 @@ function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
       {item.snippet && (
         <div className="prob-cwe-detail-section">
           <div className="prob-cwe-detail-section-label">Code</div>
-          <pre className="prob-cwe-detail-snippet">{item.snippet}</pre>
+          <div className="prob-cwe-snippet-block">
+            {item.snippet.split('\n').map((codeLine, idx) => {
+              const matchIdx = item.snippet_match_idx ?? 0
+              const isHighlight = idx === matchIdx
+              const lineNo = item.line - matchIdx + idx
+              return (
+                <div
+                  key={idx}
+                  className={`prob-cwe-snippet-line${isHighlight ? ' prob-cwe-snippet-line--highlight' : ''}`}
+                >
+                  <span className="prob-cwe-snippet-lineno">{lineNo}</span>
+                  <span className="prob-cwe-snippet-code">{codeLine}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Remediation ───────────────────────────────────────────────────────── */}
+      {item.remediation && (
+        <div className="prob-cwe-detail-section">
+          <div className="prob-cwe-detail-section-label">Remediation</div>
+          <div className="prob-cwe-remediation">{item.remediation}</div>
         </div>
       )}
 
