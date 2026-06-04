@@ -46,7 +46,7 @@ export default function DatabasePage({ terminalId, cwd, initialDbPath }: Props) 
     ]).then(([a, b, c]) => {
       const all = ([...a, ...b, ...c] as SearchResult[])
         .filter(r => r.is_name)
-        .map(r => r.path)
+        .map(r => (r as SearchResult & { abs_path?: string }).abs_path || r.path)
       setDbFiles([...new Set(all)])
       setLoading(false)
     }).catch(() => setLoading(false))
