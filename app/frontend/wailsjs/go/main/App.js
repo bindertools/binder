@@ -154,6 +154,10 @@ export function ScanProblems(arg1) {
   return window['go']['main']['App']['ScanProblems'](arg1);
 }
 
+export function ScanCWE(arg1) {
+  return window['go']['main']['App']['ScanCWE'](arg1);
+}
+
 export function SearchFiles(arg1, arg2) {
   return window['go']['main']['App']['SearchFiles'](arg1, arg2);
 }

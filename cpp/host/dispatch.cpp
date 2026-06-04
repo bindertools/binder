@@ -581,6 +581,122 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             return;
         }
 
+        // ── ls — built-in directory listing with Unix-style multi-column output ──
+        if (lower == "ls" || (lower.size() >= 3 && lower[0]=='l' && lower[1]=='s' &&
+                              (lower.size() == 2 || lower[2]==' '))) {
+            std::string list_path = cwd;
+            bool show_hidden = false;
+
+            // Parse flags and optional path argument
+            if (cmd.size() > 3) {
+                std::string rest = cmd.substr(3);
+                while (!rest.empty() && rest.front() == ' ') rest.erase(rest.begin());
+                // Tokenise
+                std::string tok;
+                auto flush_tok = [&]() {
+                    if (tok.empty()) return;
+                    if (tok[0] == '-') {
+                        if (tok.find('a') != std::string::npos) show_hidden = true;
+                    } else {
+                        fs::path p = tok;
+                        if (!p.is_absolute()) p = fs::path(cwd) / p;
+                        try { list_path = fs::weakly_canonical(p).string(); } catch (...) {}
+                    }
+                    tok.clear();
+                };
+                for (char c : rest) { if (c == ' ') flush_tok(); else tok += c; }
+                flush_tok();
+            }
+
+            // Collect entries
+            struct Entry { std::string name; bool is_dir; };
+            std::vector<Entry> entries;
+            try {
+                for (auto& e : fs::directory_iterator(list_path,
+                        fs::directory_options::skip_permission_denied)) {
+                    auto name = e.path().filename().string();
+                    if (!show_hidden && !name.empty() && name[0] == '.') continue;
+                    entries.push_back({name, e.is_directory()});
+                }
+            } catch (...) {}
+
+            // Sort: dirs first, then case-insensitive alpha
+            std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+                if (a.is_dir != b.is_dir) return a.is_dir > b.is_dir;
+                std::string al = a.name, bl = b.name;
+                for (char& c : al) c = (char)tolower((unsigned char)c);
+                for (char& c : bl) c = (char)tolower((unsigned char)c);
+                return al < bl;
+            });
+
+            if (entries.empty()) {
+                emit("terminal:output:" + id, json(std::string("\r\n")));
+                emit_prompt(id, cwd);
+                resolve_ok(seq, true);
+                return;
+            }
+
+            // Display names include the trailing "/" for directories
+            std::vector<std::string> labels;
+            labels.reserve(entries.size());
+            for (auto& e : entries) labels.push_back(e.name + (e.is_dir ? "/" : ""));
+
+            // Multi-column layout: column width = longest label + 2 spaces
+            size_t max_len = 0;
+            for (auto& l : labels) if (l.size() > max_len) max_len = l.size();
+            size_t col_w = max_len + 2;
+            size_t term_w = 80;
+            size_t ncols = std::max<size_t>(1, term_w / col_w);
+            size_t n = labels.size();
+            size_t nrows = (n + ncols - 1) / ncols;
+
+            // Fill column-major (like Unix ls)
+            std::string output = "\r\n";
+            for (size_t row = 0; row < nrows; ++row) {
+                for (size_t col = 0; col < ncols; ++col) {
+                    size_t idx = col * nrows + row;
+                    if (idx >= n) break;
+                    const auto& label = labels[idx];
+                    bool last = (col == ncols - 1) || ((col + 1) * nrows + row >= n);
+                    if (entries[idx].is_dir)
+                        output += "\x1b[34m" + label + "\x1b[0m";
+                    else
+                        output += label;
+                    if (!last) {
+                        size_t pad = col_w - label.size();
+                        output.append(pad, ' ');
+                    }
+                }
+                output += "\r\n";
+            }
+
+            emit("terminal:output:" + id, json(output));
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
+        // ── open — open file/dir with system default app ──────────────────────
+        if (lower == "open" || (lower.size() >= 5 && lower.substr(0, 5) == "open ")) {
+            std::string target = cmd.size() > 5 ? cmd.substr(5) : cwd;
+            while (!target.empty() && target.front() == ' ') target.erase(target.begin());
+            while (!target.empty() && target.back() == ' ') target.pop_back();
+            if (target.empty()) target = cwd;
+            if (!fs::path(target).is_absolute()) {
+                try { target = fs::weakly_canonical(fs::path(cwd) / target).string(); } catch (...) {}
+            }
+#ifdef _WIN32
+            ShellExecuteW(nullptr, L"open", dispatch_to_wide(target).c_str(),
+                          nullptr, nullptr, SW_SHOWNORMAL);
+#else
+            system(("xdg-open \"" + target + "\" &").c_str());
+#endif
+            emit("terminal:output:" + id, json(std::string("\r\n")));
+            emit_prompt(id, cwd);
+            resolve_ok(seq, true);
+            return;
+        }
+
         // Regular command — run via shell, stream output
         // ── Unix-path normalisation & PowerShell script detection ────────────────
         // cmd.exe doesn't understand ./ (Unix-style current-dir prefix).
@@ -986,6 +1102,169 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         return;
     }
 
+    // ── CWE static analysis ───────────────────────────────────────────────────
+    if (type == "problems.cwe") {
+        std::string scan_path = args.value("path", std::string{});
+        if (scan_path.empty()) {
+            try { scan_path = fs::current_path().string(); } catch (...) { scan_path = "."; }
+        }
+
+        std::string captured_seq  = seq;
+        std::string captured_path = scan_path;
+        auto* d = this;
+
+        std::thread([d, captured_seq, captured_path]() {
+            struct CwePattern {
+                const char* cwe_id;
+                const char* name;
+                const char* description;
+                const char* severity;
+                const char* pattern;
+                const char* extensions;
+                const char* mitre_url;
+            };
+
+            static const CwePattern kPatterns[] = {
+                {"CWE-120", "Buffer Copy without Checking Size of Input",
+                 "The program copies an input buffer to a destination without verifying the destination is large enough.",
+                 "high", "strcpy(", ".c,.cpp,.h,.hpp",
+                 "https://cwe.mitre.org/data/definitions/120.html"},
+                {"CWE-120", "Unbounded Input via gets()",
+                 "gets() reads an unbounded amount of input and is inherently unsafe — use fgets() instead.",
+                 "critical", "gets(", ".c,.cpp,.h,.hpp",
+                 "https://cwe.mitre.org/data/definitions/120.html"},
+                {"CWE-134", "Use of Externally-Controlled Format String",
+                 "sprintf() with a variable format argument can be exploited to write to arbitrary memory locations.",
+                 "high", "sprintf(", ".c,.cpp,.h,.hpp",
+                 "https://cwe.mitre.org/data/definitions/134.html"},
+                {"CWE-78", "OS Command Injection via system()",
+                 "system() constructs a shell command that may include attacker-controlled input.",
+                 "critical", "system(", ".c,.cpp,.h,.hpp",
+                 "https://cwe.mitre.org/data/definitions/78.html"},
+                {"CWE-78", "OS Command Injection via popen()",
+                 "popen() executes a shell pipeline that may be influenced by external input.",
+                 "high", "popen(", ".c,.cpp,.h,.hpp",
+                 "https://cwe.mitre.org/data/definitions/78.html"},
+                {"CWE-95", "Improper Neutralization of Eval Input",
+                 "eval() executes code from a string. If the string contains attacker-controlled data, arbitrary code execution is possible.",
+                 "high", "eval(", ".js,.ts,.jsx,.tsx,.mjs,.cjs",
+                 "https://cwe.mitre.org/data/definitions/95.html"},
+                {"CWE-79", "Cross-Site Scripting via innerHTML",
+                 "Setting innerHTML from untrusted data can inject arbitrary HTML and execute scripts.",
+                 "high", "innerHTML", ".js,.ts,.jsx,.tsx,.html",
+                 "https://cwe.mitre.org/data/definitions/79.html"},
+                {"CWE-79", "Cross-Site Scripting via document.write()",
+                 "document.write() injects raw HTML into the page and is considered unsafe.",
+                 "medium", "document.write(", ".js,.ts,.jsx,.tsx,.html",
+                 "https://cwe.mitre.org/data/definitions/79.html"},
+                {"CWE-79", "XSS via dangerouslySetInnerHTML",
+                 "React's dangerouslySetInnerHTML bypasses XSS protections — ensure the value is sanitized.",
+                 "medium", "dangerouslySetInnerHTML", ".jsx,.tsx",
+                 "https://cwe.mitre.org/data/definitions/79.html"},
+                {"CWE-89", "SQL Injection Pattern",
+                 "A SELECT query appears to be constructed inline. Prefer parameterized queries or prepared statements.",
+                 "critical", "SELECT * FROM", ".js,.ts,.jsx,.tsx,.py,.go,.java,.php",
+                 "https://cwe.mitre.org/data/definitions/89.html"},
+                {"CWE-502", "Deserialization of Untrusted Data",
+                 "JSON.parse() on untrusted input may lead to prototype pollution. Validate schema before use.",
+                 "medium", "JSON.parse(", ".js,.ts,.jsx,.tsx",
+                 "https://cwe.mitre.org/data/definitions/502.html"},
+                {"CWE-78", "OS Command Injection via os.system()",
+                 "os.system() executes a shell command. Prefer subprocess with shell=False and explicit argument lists.",
+                 "critical", "os.system(", ".py",
+                 "https://cwe.mitre.org/data/definitions/78.html"},
+                {"CWE-502", "Insecure Deserialization via pickle",
+                 "pickle.loads() deserializes arbitrary Python objects and can execute arbitrary code.",
+                 "critical", "pickle.loads(", ".py",
+                 "https://cwe.mitre.org/data/definitions/502.html"},
+            };
+            static const size_t kPatternCount = sizeof(kPatterns) / sizeof(kPatterns[0]);
+
+            static const std::set<std::string> kSkipDirs = {
+                "node_modules", ".git", ".svn", "dist", "build",
+                "out", ".next", "target", "vendor", "__pycache__",
+            };
+            static constexpr size_t kMaxFileSize = 2 * 1024 * 1024;
+            static constexpr size_t kMaxFindings = 200;
+
+            json results = json::array();
+            try {
+                for (auto it = fs::recursive_directory_iterator(
+                        captured_path,
+                        fs::directory_options::skip_permission_denied);
+                     it != fs::recursive_directory_iterator(); ++it) {
+
+                    if (results.size() >= kMaxFindings) break;
+
+                    if (it->is_directory()) {
+                        if (kSkipDirs.count(it->path().filename().string()))
+                            it.disable_recursion_pending();
+                        continue;
+                    }
+                    if (!it->is_regular_file()) continue;
+
+                    std::error_code ec;
+                    auto fsize = fs::file_size(it->path(), ec);
+                    if (ec || fsize > kMaxFileSize) continue;
+
+                    std::string ext = it->path().extension().string();
+                    for (char& c : ext) c = (char)tolower((unsigned char)c);
+
+                    // Collect applicable patterns for this extension
+                    std::vector<const CwePattern*> applicable;
+                    for (size_t pi = 0; pi < kPatternCount; ++pi) {
+                        std::string exts = kPatterns[pi].extensions;
+                        size_t pos = 0;
+                        while (pos < exts.size()) {
+                            auto comma = exts.find(',', pos);
+                            auto cand  = comma == std::string::npos
+                                ? exts.substr(pos)
+                                : exts.substr(pos, comma - pos);
+                            if (cand == ext) { applicable.push_back(&kPatterns[pi]); break; }
+                            if (comma == std::string::npos) break;
+                            pos = comma + 1;
+                        }
+                    }
+                    if (applicable.empty()) continue;
+
+                    std::ifstream f(it->path(), std::ios::binary);
+                    if (!f) continue;
+
+                    std::string line;
+                    int lineNo = 0;
+                    while (std::getline(f, line) && results.size() < kMaxFindings) {
+                        ++lineNo;
+                        for (auto* pat : applicable) {
+                            auto col = line.find(pat->pattern);
+                            if (col == std::string::npos) continue;
+
+                            std::string snippet = line;
+                            size_t sp = snippet.find_first_not_of(" \t");
+                            if (sp != std::string::npos) snippet = snippet.substr(sp);
+                            if (snippet.size() > 120) snippet = snippet.substr(0, 120) + "...";
+
+                            json item;
+                            item["cwe_id"]      = pat->cwe_id;
+                            item["name"]        = pat->name;
+                            item["description"] = pat->description;
+                            item["severity"]    = pat->severity;
+                            item["file"]        = it->path().string();
+                            item["line"]        = lineNo;
+                            item["col"]         = (int)(col + 1);
+                            item["snippet"]     = snippet;
+                            item["mitre_url"]   = pat->mitre_url;
+                            results.push_back(std::move(item));
+                            break;
+                        }
+                    }
+                }
+            } catch (...) {}
+
+            d->resolve_ok(captured_seq, results);
+        }).detach();
+        return;
+    }
+
     // ── Completions (intercept before old_to_new to resolve paths via session cwd) ──
     if (type == "complete.path") {
         std::string tabId  = args.value("tabId",  std::string{});
@@ -1006,6 +1285,34 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         json resp;
         search_ops::dispatch("complete.path", search_msg, req_id, resp);
         resolve_ok(seq, resp.value("completions", json::array()));
+        return;
+    }
+
+    // ── search.files — resolve terminal-session ID → CWD, then search ─────────
+    // The shim passes the active terminal's session ID as "path". Detect it and
+    // swap it for the session's real CWD so the backend gets a filesystem path.
+    // Returns the results array directly (not wrapped in {results:[...]}).
+    if (type == "search.files") {
+        std::string path  = args.value("path",  args.value("root", std::string{}));
+        std::string query = args.value("query", std::string{});
+
+        // If path looks like a terminal session ID ("tab-N"), resolve it to CWD.
+        if (!path.empty() && path.rfind("tab-", 0) == 0) {
+            std::lock_guard<std::mutex> lk(sessions_mu_);
+            auto it = term_sessions_.find(path);
+            if (it != term_sessions_.end()) path = it->second.cwd;
+            else path.clear();
+        }
+        if (path.empty()) {
+            try { path = fs::current_path().string(); } catch (...) { path = "C:\\"; }
+        }
+
+        json search_msg = {{"path", path}, {"query", query}, {"maxResults", 50}};
+        search_msg["type"] = "search.files";
+        search_msg["id"]   = req_id;
+        json resp;
+        search_ops::dispatch("search.files", search_msg, req_id, resp);
+        resolve_ok(seq, resp.value("results", json::array()));
         return;
     }
 
@@ -1057,30 +1364,31 @@ std::string Dispatcher::format_cwd(const std::string& cwd, bool minimal) {
     }
     if (!seg.empty()) parts.push_back(seg);
     if (parts.size() <= 2) return norm;
-    return ".../" + parts[parts.size()-2] + "/" + parts.back();
+    return parts[parts.size()-2] + "/" + parts.back();
 }
 
 void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd) {
     auto cfg      = Config::instance().get();
-    bool minimal  = cfg.value("minimal_pwd", false);
-    bool show_git = false;
+    bool minimal     = cfg.value("minimal_pwd", false);
+    bool show_ts     = cfg.value("show_timestamps", false);
+    bool show_git    = false;
     if (cfg.contains("git_recognition"))
         show_git = cfg["git_recognition"].value("show_git_branch", false);
 
     std::string display = format_cwd(cwd, minimal);
     std::string branch  = show_git ? get_git_branch(cwd) : "";
 
-    // Current time as HH:MM for the bar timestamp pill
-    char ts_buf[8] = {};
-    {
+    std::string ts_str;
+    if (show_ts) {
+        char ts_buf[12] = {};
         std::time_t now = std::time(nullptr);
         std::tm* tm_info = std::localtime(&now);
-        if (tm_info) std::strftime(ts_buf, sizeof(ts_buf), "%H:%M", tm_info);
+        if (tm_info) std::strftime(ts_buf, sizeof(ts_buf), "%H:%M:%S", tm_info);
+        ts_str = ts_buf;
     }
 
-    // Always emit structured bar-prompt data (consumed by bar-mode UI)
     emit("terminal:bar-prompt:" + id,
-         json({{"path", display}, {"branch", branch}, {"ts", std::string(ts_buf)}}));
+         json({{"path", display}, {"branch", branch}, {"ts", ts_str}}));
 
     // Always notify the frontend of the updated CWD
     emit("terminal:cwd:" + id, json(cwd));
@@ -1097,7 +1405,10 @@ void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd) {
         return;
     }
 
-    std::string prompt = "\r\n\x1b[36m" + display + "\x1b[0m";
+    std::string prompt = "\r\n";
+    if (!ts_str.empty())
+        prompt += "\x1b[97m" + ts_str + "\x1b[0m ";
+    prompt += "\x1b[36m" + display + "\x1b[0m";
     if (!branch.empty())
         prompt += " \x1b[33m(" + branch + ")\x1b[0m";
     prompt += " \x1b[32m❯\x1b[0m ";

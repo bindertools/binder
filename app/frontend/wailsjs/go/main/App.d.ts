@@ -86,6 +86,8 @@ export function SaveSession(arg1:Array<session.Tab>):Promise<void>;
 
 export function ScanProblems(arg1:string):Promise<problems.ProbResult>;
 
+export function ScanCWE(arg1:string):Promise<Array<any>>;
+
 export function SearchFiles(arg1:string,arg2:string):Promise<Array<search.Result>>;
 
 export function SelectDirectory():Promise<string>;

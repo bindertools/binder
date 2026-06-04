@@ -7,6 +7,22 @@
 
 import { invoke, on, offAll } from './ipc'
 
+// ── File content codec ────────────────────────────────────────────────────────
+// C++ readfile returns base64-encoded bytes; writefile expects the same.
+function b64ToText(b64: string): string {
+  const binStr = atob(b64)
+  const bytes = new Uint8Array(binStr.length)
+  for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
+}
+
+function textToB64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binStr = ''
+  for (let i = 0; i < bytes.length; i++) binStr += String.fromCharCode(bytes[i])
+  return btoa(binStr)
+}
+
 // ── window.go.main.App patch ──────────────────────────────────────────────────
 ;(window as any).go = {
   main: {
@@ -48,17 +64,21 @@ import { invoke, on, offAll } from './ipc'
       ExplorerOpen: (path: string) =>
         invoke('fs.tree', { path }),
 
-      ExplorerGetFile: (path: string) =>
-        invoke<string>('fs.readfile', { path }),
+      ExplorerGetFile: async (path: string) => {
+        const r = await invoke<{ content: string }>('fs.readfile', { path })
+        return b64ToText(r.content)
+      },
 
-      ReadFile: (path: string) =>
-        invoke<string>('fs.readfile', { path }),
+      ReadFile: async (path: string) => {
+        const r = await invoke<{ content: string }>('fs.readfile', { path })
+        return b64ToText(r.content)
+      },
 
       ExplorerSaveFile: (path: string, content: string) =>
-        invoke('fs.writefile', { path, content }),
+        invoke('fs.writefile', { path, content: textToB64(content) }),
 
       WriteFile: (path: string, content: string) =>
-        invoke('fs.writefile', { path, content }),
+        invoke('fs.writefile', { path, content: textToB64(content) }),
 
       ExplorerDelete: (path: string) =>
         invoke('fs.delete', { path }),
@@ -98,16 +118,20 @@ import { invoke, on, offAll } from './ipc'
         invoke('config.set', { key: 'customTheme', value: theme }),
 
       // ── Search / completions ──────────────────────────────────────────────
-      SearchFiles: (root: string, query: string) =>
-        invoke('search.files', { root, query }),
-
       // Terminal.tsx calls GetCompletions(tabId, dir, partial) for filesystem completions.
       // Route to complete.path so C++ can resolve paths relative to the session cwd.
       GetCompletions: (tabId: string, dir: string, partial: string) =>
         invoke<string[]>('complete.path', { tabId, dir, prefix: partial }),
 
-      ExecSilent: (cmd: string, dir: string, args: string[]) =>
-        invoke<string>('shell.exec', { cmd, dir, args }),
+      // search.files: pass the first arg as "path". The C++ handler also accepts
+      // a terminal session ID as "path" and resolves it to the session's CWD.
+      SearchFiles: (root: string, query: string) =>
+        invoke<any[]>('search.files', { path: root, query }),
+
+      // ExecSilent(workingDir, cmd, args) — note: workingDir is the first arg here
+      // (the original Wails Go binding used the same order).
+      ExecSilent: (workingDir: string, cmd: string, args: string[]) =>
+        invoke<string>('shell.exec', { cmd, dir: workingDir, args }),
 
       SelectDirectory: () =>
         invoke<string>('shell.selectdir'),
@@ -174,6 +198,9 @@ import { invoke, on, offAll } from './ipc'
 
       ScanProblems: (path: string) =>
         invoke('problems.scan', { path }),
+
+      ScanCWE: (path: string) =>
+        invoke('problems.cwe', { path }),
     },
   },
 }
