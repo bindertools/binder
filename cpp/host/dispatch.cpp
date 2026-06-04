@@ -18,6 +18,7 @@
 #include <string>
 #include <thread>
 #include <filesystem>
+#include <deque>
 #include <fstream>
 #include <vector>
 #include <map>
@@ -1007,9 +1008,18 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     try { path = (fs::path(cwd) / path).string(); } catch (...) {}
                 }
             }
-            ShellExecuteW(nullptr, L"open", dispatch_to_wide(path).c_str(),
-                          nullptr, nullptr, SW_SHOWNORMAL);
-            resolve_ok(seq, true);
+            bool exists = false;
+            bool isDir  = false;
+            try {
+                exists = fs::exists(path);
+                if (exists) isDir = fs::is_directory(path);
+            } catch (...) {}
+            json result = {
+                {"resolved", path},
+                {"isDir",    isDir},
+                {"exists",   exists},
+            };
+            resolve_ok(seq, result);
         } else {
             resolve_ok(seq, true);
         }
@@ -1122,61 +1132,75 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 const char* pattern;
                 const char* extensions;
                 const char* mitre_url;
+                const char* remediation;
             };
 
             static const CwePattern kPatterns[] = {
                 {"CWE-120", "Buffer Copy without Checking Size of Input",
                  "The program copies an input buffer to a destination without verifying the destination is large enough.",
                  "high", "strcpy(", ".c,.cpp,.h,.hpp",
-                 "https://cwe.mitre.org/data/definitions/120.html"},
+                 "https://cwe.mitre.org/data/definitions/120.html",
+                 "Replace strcpy() with strncpy() or strlcpy(). Always validate that the destination buffer is large enough before copying."},
                 {"CWE-120", "Unbounded Input via gets()",
                  "gets() reads an unbounded amount of input and is inherently unsafe — use fgets() instead.",
                  "critical", "gets(", ".c,.cpp,.h,.hpp",
-                 "https://cwe.mitre.org/data/definitions/120.html"},
+                 "https://cwe.mitre.org/data/definitions/120.html",
+                 "Replace gets() with fgets(buf, sizeof(buf), stdin). gets() has no bounds checking and is removed from C11."},
                 {"CWE-134", "Use of Externally-Controlled Format String",
                  "sprintf() with a variable format argument can be exploited to write to arbitrary memory locations.",
                  "high", "sprintf(", ".c,.cpp,.h,.hpp",
-                 "https://cwe.mitre.org/data/definitions/134.html"},
+                 "https://cwe.mitre.org/data/definitions/134.html",
+                 "Use snprintf() instead of sprintf(). Never pass a variable as the format string \xe2\x80\x94 always use a literal format: snprintf(buf, sizeof(buf), \"%s\", input)."},
                 {"CWE-78", "OS Command Injection via system()",
                  "system() constructs a shell command that may include attacker-controlled input.",
                  "critical", "system(", ".c,.cpp,.h,.hpp",
-                 "https://cwe.mitre.org/data/definitions/78.html"},
+                 "https://cwe.mitre.org/data/definitions/78.html",
+                 "Avoid system(). Use execve() with an explicit argv[] array to avoid shell interpretation of arguments."},
                 {"CWE-78", "OS Command Injection via popen()",
                  "popen() executes a shell pipeline that may be influenced by external input.",
                  "high", "popen(", ".c,.cpp,.h,.hpp",
-                 "https://cwe.mitre.org/data/definitions/78.html"},
+                 "https://cwe.mitre.org/data/definitions/78.html",
+                 "Validate and sanitize all input before passing to popen(). Prefer subprocess with explicit argument lists."},
                 {"CWE-95", "Improper Neutralization of Eval Input",
                  "eval() executes code from a string. If the string contains attacker-controlled data, arbitrary code execution is possible.",
                  "high", "eval(", ".js,.ts,.jsx,.tsx,.mjs,.cjs",
-                 "https://cwe.mitre.org/data/definitions/95.html"},
+                 "https://cwe.mitre.org/data/definitions/95.html",
+                 "Avoid eval() entirely. Use JSON.parse() for data, or a safe expression evaluator. If eval is required, run it in a sandboxed context."},
                 {"CWE-79", "Cross-Site Scripting via innerHTML",
                  "Setting innerHTML from untrusted data can inject arbitrary HTML and execute scripts.",
                  "high", "innerHTML", ".js,.ts,.jsx,.tsx,.html",
-                 "https://cwe.mitre.org/data/definitions/79.html"},
+                 "https://cwe.mitre.org/data/definitions/79.html",
+                 "Use textContent instead of innerHTML when inserting text. When HTML is needed, sanitize with DOMPurify before assignment."},
                 {"CWE-79", "Cross-Site Scripting via document.write()",
                  "document.write() injects raw HTML into the page and is considered unsafe.",
                  "medium", "document.write(", ".js,.ts,.jsx,.tsx,.html",
-                 "https://cwe.mitre.org/data/definitions/79.html"},
+                 "https://cwe.mitre.org/data/definitions/79.html",
+                 "Avoid document.write(). Manipulate the DOM using createElement() and appendChild() instead."},
                 {"CWE-79", "XSS via dangerouslySetInnerHTML",
                  "React's dangerouslySetInnerHTML bypasses XSS protections — ensure the value is sanitized.",
                  "medium", "dangerouslySetInnerHTML", ".jsx,.tsx",
-                 "https://cwe.mitre.org/data/definitions/79.html"},
+                 "https://cwe.mitre.org/data/definitions/79.html",
+                 "Always sanitize HTML with DOMPurify before passing to dangerouslySetInnerHTML. Consider using a dedicated rich-text component."},
                 {"CWE-89", "SQL Injection Pattern",
                  "A SELECT query appears to be constructed inline. Prefer parameterized queries or prepared statements.",
                  "critical", "SELECT * FROM", ".js,.ts,.jsx,.tsx,.py,.go,.java,.php",
-                 "https://cwe.mitre.org/data/definitions/89.html"},
+                 "https://cwe.mitre.org/data/definitions/89.html",
+                 "Use parameterized queries or prepared statements. Never concatenate user input into SQL strings directly."},
                 {"CWE-502", "Deserialization of Untrusted Data",
                  "JSON.parse() on untrusted input may lead to prototype pollution. Validate schema before use.",
                  "medium", "JSON.parse(", ".js,.ts,.jsx,.tsx",
-                 "https://cwe.mitre.org/data/definitions/502.html"},
+                 "https://cwe.mitre.org/data/definitions/502.html",
+                 "Validate JSON structure against a schema (e.g. zod, ajv) after parsing. Consider using JSON.parse() with a reviver function."},
                 {"CWE-78", "OS Command Injection via os.system()",
                  "os.system() executes a shell command. Prefer subprocess with shell=False and explicit argument lists.",
                  "critical", "os.system(", ".py",
-                 "https://cwe.mitre.org/data/definitions/78.html"},
+                 "https://cwe.mitre.org/data/definitions/78.html",
+                 "Replace os.system() with subprocess.run() using a list of arguments (shell=False). This prevents shell injection."},
                 {"CWE-502", "Insecure Deserialization via pickle",
                  "pickle.loads() deserializes arbitrary Python objects and can execute arbitrary code.",
                  "critical", "pickle.loads(", ".py",
-                 "https://cwe.mitre.org/data/definitions/502.html"},
+                 "https://cwe.mitre.org/data/definitions/502.html",
+                 "Never unpickle data from untrusted sources. Use json.loads() for data exchange, or cryptographically sign pickle data."},
             };
             static const size_t kPatternCount = sizeof(kPatterns) / sizeof(kPatterns[0]);
 
@@ -1230,18 +1254,46 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     std::ifstream f(it->path(), std::ios::binary);
                     if (!f) continue;
 
+                    // Buffer to hold a rolling window of lines for context
+                    std::deque<std::string> lineBuffer;
                     std::string line;
                     int lineNo = 0;
                     while (std::getline(f, line) && results.size() < kMaxFindings) {
                         ++lineNo;
+                        // Trim trailing \r
+                        if (!line.empty() && line.back() == '\r') line.pop_back();
+                        lineBuffer.push_back(line);
+                        if (lineBuffer.size() > 3) lineBuffer.pop_front();
+
                         for (auto* pat : applicable) {
                             auto col = line.find(pat->pattern);
                             if (col == std::string::npos) continue;
 
-                            std::string snippet = line;
-                            size_t sp = snippet.find_first_not_of(" \t");
-                            if (sp != std::string::npos) snippet = snippet.substr(sp);
-                            if (snippet.size() > 120) snippet = snippet.substr(0, 120) + "...";
+                            // Collect context: up to 2 lines before (already in buffer)
+                            // plus 2 lines after (read ahead)
+                            std::vector<std::string> ctxLines(lineBuffer.begin(), lineBuffer.end());
+                            int matchIdxInCtx = (int)ctxLines.size() - 1; // matching line is last so far
+                            for (int ai = 0; ai < 2; ++ai) {
+                                std::string after;
+                                if (std::getline(f, after)) {
+                                    if (!after.empty() && after.back() == '\r') after.pop_back();
+                                    ctxLines.push_back(after);
+                                    lineBuffer.push_back(after);
+                                    if (lineBuffer.size() > 3) lineBuffer.pop_front();
+                                    ++lineNo;
+                                }
+                            }
+
+                            // Build multi-line snippet (trim leading whitespace per line)
+                            std::string snippet;
+                            for (size_t si = 0; si < ctxLines.size(); ++si) {
+                                const std::string& sl = ctxLines[si];
+                                size_t sp = sl.find_first_not_of(" \t");
+                                std::string trimmed = (sp != std::string::npos) ? sl.substr(sp) : sl;
+                                if (trimmed.size() > 120) trimmed = trimmed.substr(0, 120) + "...";
+                                if (si > 0) snippet += "\n";
+                                snippet += trimmed;
+                            }
 
                             json item;
                             item["cwe_id"]      = pat->cwe_id;
@@ -1249,10 +1301,12 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                             item["description"] = pat->description;
                             item["severity"]    = pat->severity;
                             item["file"]        = it->path().string();
-                            item["line"]        = lineNo;
+                            item["line"]        = lineNo - (int)(ctxLines.size() - 1 - matchIdxInCtx);
                             item["col"]         = (int)(col + 1);
                             item["snippet"]     = snippet;
+                            item["snippet_match_idx"] = matchIdxInCtx;
                             item["mitre_url"]   = pat->mitre_url;
+                            item["remediation"] = pat->remediation;
                             results.push_back(std::move(item));
                             break;
                         }

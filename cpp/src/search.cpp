@@ -163,8 +163,10 @@ json files_impl(const std::string& root_path, const std::string& query, int max_
         if (lower(name).find(query_l) != std::string::npos) {
             std::error_code rec;
             results.push_back({
-                {"path", fs::relative(it->path(), from_u8(root_path), rec).generic_u8string()},
-                {"name", name},
+                {"path",     fs::relative(it->path(), from_u8(root_path), rec).generic_u8string()},
+                {"abs_path", it->path().u8string()},
+                {"name",     name},
+                {"is_name",  true},
             });
         }
     }
