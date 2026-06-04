@@ -31,6 +31,7 @@ interface Props {
   defaultZoom?: number
   commandAlignment?: 'default' | 'top' | 'bottom'
   pluginCommands?: Record<string, InstalledPluginCommand>
+  quickPaths?: string[]
   onCwdChange?: (cwd: string) => void
 }
 
@@ -95,12 +96,14 @@ export default function Terminal({
   defaultZoom = 1,
   commandAlignment = 'default',
   pluginCommands = {},
+  quickPaths,
   onCwdChange,
 }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<XTerm | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
-  const activeRef = useRef(active)
+  const containerRef           = useRef<HTMLDivElement>(null)
+  const termRef                = useRef<XTerm | null>(null)
+  const fitRef                 = useRef<FitAddon | null>(null)
+  const activeRef              = useRef(active)
+  const hasShownQuickPathsRef  = useRef(false)
   useEffect(() => { activeRef.current = active }, [active])
   const ptyModeRef = useRef(false)
 
@@ -336,7 +339,15 @@ export default function Terminal({
         return
       }
 
-      CtrlClickPath(tabId, token).catch(() => {})
+      e.preventDefault()
+      CtrlClickPath(tabId, token).then((result: unknown) => {
+        const r = result as { resolved: string; isDir: boolean; exists: boolean }
+        if (r.exists && r.isDir) {
+          ExecuteCommand(tabId, 'cd "' + r.resolved.replace(/"/g, '\\"') + '"').catch(() => {})
+        } else if (r.exists && !r.isDir) {
+          window.dispatchEvent(new CustomEvent('ide:ctrl-click-file', { detail: { path: r.resolved } }))
+        }
+      }).catch(() => {})
     }
 
     container.addEventListener('mousemove', handleCtrlMouseMove)
@@ -356,6 +367,16 @@ export default function Terminal({
     container.addEventListener('wheel', handleWheel, { passive: false })
 
     CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
+
+    if (quickPaths && quickPaths.length > 0 && !hasShownQuickPathsRef.current) {
+      hasShownQuickPathsRef.current = true
+      term.write('\r\n\x1b[2m  Recent paths:\x1b[0m\r\n')
+      quickPaths.forEach(p => {
+        const display = p.replace(/\\/g, '/')
+        term.write(`  \x1b[36;4m${display}\x1b[0m\r\n`)
+      })
+      term.write('\r\n')
+    }
 
     const outEvent = `terminal:output:${tabId}`
     // Use termRef.current (not the closure `term`) so that if the component

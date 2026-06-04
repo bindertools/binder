@@ -26,6 +26,25 @@ import './App.css'
 let tabCounter = 0
 const nextId = () => `tab-${++tabCounter}`
 
+// ── Recent paths helpers ──────────────────────────────────────────────────────
+
+const RECENT_PATHS_KEY = 'cmdide_recent_paths'
+
+function loadRecentPaths(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_PATHS_KEY)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch { return [] }
+}
+
+function saveRecentPath(newPath: string): void {
+  try {
+    const current = loadRecentPaths().filter(p => p !== newPath)
+    const updated = [newPath, ...current].slice(0, 7)
+    localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(updated))
+  } catch { /* ignore */ }
+}
+
 function makeTerminalTab(id?: string, initialCwd?: string, parentId?: string): Tab {
   return {
     id: id ?? nextId(),
@@ -298,8 +317,9 @@ export default function App() {
   const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
   const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
 
-  const contentRef = useRef<HTMLDivElement>(null)
-  const dragging   = useRef(false)
+  const contentRef    = useRef<HTMLDivElement>(null)
+  const dragging      = useRef(false)
+  const pathDwellRef  = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
 
   // ── plugin loader ─────────────────────────────────────────────────────────────
   const reloadPlugins = useCallback(async () => {
@@ -494,6 +514,15 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      if (path) void handleOpenFileAtLine(path, 0, 0)
+    }
+    window.addEventListener('ide:ctrl-click-file', handler)
+    return () => window.removeEventListener('ide:ctrl-click-file', handler)
+  }, [handleOpenFileAtLine])
+
+  useEffect(() => {
     EventsOn('app:open-problems', (...args: any[]) => {
       const payload = args[0] as OpenProblemsPayload
       if (!payload?.cwd) return
@@ -670,6 +699,20 @@ export default function App() {
     setActivePage('terminal')
   }, [])
 
+  const handleDuplicateTab = useCallback(async (id: string) => {
+    const cwd   = await GetTerminalCwd(id).catch(() => '')
+    const panel = tabPanels[id] ?? 'left'
+    if (panel === 'right') {
+      const newId = nextId()
+      dispatch({ type: 'add-terminal', id: newId, parentId: id, initialCwd: cwd || undefined, keepActive: true })
+      setTabPanels(prev => ({ ...prev, [newId]: 'right' }))
+      setRightActiveId(newId)
+    } else {
+      dispatch({ type: 'add-terminal', parentId: id, initialCwd: cwd || undefined })
+    }
+    setActivePage('terminal')
+  }, [tabPanels])
+
   // ── theme helpers ─────────────────────────────────────────────────────────────
   const handleApplyColors = useCallback((colors: Record<string, string>) => {
     setLiveColors(colors)
@@ -759,7 +802,18 @@ export default function App() {
           defaultZoom={currentZoom}
           commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
           pluginCommands={pluginCommands}
-          onCwdChange={cwd => setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))}
+          quickPaths={loadRecentPaths()}
+          onCwdChange={cwd => {
+            setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))
+            const prev = pathDwellRef.current.get(tab.id)
+            if (prev && prev.path !== cwd) {
+              const dwell = Date.now() - prev.enteredAt
+              if (dwell >= 60000 || prev.relatedPageVisited) {
+                saveRecentPath(prev.path)
+              }
+            }
+            pathDwellRef.current.set(tab.id, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
+          }}
         />
       )
     }
@@ -831,6 +885,15 @@ export default function App() {
     return null
   }
 
+  // ── Path dwell: mark related page visits ─────────────────────────────────────
+  useEffect(() => {
+    if (activePage === 'problems' || activePage === 'database' || activePage === 'editor') {
+      pathDwellRef.current.forEach(entry => {
+        entry.relatedPageVisited = true
+      })
+    }
+  }, [activePage])
+
   // ── ProblemsPage inline state ─────────────────────────────────────────────────
   const [probSources,  setProbSources]  = useState<string[]>([])
   const [probItems,    setProbItems]    = useState<ProbItem[]>([])
@@ -899,6 +962,7 @@ export default function App() {
             onNewTerminal={handleNewTab}
             onAddSiblingTerminal={id => { void _handleAddSiblingTerminal(id) }}
             onDrop={id => _handleTabDrop(id, 'left')}
+            onDuplicate={id => { void handleDuplicateTab(id) }}
           />
         </div>
 
