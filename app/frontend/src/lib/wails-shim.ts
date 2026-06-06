@@ -193,8 +193,8 @@ function textToB64(text: string): string {
       OpenNewWindow: () =>
         invoke('window.new'),
 
-      ReadDatabase: (key: string) =>
-        invoke('db.read', { key }),
+      ReadDatabase: (path: string) =>
+        invoke('db.read', { path }),
 
       ScanProblems: (path: string) =>
         invoke('problems.scan', { path }),

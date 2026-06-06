@@ -123,4 +123,5 @@ export interface AppConfig {
   file_word_wrap: boolean
   scroll_speed: number
   preferred_shell: string  // "zsh" | "bash" | "sh" | "" (auto-detect)
+  database_privacy: boolean
 }

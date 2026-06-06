@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include <sqlite3.h>
 
 #include <string>
 #include <thread>
@@ -1094,9 +1095,129 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         return;
     }
 
-    // ── Database (stub — future implementation) ───────────────────────────────
+    // ── Database read (SQLite) ────────────────────────────────────────────────
     if (type == "db.read") {
-        resolve_ok(seq, json::object());
+        std::string db_path = args.value("path", args.value("key", std::string{}));
+        if (db_path.empty()) {
+            resolve_err(seq, "db.read: no path specified");
+            return;
+        }
+
+        std::string captured_seq  = seq;
+        std::string captured_path = db_path;
+        auto* d = this;
+
+        std::thread([d, captured_seq, captured_path]() {
+            sqlite3* db = nullptr;
+            int rc = sqlite3_open_v2(captured_path.c_str(), &db,
+                                     SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nullptr);
+            if (rc != SQLITE_OK) {
+                std::string err = db ? sqlite3_errmsg(db) : "cannot open database";
+                if (db) sqlite3_close(db);
+                d->resolve_err(captured_seq, "Cannot open database: " + err);
+                return;
+            }
+
+            // Enumerate user tables (skip sqlite_ internals)
+            std::vector<std::string> table_names;
+            {
+                sqlite3_stmt* stmt = nullptr;
+                const char* sql =
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                    "ORDER BY name";
+                if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+                    while (sqlite3_step(stmt) == SQLITE_ROW) {
+                        const unsigned char* n = sqlite3_column_text(stmt, 0);
+                        if (n) table_names.emplace_back(reinterpret_cast<const char*>(n));
+                    }
+                    sqlite3_finalize(stmt);
+                }
+            }
+
+            json tables_arr = json::array();
+            static constexpr int kRowLimit = 500;
+
+            for (const auto& tname : table_names) {
+                json tobj;
+                tobj["name"] = tname;
+
+                // Column info via PRAGMA table_info
+                json cols = json::array();
+                {
+                    std::string sql = "PRAGMA table_info(\"" + tname + "\")";
+                    sqlite3_stmt* stmt = nullptr;
+                    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+                        while (sqlite3_step(stmt) == SQLITE_ROW) {
+                            json col;
+                            auto cn = sqlite3_column_text(stmt, 1);
+                            auto ct = sqlite3_column_text(stmt, 2);
+                            col["name"]    = cn ? std::string(reinterpret_cast<const char*>(cn)) : "";
+                            col["type"]    = ct ? std::string(reinterpret_cast<const char*>(ct)) : "";
+                            col["notnull"] = sqlite3_column_int(stmt, 3) != 0;
+                            col["pk"]      = sqlite3_column_int(stmt, 5) != 0;
+                            cols.push_back(col);
+                        }
+                        sqlite3_finalize(stmt);
+                    }
+                }
+                tobj["columns"] = cols;
+
+                // Row count
+                int64_t row_count = 0;
+                {
+                    std::string sql = "SELECT COUNT(*) FROM \"" + tname + "\"";
+                    sqlite3_stmt* stmt = nullptr;
+                    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+                        if (sqlite3_step(stmt) == SQLITE_ROW)
+                            row_count = sqlite3_column_int64(stmt, 0);
+                        sqlite3_finalize(stmt);
+                    }
+                }
+                tobj["row_count"] = row_count;
+
+                // Rows (capped at kRowLimit)
+                json rows = json::array();
+                {
+                    std::string sql = "SELECT * FROM \"" + tname + "\" LIMIT " +
+                                      std::to_string(kRowLimit);
+                    sqlite3_stmt* stmt = nullptr;
+                    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+                        int ncols = sqlite3_column_count(stmt);
+                        while (sqlite3_step(stmt) == SQLITE_ROW) {
+                            json row = json::array();
+                            for (int i = 0; i < ncols; ++i) {
+                                switch (sqlite3_column_type(stmt, i)) {
+                                    case SQLITE_NULL:
+                                        row.push_back(nullptr);
+                                        break;
+                                    case SQLITE_INTEGER:
+                                        row.push_back(sqlite3_column_int64(stmt, i));
+                                        break;
+                                    case SQLITE_FLOAT:
+                                        row.push_back(sqlite3_column_double(stmt, i));
+                                        break;
+                                    default: {
+                                        auto t = sqlite3_column_text(stmt, i);
+                                        row.push_back(t ? std::string(
+                                            reinterpret_cast<const char*>(t)) : "");
+                                        break;
+                                    }
+                                }
+                            }
+                            rows.push_back(row);
+                        }
+                        sqlite3_finalize(stmt);
+                    }
+                }
+                tobj["rows"] = rows;
+
+                tables_arr.push_back(tobj);
+            }
+
+            sqlite3_close(db);
+            d->resolve_ok(captured_seq, {{"tables", tables_arr}});
+        }).detach();
         return;
     }
 
