@@ -10,23 +10,78 @@ import { SelectDirectory } from '../../wailsjs/go/main/App'
 import './ConfigEditor.scss'
 
 interface Props {
-  appConfig:       AppConfig
-  onSaveSettings:  (cfg: AppConfig) => Promise<void>
-  onApply:         (colors: Record<string, string>) => void
-  onSaveTheme:     (colors: Record<string, string>) => Promise<void>
+  appConfig:      AppConfig
+  onSaveSettings: (cfg: AppConfig) => Promise<void>
+  onApply:        (colors: Record<string, string>) => void
+  onSaveTheme:    (colors: Record<string, string>) => Promise<void>
 }
 
-// ── helpers ────────────────────────────────────────────────────────────────────
+// ── Section definitions ────────────────────────────────────────────────────────
+
+type SectionId = 'general' | 'appearance' | 'preferences'
+
+const SECTIONS: Array<{ id: SectionId; label: string; description: string; icon: React.ReactNode }> = [
+  {
+    id: 'general',
+    label: 'General',
+    description: 'Workspace, shell, and performance',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 6.5L8 2l6 4.5V13.5H2V6.5z"/>
+        <path d="M6 13.5V9.5h4v4"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Themes, colors, and visual display',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 13.5c0-3.5 1.5-5.5 4-7l1.5 3C10 8.5 11.5 7 11.5 5a3.5 3.5 0 00-7 0c0 .6.1 1.2.4 1.7"/>
+        <circle cx="12" cy="12" r="2.5"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'preferences',
+    label: 'Preferences',
+    description: 'Terminal input, zoom, and session behavior',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="8" r="2"/>
+        <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M3.2 12.8l1.1-1.1M11.7 4.3l1.1-1.1"/>
+      </svg>
+    ),
+  },
+]
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 const PRESET_KEYS = Object.keys(THEMES)
 
 const ZOOM_OPTIONS = [
-  { label: '1×',    value: 1.0  },
-  { label: '1.1×',  value: 1.1  },
-  { label: '1.25×', value: 1.25 },
-  { label: '1.5×',  value: 1.5  },
-  { label: '1.75×', value: 1.75 },
-  { label: '2×',    value: 2.0  },
+  { label: '1×',    value: '1'    },
+  { label: '1.1×',  value: '1.1'  },
+  { label: '1.25×', value: '1.25' },
+  { label: '1.5×',  value: '1.5'  },
+  { label: '1.75×', value: '1.75' },
+  { label: '2×',    value: '2'    },
+]
+
+const SHELL_OPTIONS = [
+  { label: 'Auto-detect', value: '' },
+  { label: 'PowerShell',  value: 'powershell' },
+  { label: 'CMD',         value: 'cmd' },
+  { label: 'Bash',        value: 'bash' },
+  { label: 'Zsh',         value: 'zsh' },
+  { label: 'Fish',        value: 'fish' },
+]
+
+const ALIGNMENT_OPTIONS = [
+  { label: 'Default — type directly in terminal',        value: 'default' },
+  { label: 'Top — fixed input bar below tab bar',        value: 'top' },
+  { label: 'Bottom — fixed input bar above status bar',  value: 'bottom' },
 ]
 
 function seedColors(theme: string, saved: Record<string, string>): Record<string, string> {
@@ -35,26 +90,28 @@ function seedColors(theme: string, saved: Record<string, string>): Record<string
   return themeToCustomColors(preset)
 }
 
-// ── component ──────────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSaveTheme }: Props) {
+  const [activeSection, setActiveSection] = useState<SectionId>('general')
+  const [cfg, setCfg]                     = useState<AppConfig>({ ...appConfig })
+  const cfgRef                            = useRef(cfg)
+  const [saveStatus, setSaveStatus]       = useState<'idle' | 'saved' | 'error'>('idle')
+  const saveStatusTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Left panel: settings state ───────────────────────────────────────────────
-  const [cfg, setCfg] = useState<AppConfig>({ ...appConfig })
-  const [settingsSaving, setSettingsSaving] = useState(false)
-  const [settingsMsg, setSettingsMsg] = useState<'idle' | 'saved' | 'error'>('idle')
-
-  // ── Right panel: color state ─────────────────────────────────────────────────
   const [colors, setColors] = useState<Record<string, string>>(
     () => seedColors(appConfig.theme, appConfig.custom_theme ?? {}),
   )
+  const colorsRef  = useRef(colors)
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(['shell', 'terminal', 'editor', 'syntax']),
   )
-  const [themeSaving, setThemeSaving] = useState(false)
-  const [themeMsg,    setThemeMsg]    = useState<'idle' | 'saved' | 'error'>('idle')
 
-  // Sync when config prop changes externally (e.g. after save or config reload)
+  // Keep refs in sync with state
+  useEffect(() => { cfgRef.current = cfg }, [cfg])
+  useEffect(() => { colorsRef.current = colors }, [colors])
+
+  // Sync from external config changes
   useEffect(() => { setCfg({ ...appConfig }) }, [appConfig])
   useEffect(() => {
     if (appConfig.theme === 'custom' && Object.keys(appConfig.custom_theme ?? {}).length > 0) {
@@ -63,77 +120,85 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appConfig.custom_theme])
 
-  // ── Left panel handlers ───────────────────────────────────────────────────────
+  // ── Save helpers ─────────────────────────────────────────────────────────────
 
-  const handleToggle = (key: keyof AppConfig) =>
-    setCfg(prev => ({ ...prev, [key]: !prev[key as keyof AppConfig] }))
+  const showSaved = useCallback(() => {
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current)
+    setSaveStatus('saved')
+    saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000)
+  }, [])
 
-  const handleGitToggle = () =>
-    setCfg(prev => ({
-      ...prev,
-      git_recognition: { show_git_branch: !prev.git_recognition.show_git_branch },
-    }))
+  const showError = useCallback(() => {
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current)
+    setSaveStatus('error')
+    saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
+  }, [])
 
-  const handlePresetChange = (key: string) => {
-    setCfg(prev => ({ ...prev, theme: key }))
+  const saveCfg = useCallback((newCfg: AppConfig) => {
+    onSaveSettings(newCfg).then(showSaved).catch(showError)
+  }, [onSaveSettings, showSaved, showError])
+
+  const saveColors = useCallback((newColors: Record<string, string>) => {
+    onSaveTheme(newColors).catch(() => { /* ignore */ })
+  }, [onSaveTheme])
+
+  // ── Update handlers ──────────────────────────────────────────────────────────
+
+  const updateCfg = useCallback((patch: Partial<AppConfig>) => {
+    const next = { ...cfgRef.current, ...patch }
+    cfgRef.current = next
+    setCfg(next)
+    saveCfg(next)
+  }, [saveCfg])
+
+  const handleToggle = useCallback((key: keyof AppConfig) => {
+    const next = { ...cfgRef.current, [key]: !cfgRef.current[key as keyof AppConfig] }
+    cfgRef.current = next
+    setCfg(next)
+    saveCfg(next)
+  }, [saveCfg])
+
+  const handleGitToggle = useCallback(() => {
+    const next = { ...cfgRef.current, git_recognition: { show_git_branch: !cfgRef.current.git_recognition.show_git_branch } }
+    cfgRef.current = next
+    setCfg(next)
+    saveCfg(next)
+  }, [saveCfg])
+
+  const handlePresetChange = useCallback((key: string) => {
+    const next = { ...cfgRef.current, theme: key }
+    cfgRef.current = next
+    setCfg(next)
+    saveCfg(next)
     if (key === 'custom') {
       const saved = appConfig.custom_theme ?? {}
       if (Object.keys(saved).length > 0) {
-        const c = { ...saved }
-        setColors(c)
-        onApply(c)
+        setColors({ ...saved })
+        onApply({ ...saved })
       }
     } else if (THEMES[key]) {
       const c = themeToCustomColors(THEMES[key])
       setColors(c)
       onApply(c)
     }
-  }
+  }, [appConfig.custom_theme, onApply, saveCfg])
 
   const handleBrowseDir = async () => {
     const dir = await SelectDirectory().catch(() => '')
-    if (dir) setCfg(prev => ({ ...prev, default_directory: dir }))
+    if (dir) updateCfg({ default_directory: dir })
   }
-
-  const handleSaveSettings = async () => {
-    setSettingsSaving(true)
-    try {
-      await onSaveSettings(cfg)
-      setSettingsMsg('saved')
-      setTimeout(() => setSettingsMsg('idle'), 2500)
-    } catch {
-      setSettingsMsg('error')
-      setTimeout(() => setSettingsMsg('idle'), 3000)
-    } finally {
-      setSettingsSaving(false)
-    }
-  }
-
-  // ── Right panel handlers ──────────────────────────────────────────────────────
 
   const handleColorChange = useCallback((key: string, val: string) => {
-    setColors(prev => {
-      const next = { ...prev, [key]: val }
-      onApply(next)
-      return next
-    })
-    setCfg(prev => ({ ...prev, theme: 'custom' }))
-    setThemeMsg('idle')
-  }, [onApply])
-
-  const handleSaveTheme = async () => {
-    setThemeSaving(true)
-    try {
-      await onSaveTheme(colors)
-      setThemeMsg('saved')
-      setTimeout(() => setThemeMsg('idle'), 2500)
-    } catch {
-      setThemeMsg('error')
-      setTimeout(() => setThemeMsg('idle'), 3000)
-    } finally {
-      setThemeSaving(false)
-    }
-  }
+    const nextColors = { ...colorsRef.current, [key]: val }
+    colorsRef.current = nextColors
+    setColors(nextColors)
+    onApply(nextColors)
+    saveColors(nextColors)
+    const nextCfg = { ...cfgRef.current, theme: 'custom' }
+    cfgRef.current = nextCfg
+    setCfg(nextCfg)
+    saveCfg(nextCfg)
+  }, [onApply, saveColors, saveCfg])
 
   const handleExport = () => {
     const json = JSON.stringify(colors, null, 2)
@@ -147,257 +212,392 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
   }
 
   const handleImport = () => {
-    const input   = document.createElement('input')
-    input.type    = 'file'
-    input.accept  = '.json'
+    const input  = document.createElement('input')
+    input.type   = 'file'
+    input.accept = '.json'
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
       try {
-        const text   = await file.text()
-        const parsed = JSON.parse(text) as Record<string, string>
+        const text      = await file.text()
+        const parsed    = JSON.parse(text) as Record<string, string>
+        colorsRef.current = parsed
         setColors(parsed)
         onApply(parsed)
-        setCfg(prev => ({ ...prev, theme: 'custom' }))
+        saveColors(parsed)
+        const nextCfg   = { ...cfgRef.current, theme: 'custom' }
+        cfgRef.current  = nextCfg
+        setCfg(nextCfg)
+        saveCfg(nextCfg)
       } catch { /* ignore bad files */ }
     }
     input.click()
   }
 
-  const toggleSection = (id: string) =>
+  const toggleExpanded = (id: string) =>
     setExpanded(prev => {
       const next = new Set(prev)
       if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
 
-  // ── Button labels ─────────────────────────────────────────────────────────────
-  const settingsLabel =
-    settingsSaving          ? 'Saving…'  :
-    settingsMsg === 'saved' ? '✓ Saved'  :
-    settingsMsg === 'error' ? '✕ Error'  :
-    'Save Settings'
+  const current = SECTIONS.find(s => s.id === activeSection)!
 
-  const themeLabel =
-    themeSaving          ? 'Saving…'       :
-    themeMsg === 'saved' ? '✓ Saved'       :
-    themeMsg === 'error' ? '✕ Error'       :
-    'Save Custom Theme'
-
-  // Is the currently active theme "custom" (from editing or selection)?
-  const isCustom = cfg.theme === 'custom'
-
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="ce-root">
+    <div className="sp-root">
 
-      {/* ── LEFT PANEL ────────────────────────────────────────────────────────── */}
-      <div className="ce-left">
-        <div className="ce-panel-header">
-          <span className="ce-panel-title">Settings</span>
+      {/* ── Left navigation sidebar ───────────────────────────────────────────── */}
+      <nav className="sp-nav">
+        <div className="sp-nav-header">Settings</div>
+        <div className="sp-nav-list">
+          {SECTIONS.map(s => (
+            <button
+              key={s.id}
+              className={`sp-nav-item${activeSection === s.id ? ' is-active' : ''}`}
+              onClick={() => setActiveSection(s.id)}
+            >
+              <span className="sp-nav-icon">{s.icon}</span>
+              <span className="sp-nav-label">{s.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* ── Divider ──────────────────────────────────────────────────────────── */}
+      <div className="sp-divider" />
+
+      {/* ── Right content panel ──────────────────────────────────────────────── */}
+      <div className="sp-content">
+
+        <div className="sp-content-header">
+          <div className="sp-content-title-group">
+            <h2 className="sp-content-title">{current.label}</h2>
+            <p className="sp-content-subtitle">{current.description}</p>
+          </div>
+          {saveStatus !== 'idle' && (
+            <span className={`sp-save-status${saveStatus === 'saved' ? ' is-saved' : ' is-error'}`}>
+              {saveStatus === 'saved' ? '✓ Saved' : '✕ Error'}
+            </span>
+          )}
         </div>
 
-        <div className="ce-left-body">
+        <div className="sp-content-body">
+          {activeSection === 'general' && (
+            <GeneralSection cfg={cfg} updateCfg={updateCfg} onBrowseDir={handleBrowseDir} />
+          )}
+          {activeSection === 'appearance' && (
+            <AppearanceSection
+              cfg={cfg}
+              colors={colors}
+              expanded={expanded}
+              onPresetChange={handlePresetChange}
+              onColorChange={handleColorChange}
+              onToggleExpanded={toggleExpanded}
+              onImport={handleImport}
+              onExport={handleExport}
+              onToggle={handleToggle}
+              onGitToggle={handleGitToggle}
+            />
+          )}
+          {activeSection === 'preferences' && (
+            <PreferencesSection cfg={cfg} updateCfg={updateCfg} onToggle={handleToggle} />
+          )}
+        </div>
 
-          {/* Theme preset */}
-          <div className="ce-group">
-            <div className="ce-group-label">Theme</div>
-            <select
-              className="ce-select"
-              value={cfg.theme}
-              onChange={e => handlePresetChange(e.target.value)}
-            >
-              {PRESET_KEYS.map(k => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-              <option value="custom">custom {isCustom ? '●' : ''}</option>
-            </select>
-          </div>
+      </div>
+    </div>
+  )
+}
 
-          {/* Default directory */}
-          <div className="ce-group">
-            <div className="ce-group-label">Default Directory</div>
-            <div className="ce-dir-row">
-              <input
-                className="ce-text-input"
-                type="text"
-                value={cfg.default_directory}
-                placeholder="e.g. C:\Projects"
-                spellCheck={false}
-                onChange={e => setCfg(prev => ({ ...prev, default_directory: e.target.value }))}
-              />
-              <button className="ce-btn ce-btn--ghost ce-btn--sm" onClick={handleBrowseDir} title="Browse">
-                …
-              </button>
-            </div>
-          </div>
+// ── Shared primitives ──────────────────────────────────────────────────────────
 
-          {/* Command line alignment */}
-          <div className="ce-group">
-            <div className="ce-group-label">Command Line Alignment</div>
-            <select
-              className="ce-select"
-              value={cfg.command_alignment || 'default'}
-              onChange={e => setCfg(prev => ({ ...prev, command_alignment: e.target.value as 'default' | 'top' | 'bottom' }))}
-            >
-              <option value="default">Default — type directly in terminal</option>
-              <option value="top">Top — fixed input bar below tab bar</option>
-              <option value="bottom">Bottom — fixed input bar above status bar</option>
-            </select>
-          </div>
+function SettingRow({
+  label,
+  description,
+  children,
+  wide,
+}: {
+  label: string
+  description?: string
+  children: React.ReactNode
+  wide?: boolean
+}) {
+  return (
+    <div className={`sp-row${wide ? ' sp-row--wide' : ''}`}>
+      <div className="sp-row-text">
+        <div className="sp-row-label">{label}</div>
+        {description && <div className="sp-row-desc">{description}</div>}
+      </div>
+      <div className="sp-row-ctrl">{children}</div>
+    </div>
+  )
+}
 
-          {/* Default zoom */}
-          <div className="ce-group">
-            <div className="ce-group-label">Default Zoom</div>
-            <select
-              className="ce-select"
-              value={cfg.default_zoom}
-              onChange={e => setCfg(prev => ({ ...prev, default_zoom: parseFloat(e.target.value) }))}
-            >
-              {ZOOM_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
+function SettingGroup({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div className="sp-group">
+      {title && <div className="sp-group-title">{title}</div>}
+      <div className="sp-group-body">{children}</div>
+    </div>
+  )
+}
 
-          <div className="ce-divider" />
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      className={`sp-toggle${checked ? ' is-on' : ''}`}
+      onClick={onChange}
+    >
+      <span className="sp-toggle-knob" />
+    </button>
+  )
+}
 
-          {/* Boolean toggle rows */}
-          {([
-            ['indent_guides',      'Indent Guides'],
-            ['minimap',            'Minimap'],
-            ['file_word_wrap',     'File Word Wrap'],
-            ['terminal_word_wrap', 'Terminal Word Wrap'],
-            ['show_timestamps',    'Show Timestamps'],
-            ['minimal_pwd',        'Minimal PWD'],
-            ['zoom_insights',      'Zoom Insights'],
-            ['soft_close',         'Soft Close'],
-            ['order_directory',    'Order Directory'],
-          ] as [keyof AppConfig, string][]).map(([key, label]) => (
-            <div key={key} className="ce-toggle-row">
-              <span className="ce-toggle-label">{label}</span>
-              <button
-                role="switch"
-                aria-checked={!!cfg[key]}
-                className={`ce-toggle${cfg[key] ? ' is-on' : ''}`}
-                onClick={() => handleToggle(key)}
-              >
-                <span className="ce-toggle-knob" />
-              </button>
-            </div>
-          ))}
+function SettingSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string | number
+  onChange: (v: string) => void
+  options: Array<{ label: string; value: string | number }>
+}) {
+  return (
+    <select
+      className="sp-select"
+      value={String(value)}
+      onChange={e => onChange(e.target.value)}
+    >
+      {options.map(o => (
+        <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+      ))}
+    </select>
+  )
+}
 
-          {/* Git branch toggle */}
-          <div className="ce-toggle-row">
-            <span className="ce-toggle-label">Git Branch in Prompt</span>
-            <button
-              role="switch"
-              aria-checked={cfg.git_recognition.show_git_branch}
-              className={`ce-toggle${cfg.git_recognition.show_git_branch ? ' is-on' : ''}`}
-              onClick={handleGitToggle}
-            >
-              <span className="ce-toggle-knob" />
+// ── Section: General ───────────────────────────────────────────────────────────
+
+function GeneralSection({
+  cfg,
+  updateCfg,
+  onBrowseDir,
+}: {
+  cfg: AppConfig
+  updateCfg: (patch: Partial<AppConfig>) => void
+  onBrowseDir: () => void
+}) {
+  return (
+    <>
+      <SettingGroup title="Workspace">
+        <SettingRow label="Default Directory" description="Directory opened when launching new terminal tabs" wide>
+          <div className="sp-dir-row">
+            <input
+              className="sp-text-input"
+              type="text"
+              value={cfg.default_directory}
+              placeholder="e.g. C:\Projects"
+              spellCheck={false}
+              onChange={e => updateCfg({ default_directory: e.target.value })}
+            />
+            <button className="sp-btn sp-btn--ghost sp-btn--sm" onClick={onBrowseDir} title="Browse">
+              …
             </button>
           </div>
+        </SettingRow>
+        <SettingRow label="Preferred Shell" description="Shell executable used when opening new terminal tabs">
+          <SettingSelect
+            value={cfg.preferred_shell ?? ''}
+            onChange={v => updateCfg({ preferred_shell: v })}
+            options={SHELL_OPTIONS}
+          />
+        </SettingRow>
+      </SettingGroup>
 
-        </div>{/* end ce-left-body */}
+      <SettingGroup title="Performance">
+        <SettingRow label="Scroll Speed" description="Mouse wheel scroll multiplier applied in terminal panels">
+          <div className="sp-range-row">
+            <input
+              type="range"
+              className="sp-range"
+              min={1}
+              max={10}
+              step={1}
+              value={cfg.scroll_speed ?? 3}
+              onChange={e => updateCfg({ scroll_speed: parseInt(e.target.value) })}
+            />
+            <span className="sp-range-val">{cfg.scroll_speed ?? 3}×</span>
+          </div>
+        </SettingRow>
+      </SettingGroup>
+    </>
+  )
+}
 
-        <div className="ce-left-footer">
-          <button
-            className={`ce-btn ce-btn--primary${settingsMsg === 'saved' ? ' is-saved' : ''}${settingsMsg === 'error' ? ' is-error' : ''}`}
-            onClick={handleSaveSettings}
-            disabled={settingsSaving}
-          >
-            {settingsLabel}
-          </button>
+// ── Section: Appearance ────────────────────────────────────────────────────────
+
+function AppearanceSection({
+  cfg,
+  colors,
+  expanded,
+  onPresetChange,
+  onColorChange,
+  onToggleExpanded,
+  onImport,
+  onExport,
+  onToggle,
+  onGitToggle,
+}: {
+  cfg: AppConfig
+  colors: Record<string, string>
+  expanded: Set<string>
+  onPresetChange: (key: string) => void
+  onColorChange: (key: string, val: string) => void
+  onToggleExpanded: (id: string) => void
+  onImport: () => void
+  onExport: () => void
+  onToggle: (k: keyof AppConfig) => void
+  onGitToggle: () => void
+}) {
+  const isCustom = cfg.theme === 'custom'
+  const themeOptions = [
+    ...PRESET_KEYS.map(k => ({ label: k, value: k })),
+    { label: isCustom ? 'custom ●' : 'custom', value: 'custom' },
+  ]
+
+  return (
+    <>
+      <SettingGroup title="Theme">
+        <SettingRow label="Color Theme" description="Select a built-in preset or customize individual UI colors below">
+          <SettingSelect
+            value={cfg.theme}
+            onChange={onPresetChange}
+            options={themeOptions}
+          />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Terminal">
+        <SettingRow label="Show Timestamps" description="Display the time each command was executed">
+          <Toggle checked={!!cfg.show_timestamps} onChange={() => onToggle('show_timestamps')} />
+        </SettingRow>
+        <SettingRow label="Minimal PWD" description="Show a shortened working directory path in the prompt">
+          <Toggle checked={!!cfg.minimal_pwd} onChange={() => onToggle('minimal_pwd')} />
+        </SettingRow>
+        <SettingRow label="Git Branch in Prompt" description="Display the active git branch next to the prompt">
+          <Toggle checked={cfg.git_recognition.show_git_branch} onChange={onGitToggle} />
+        </SettingRow>
+        <SettingRow label="Word Wrap" description="Soft-wrap long output lines in the terminal">
+          <Toggle checked={!!cfg.terminal_word_wrap} onChange={() => onToggle('terminal_word_wrap')} />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Code Editor">
+        <SettingRow label="Minimap" description="Show a miniaturized overview of the file on the right edge">
+          <Toggle checked={!!cfg.minimap} onChange={() => onToggle('minimap')} />
+        </SettingRow>
+        <SettingRow label="Indent Guides" description="Show vertical lines marking each indentation level">
+          <Toggle checked={!!cfg.indent_guides} onChange={() => onToggle('indent_guides')} />
+        </SettingRow>
+        <SettingRow label="Word Wrap" description="Soft-wrap long lines to fit the editor viewport">
+          <Toggle checked={!!cfg.file_word_wrap} onChange={() => onToggle('file_word_wrap')} />
+        </SettingRow>
+        <SettingRow label="Directories First" description="Sort folders above files in the file tree">
+          <Toggle checked={!!cfg.order_directory} onChange={() => onToggle('order_directory')} />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Custom Colors">
+        <div className="sp-color-toolbar">
+          <span className="sp-color-toolbar-hint">Customize individual UI and syntax colors</span>
+          <button className="sp-btn sp-btn--ghost sp-btn--sm" onClick={onImport}>Import</button>
+          <button className="sp-btn sp-btn--ghost sp-btn--sm" onClick={onExport}>Export</button>
         </div>
-      </div>{/* end ce-left */}
-
-      {/* ── PANEL DIVIDER ─────────────────────────────────────────────────────── */}
-      <div className="ce-panel-sep" />
-
-      {/* ── RIGHT PANEL ───────────────────────────────────────────────────────── */}
-      <div className="ce-right">
-        <div className="ce-panel-header">
-          <span className="ce-panel-title">Custom Colors</span>
-          <div className="ce-panel-header-spacer" />
-          <button className="ce-btn ce-btn--ghost" onClick={handleImport} title="Import theme JSON">
-            Import
-          </button>
-          <button className="ce-btn ce-btn--ghost" onClick={handleExport} title="Export theme JSON">
-            Export
-          </button>
-        </div>
-
-        <div className="ce-right-body">
+        <div className="sp-color-sections">
           {COLOR_SECTIONS.map(section => (
-            <div key={section.id} className="ce-section">
+            <div key={section.id} className="sp-color-section">
               <button
-                className="ce-section-head"
-                onClick={() => toggleSection(section.id)}
+                className="sp-color-section-head"
+                onClick={() => onToggleExpanded(section.id)}
               >
-                <span className="ce-chevron">{expanded.has(section.id) ? '▾' : '▸'}</span>
-                <span className="ce-section-label">{section.label}</span>
-                <span className="ce-section-count">{section.items.length} colors</span>
+                <span className="sp-chevron">{expanded.has(section.id) ? '▾' : '▸'}</span>
+                <span className="sp-color-section-label">{section.label}</span>
+                <span className="sp-color-section-count">{section.items.length} colors</span>
               </button>
 
               {expanded.has(section.id) && (
-                <div className="ce-section-body">
+                <div className="sp-color-section-body">
                   {section.items.map(spec => (
                     <ColorRow
                       key={spec.key}
                       label={spec.label}
                       colorKey={spec.key}
                       value={colors[spec.key] ?? '#000000'}
-                      onChange={handleColorChange}
+                      onChange={onColorChange}
                     />
                   ))}
-
-                  {/* ANSI grid injected into the terminal section */}
                   {section.id === 'terminal' && (
-                    <div className="ce-ansi">
-                      <div className="ce-ansi-title">ANSI Colors</div>
-                      <div className="ce-ansi-col-head">
-                        <span />
-                        <span>Normal</span>
-                        <span>Bright</span>
-                      </div>
-                      {ANSI_PAIRS.map(pair => (
-                        <div key={pair.label} className="ce-ansi-row">
-                          <span className="ce-ansi-label">{pair.label}</span>
-                          <ColorSwatch
-                            colorKey={pair.normal}
-                            value={colors[pair.normal] ?? '#000000'}
-                            onChange={handleColorChange}
-                          />
-                          <ColorSwatch
-                            colorKey={pair.bright}
-                            value={colors[pair.bright] ?? '#666666'}
-                            onChange={handleColorChange}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <AnsiGrid colors={colors} onChange={onColorChange} />
                   )}
                 </div>
               )}
             </div>
           ))}
-          <div className="ce-footer-pad" />
         </div>
+      </SettingGroup>
+    </>
+  )
+}
 
-        <div className="ce-right-footer">
-          <button
-            className={`ce-btn ce-btn--primary${themeMsg === 'saved' ? ' is-saved' : ''}${themeMsg === 'error' ? ' is-error' : ''}`}
-            onClick={handleSaveTheme}
-            disabled={themeSaving}
-          >
-            {themeLabel}
-          </button>
-        </div>
-      </div>{/* end ce-right */}
+// ── Section: Preferences ───────────────────────────────────────────────────────
 
-    </div>
+function PreferencesSection({
+  cfg,
+  updateCfg,
+  onToggle,
+}: {
+  cfg: AppConfig
+  updateCfg: (patch: Partial<AppConfig>) => void
+  onToggle: (k: keyof AppConfig) => void
+}) {
+  return (
+    <>
+      <SettingGroup title="Terminal Input">
+        <SettingRow label="Command Line Alignment" description="Where the command input field appears in terminal panels">
+          <SettingSelect
+            value={cfg.command_alignment || 'default'}
+            onChange={v => updateCfg({ command_alignment: v as 'default' | 'top' | 'bottom' })}
+            options={ALIGNMENT_OPTIONS}
+          />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Display Scale">
+        <SettingRow label="Default Zoom" description="Base font scale factor applied when the application starts">
+          <SettingSelect
+            value={cfg.default_zoom}
+            onChange={v => updateCfg({ default_zoom: parseFloat(v) })}
+            options={ZOOM_OPTIONS}
+          />
+        </SettingRow>
+        <SettingRow label="Zoom Insights" description="Show keyboard shortcuts for adjusting zoom in the status bar">
+          <Toggle checked={!!cfg.zoom_insights} onChange={() => onToggle('zoom_insights')} />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Session">
+        <SettingRow label="Soft Close" description="Ask for confirmation before closing a tab with an active process">
+          <Toggle checked={!!cfg.soft_close} onChange={() => onToggle('soft_close')} />
+        </SettingRow>
+      </SettingGroup>
+
+      <SettingGroup title="Privacy">
+        <SettingRow label="Database Privacy Mode" description="Blur all cell data in database views — click any cell to reveal it. Designed for screensharing and livestreams.">
+          <Toggle checked={!!cfg.database_privacy} onChange={() => onToggle('database_privacy')} />
+        </SettingRow>
+      </SettingGroup>
+    </>
   )
 }
 
@@ -417,11 +617,11 @@ function ColorRow({ label, colorKey, value, onChange }: ColorRowProps) {
   useEffect(() => { setText(value) }, [value])
 
   return (
-    <div className="ce-color-row">
-      <span className="ce-color-label">{label}</span>
-      <div className="ce-color-ctrl">
+    <div className="sp-color-row">
+      <span className="sp-color-label">{label}</span>
+      <div className="sp-color-ctrl">
         <div
-          className="ce-swatch"
+          className="sp-swatch"
           style={{ background: value }}
           onClick={() => nativeRef.current?.click()}
           title="Click to open colour picker"
@@ -431,11 +631,11 @@ function ColorRow({ label, colorKey, value, onChange }: ColorRowProps) {
           type="color"
           value={value}
           onChange={e => onChange(colorKey, e.target.value)}
-          className="ce-native-picker"
+          className="sp-native-picker"
         />
         <input
           type="text"
-          className="ce-hex-input"
+          className="sp-hex-input"
           value={text}
           spellCheck={false}
           maxLength={7}
@@ -445,9 +645,7 @@ function ColorRow({ label, colorKey, value, onChange }: ColorRowProps) {
             if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(colorKey, v)
             else setText(value)
           }}
-          onKeyDown={e => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         />
       </div>
     </div>
@@ -465,9 +663,9 @@ interface ColorSwatchProps {
 function ColorSwatch({ colorKey, value, onChange }: ColorSwatchProps) {
   const nativeRef = useRef<HTMLInputElement>(null)
   return (
-    <div className="ce-ansi-swatch-wrap" title={`${colorKey}: ${value}`}>
+    <div className="sp-ansi-swatch-wrap" title={`${colorKey}: ${value}`}>
       <div
-        className="ce-ansi-swatch"
+        className="sp-ansi-swatch"
         style={{ background: value }}
         onClick={() => nativeRef.current?.click()}
       />
@@ -476,8 +674,30 @@ function ColorSwatch({ colorKey, value, onChange }: ColorSwatchProps) {
         type="color"
         value={value}
         onChange={e => onChange(colorKey, e.target.value)}
-        className="ce-native-picker"
+        className="sp-native-picker"
       />
+    </div>
+  )
+}
+
+// ── ANSI grid ──────────────────────────────────────────────────────────────────
+
+function AnsiGrid({ colors, onChange }: { colors: Record<string, string>; onChange: (k: string, v: string) => void }) {
+  return (
+    <div className="sp-ansi">
+      <div className="sp-ansi-title">ANSI Colors</div>
+      <div className="sp-ansi-col-head">
+        <span />
+        <span>Normal</span>
+        <span>Bright</span>
+      </div>
+      {ANSI_PAIRS.map(pair => (
+        <div key={pair.label} className="sp-ansi-row">
+          <span className="sp-ansi-label">{pair.label}</span>
+          <ColorSwatch colorKey={pair.normal} value={colors[pair.normal] ?? '#000000'} onChange={onChange} />
+          <ColorSwatch colorKey={pair.bright}  value={colors[pair.bright]  ?? '#666666'} onChange={onChange} />
+        </div>
+      ))}
     </div>
   )
 }
