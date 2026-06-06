@@ -73,12 +73,12 @@ Dispatcher::~Dispatcher() {
 
 void Dispatcher::resolve_ok(const std::string& seq, const json& data) {
     json r = {{"ok", true}, {"data", data}};
-    wv_.resolve(seq, 0, r.dump());
+    wv_.resolve(seq, 0, r.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 }
 
 void Dispatcher::resolve_err(const std::string& seq, const std::string& error) {
     json r = {{"ok", false}, {"error", error}};
-    wv_.resolve(seq, 0, r.dump());
+    wv_.resolve(seq, 0, r.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
 }
 
 void Dispatcher::emit(const std::string& event, const json& data) {
@@ -1245,6 +1245,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         auto* d = this;
 
         std::thread([d, captured_seq, captured_path]() {
+          try {
             struct CwePattern {
                 const char* cwe_id;
                 const char* name;
@@ -1421,7 +1422,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                             item["name"]        = pat->name;
                             item["description"] = pat->description;
                             item["severity"]    = pat->severity;
-                            item["file"]        = it->path().string();
+                            item["file"]        = it->path().u8string();
                             item["line"]        = lineNo - (int)(ctxLines.size() - 1 - matchIdxInCtx);
                             item["col"]         = (int)(col + 1);
                             item["snippet"]     = snippet;
@@ -1436,6 +1437,11 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             } catch (...) {}
 
             d->resolve_ok(captured_seq, results);
+          } catch (const std::exception& e) {
+            d->resolve_err(captured_seq, std::string("cwe scan error: ") + e.what());
+          } catch (...) {
+            d->resolve_err(captured_seq, "cwe scan error");
+          }
         }).detach();
         return;
     }
