@@ -270,7 +270,7 @@ export default function Terminal({
     //   • directories  → cd (SetCwd + new prompt)
     //   • files        → open in editor tab
 
-    const isPathChar = (c: string) => /[a-zA-Z0-9_./\\-]/.test(c)
+    const isPathChar = (c: string) => /[a-zA-Z0-9_./\\-]/.test(c) || c === ':'
 
     // Set the cursor on the xterm canvas/row elements so the user sees a pointer
     // while Ctrl is held, indicating that clicking is available.
