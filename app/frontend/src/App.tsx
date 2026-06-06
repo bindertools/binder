@@ -246,7 +246,7 @@ const defaultConfig: AppConfig = {
   git_recognition: { show_git_branch: false }, soft_close: false,
   zoom_insights: true, minimal_pwd: false, default_zoom: 1, command_alignment: 'default',
   terminal_word_wrap: false, file_word_wrap: false, scroll_speed: 1,
-  preferred_shell: '',
+  preferred_shell: '', database_privacy: false,
 }
 
 const initialTab = makeTerminalTab()
@@ -398,8 +398,8 @@ export default function App() {
 
   useEffect(() => {
     GetAppConfig().then(cfg => {
-      const zoom = (cfg as AppConfig).default_zoom || defaultConfig.default_zoom
-      setAppConfig(cfg as AppConfig)
+      const zoom = (cfg as unknown as AppConfig).default_zoom || defaultConfig.default_zoom
+      setAppConfig(cfg as unknown as AppConfig)
       setCurrentZoom(zoom)
       localStorage.setItem('cmdide_zoom', String(zoom))
     }).catch(() => {})
@@ -714,8 +714,8 @@ export default function App() {
   }, [])
 
   const handleSaveSettings = useCallback(async (cfg: AppConfig) => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    await SaveAppConfig(cfg as Parameters<typeof SaveAppConfig>[0])
+    await SaveAppConfig(cfg as unknown as Parameters<typeof SaveAppConfig>[0])
+    setAppConfig(cfg)
   }, [])
 
   // ── derive active terminal ID ────────────────────────────────────────────────
@@ -834,7 +834,7 @@ export default function App() {
         />
       )
     }
-    if (tab.type === 'database') return <Database dbPath={tab.dbPath!} />
+    if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />
     if (tab.type === 'problems') {
       return (
         <Problems
@@ -929,7 +929,7 @@ export default function App() {
   const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
 
   return (
-    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui">
+    <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui" onContextMenu={e => e.preventDefault()}>
 
       {/* ── App header ──────────────────────────────────────────────────────────── */}
       <div className="flex h-[42px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none">
@@ -1142,6 +1142,7 @@ export default function App() {
                   terminalId={activeTerminalId}
                   cwd={activeCwd}
                   initialDbPath={forcedDbPath}
+                  privacyMode={appConfig.database_privacy}
                 />
               )}
 
