@@ -47,15 +47,15 @@
 /* ── Global design tokens ────────────────────────────────────────────────────── */
 :root {
   /* Theme-injected vars (overridden by JS) */
-  --app-bg:              #1c1c1e;
-  --border-color:        #2d2d2f;
-  --info-bar-bg:         #252527;
-  --info-bar-color:      #636366;
-  --info-bar-hover-bg:   #2d2d2f;
-  --info-bar-hover-color:#aeaeb2;
-  --tab-color:           #636366;
-  --tab-color-hover:     #c7c7cc;
-  --tab-add-border:      #3a3a3c;
+  --app-bg:              #0d0d0d;
+  --border-color:        #1e1e1e;
+  --info-bar-bg:         #141414;
+  --info-bar-color:      #555555;
+  --info-bar-hover-bg:   #1a1a1a;
+  --info-bar-hover-color:#888888;
+  --tab-color:           #555555;
+  --tab-color-hover:     #999999;
+  --tab-add-border:      #222222;
 
   /* Typography */
   --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;

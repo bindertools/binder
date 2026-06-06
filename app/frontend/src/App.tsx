@@ -24,7 +24,10 @@ import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
 
 let tabCounter = 0
-const nextId = () => `tab-${++tabCounter}`
+// Include a per-session timestamp so IDs never collide with a zombie PTY left
+// by a previous crash (backend reuses the same ID if the process didn't restart).
+const SESSION_TS = Date.now()
+const nextId = () => `tab-${SESSION_TS}-${++tabCounter}`
 
 // ── Recent paths helpers ──────────────────────────────────────────────────────
 
@@ -147,7 +150,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
 
     case 'open-problems': {
       const { payload } = action
-      const existing = state.tabs.find(t => t.type === 'problems' && t.problemsCwd === payload.cwd)
+      const existing = state.tabs.find(t => t.type === 'debug' && t.problemsCwd === payload.cwd)
       if (existing) {
         return {
           ...state, activeId: existing.id,
@@ -157,7 +160,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         }
       }
       const tab: Tab = {
-        id: nextId(), type: 'problems', title: 'problems',
+        id: nextId(), type: 'debug', title: 'Debug',
         parentId: payload.terminalId,
         problemsCwd: payload.cwd,
         problemsSources: payload.sources,
@@ -242,7 +245,7 @@ function insertNearParent(state: TabState, tab: Tab, terminalId?: string): TabSt
 // ── default config ────────────────────────────────────────────────────────────
 const defaultConfig: AppConfig = {
   default_directory: '', indent_guides: false, order_directory: false,
-  minimap: false, theme: 'minimal', show_timestamps: false,
+  minimap: false, theme: 'dark', show_timestamps: false,
   git_recognition: { show_git_branch: false }, soft_close: false,
   zoom_insights: true, minimal_pwd: false, default_zoom: 1, command_alignment: 'default',
   terminal_word_wrap: false, file_word_wrap: false, scroll_speed: 1,
@@ -313,6 +316,8 @@ export default function App() {
   const [splitModalOpen, setSplitModalOpen] = useState(false)
   const [terminalCwds,   setTerminalCwds]   = useState<Record<string, string>>({})
   const [activePage,     setActivePage]     = useState<PageId>('terminal')
+  const [panelSplitAxis, setPanelSplitAxis] = useState<'h' | 'v' | null>(null)
+  const [panelBPage,     setPanelBPage]     = useState<PageId | null>(null)
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
   const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
   const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
@@ -517,7 +522,7 @@ export default function App() {
     EventsOn('app:open-problems', (...args: any[]) => {
       const payload = args[0] as OpenProblemsPayload
       if (!payload?.cwd) return
-      setActivePage('problems')
+      setActivePage('debug')
     })
     return () => EventsOff('app:open-problems')
   }, [])
@@ -718,6 +723,35 @@ export default function App() {
     setAppConfig(cfg)
   }, [])
 
+  // ── panel split ──────────────────────────────────────────────────────────────
+
+  const closePanelB = useCallback(() => {
+    setPanelSplitAxis(null)
+    setPanelBPage(null)
+  }, [])
+
+  const handleSidebarNavigate = useCallback((page: PageId) => {
+    setActivePage(page)
+    if (page === panelBPage) closePanelB()
+  }, [panelBPage, closePanelB])
+
+  const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
+    if (dir === 'right' || dir === 'down') {
+      // Page goes into Panel B (right or bottom slot)
+      setPanelSplitAxis(dir === 'right' ? 'h' : 'v')
+      setPanelBPage(page)
+    } else {
+      // Page goes into Panel A (left or top slot)
+      setActivePage(page)
+      if (page === panelBPage) {
+        closePanelB()
+      } else if (panelBPage) {
+        // Already have a Panel B — keep it, just change axis
+        setPanelSplitAxis(dir === 'left' ? 'h' : 'v')
+      }
+    }
+  }, [panelBPage, closePanelB])
+
   // ── derive active terminal ID ────────────────────────────────────────────────
   const activeTerminalId = useMemo(() => {
     const focused = focusedPanel === 'left' ? activeId : rightActiveId
@@ -887,7 +921,7 @@ export default function App() {
 
   // ── Path dwell: mark related page visits ─────────────────────────────────────
   useEffect(() => {
-    if (activePage === 'problems' || activePage === 'database' || activePage === 'editor') {
+    if (activePage === 'debug' || activePage === 'database' || activePage === 'editor') {
       pathDwellRef.current.forEach(entry => {
         entry.relatedPageVisited = true
       })
@@ -902,7 +936,7 @@ export default function App() {
   const [cweScanning,  setCweScanning]  = useState(false)
 
   useEffect(() => {
-    if (activePage !== 'problems' || !activeCwd) return
+    if (activePage !== 'debug' || !activeCwd) return
     setProbScanning(true)
     ScanProblems(activeCwd)
       .then(result => {
@@ -1058,134 +1092,222 @@ export default function App() {
         {/* Sidebar */}
         <Sidebar
           activePage={activePage}
-          onNavigate={(page: PageId) => setActivePage(page)}
+          onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
+          onPanelMove={handlePanelMove}
           showPlugins={__PLUGINS__}
         />
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden relative" ref={contentRef}>
+        {/* Content — supports optional side-by-side or top/bottom panel split */}
+        <div className={`flex-1 overflow-hidden ${panelSplitAxis ? `flex ${panelSplitAxis === 'v' ? 'flex-col' : 'flex-row'}` : 'relative'}`}>
 
-          {/* Terminal panels — always mounted, hidden when a page is active */}
-          <div
-            className="absolute inset-0"
-            style={{
-              visibility:    activePage === 'terminal' ? 'visible' : 'hidden',
-              pointerEvents: activePage === 'terminal' ? 'auto'    : 'none',
-            }}
-          >
-            {tabs.map(tab => {
-              const panel    = tabPanels[tab.id] ?? 'left'
-              const isLeft   = panel === 'left'
-              const isActive = isLeft ? tab.id === activeId : tab.id === rightActiveId
-              const visible  = isActive && (isLeft || splitEnabled)
+          {/* ── Panel A (primary — always present) ────────────────────────────── */}
+          <div className={`${panelSplitAxis ? 'flex-1 relative' : 'absolute inset-0'} overflow-hidden`} ref={contentRef}>
 
-              let style: React.CSSProperties
-              if (!visible) {
-                style = { display: 'none', left: 0, right: 0 }
-              } else if (!splitEnabled) {
-                style = { display: 'flex', left: 0, right: 0 }
-              } else if (isLeft) {
-                style = {
-                  display: 'flex',
-                  left: 0,
-                  width: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)`,
+            {/* Terminal panels — always mounted, hidden when a page is active */}
+            <div
+              className="absolute inset-0"
+              style={{
+                visibility:    activePage === 'terminal' ? 'visible' : 'hidden',
+                pointerEvents: activePage === 'terminal' ? 'auto'    : 'none',
+              }}
+            >
+              {tabs.map(tab => {
+                const panel    = tabPanels[tab.id] ?? 'left'
+                const isLeft   = panel === 'left'
+                const isActive = isLeft ? tab.id === activeId : tab.id === rightActiveId
+                const visible  = isActive && (isLeft || splitEnabled)
+
+                let style: React.CSSProperties
+                if (!visible) {
+                  style = { display: 'none', left: 0, right: 0 }
+                } else if (!splitEnabled) {
+                  style = { display: 'flex', left: 0, right: 0 }
+                } else if (isLeft) {
+                  style = {
+                    display: 'flex',
+                    left: 0,
+                    width: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)`,
+                  }
+                } else {
+                  style = {
+                    display: 'flex',
+                    left: `calc(${splitRatio * 100}% + ${DIVIDER_PX / 2}px)`,
+                    right: 0,
+                  }
                 }
-              } else {
-                style = {
-                  display: 'flex',
-                  left: `calc(${splitRatio * 100}% + ${DIVIDER_PX / 2}px)`,
-                  right: 0,
-                }
-              }
 
-              const isFocused = splitEnabled && (isLeft ? focusedPanel === 'left' : focusedPanel === 'right')
+                const isFocused = splitEnabled && (isLeft ? focusedPanel === 'left' : focusedPanel === 'right')
 
-              return (
+                return (
+                  <div
+                    key={tab.id}
+                    className={`absolute top-0 bottom-0 flex flex-col overflow-hidden${isFocused ? ' pane--focused' : ''}`}
+                    style={style}
+                    onMouseDown={() => setFocusedPanel(isLeft ? 'left' : 'right')}
+                  >
+                    {renderTabContent(tab, isLeft)}
+                  </div>
+                )
+              })}
+
+              {splitEnabled && (
                 <div
-                  key={tab.id}
-                  className={`absolute top-0 bottom-0 flex flex-col overflow-hidden${isFocused ? ' pane--focused' : ''}`}
-                  style={style}
-                  onMouseDown={() => setFocusedPanel(isLeft ? 'left' : 'right')}
-                >
-                  {renderTabContent(tab, isLeft)}
-                </div>
-              )
-            })}
+                  className="absolute top-0 bottom-0 w-[4px] cursor-col-resize bg-[var(--border-color)] z-20 transition-[background] duration-[180ms] hover:bg-[rgba(10,132,255,0.5)] active:bg-[rgba(10,132,255,0.5)]"
+                  style={{ left: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)` }}
+                  onMouseDown={handleDividerMouseDown}
+                />
+              )}
+            </div>
 
-            {splitEnabled && (
-              <div
-                className="absolute top-0 bottom-0 w-[4px] cursor-col-resize bg-[var(--border-color)] z-20 transition-[background] duration-[180ms] hover:bg-[rgba(10,132,255,0.5)] active:bg-[rgba(10,132,255,0.5)]"
-                style={{ left: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)` }}
-                onMouseDown={handleDividerMouseDown}
-              />
+            {/* Page overlay — Panel A */}
+            {activePage !== 'terminal' && (
+              <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
+                {activePage === 'editor' && (
+                  <FullscreenIDE
+                    cwd={activeCwd}
+                    theme={resolvedTheme}
+                    indentGuides={appConfig.indent_guides}
+                    minimap={appConfig.minimap}
+                    wordWrap={appConfig.file_word_wrap}
+                    defaultZoom={currentZoom}
+                  />
+                )}
+                {activePage === 'database' && (
+                  <DatabasePage
+                    terminalId={activeTerminalId}
+                    cwd={activeCwd}
+                    initialDbPath={forcedDbPath}
+                    privacyMode={appConfig.database_privacy}
+                  />
+                )}
+                {activePage === 'debug' && (
+                  <Problems
+                    tabId={activeTerminalId ?? 'problems-page'}
+                    cwd={activeCwd}
+                    sources={probSources}
+                    items={probItems}
+                    scanning={probScanning}
+                    cweItems={cweItems}
+                    cweScanning={cweScanning}
+                    onRescan={async (_, scanCwd) => {
+                      setProbScanning(true)
+                      try {
+                        const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
+                        setProbSources(r.sources ?? [])
+                        setProbItems(r.items ?? [])
+                      } catch { /* ignore */ }
+                      setProbScanning(false)
+                    }}
+                    onOpenFile={(path, line, col) => {
+                      void handleOpenFileAtLine(path, line, col)
+                      setActivePage('terminal')
+                    }}
+                    onCweScan={cwd => { void handleCweScan(cwd) }}
+                  />
+                )}
+                {activePage === 'settings' && (
+                  <ConfigEditor
+                    appConfig={appConfig}
+                    onSaveSettings={handleSaveSettings}
+                    onApply={handleApplyColors}
+                    onSaveTheme={handleSaveTheme}
+                  />
+                )}
+                {activePage === 'plugins' && __PLUGINS__ && (
+                  <PluginStore onPluginChange={reloadPlugins} />
+                )}
+              </div>
             )}
           </div>
 
-          {/* Page overlay */}
-          {activePage !== 'terminal' && (
-            <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
+          {/* ── Panel B (secondary — only when split is active) ────────────────── */}
+          {panelSplitAxis && panelBPage && (
+            <>
+              {/* Split divider */}
+              <div className={panelSplitAxis === 'h'
+                ? 'w-[1px] bg-[var(--border-color)] shrink-0'
+                : 'h-[1px] bg-[var(--border-color)] shrink-0'}
+              />
 
-              {activePage === 'editor' && (
-                <FullscreenIDE
-                  cwd={activeCwd}
-                  theme={resolvedTheme}
-                  indentGuides={appConfig.indent_guides}
-                  minimap={appConfig.minimap}
-                  wordWrap={appConfig.file_word_wrap}
-                  defaultZoom={currentZoom}
-                />
-              )}
+              {/* Panel B container */}
+              <div className="flex-1 overflow-hidden flex flex-col">
 
-              {activePage === 'database' && (
-                <DatabasePage
-                  terminalId={activeTerminalId}
-                  cwd={activeCwd}
-                  initialDbPath={forcedDbPath}
-                  privacyMode={appConfig.database_privacy}
-                />
-              )}
+                {/* Panel B header */}
+                <div className="flex items-center justify-between h-[28px] px-3 bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] shrink-0 select-none">
+                  <span className="text-[10.5px] font-ui font-semibold uppercase tracking-[0.07em] text-[var(--info-bar-color)]">
+                    {{ editor: 'Code Editor', database: 'Database', debug: 'Debug', settings: 'Settings', plugins: 'Plugins', terminal: 'Terminal' }[panelBPage] ?? panelBPage}
+                  </span>
+                  <button
+                    className="flex items-center justify-center w-5 h-5 rounded bg-transparent border-0 cursor-pointer text-[var(--info-bar-color)] transition-[background,color] duration-[100ms] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"
+                    onClick={closePanelB}
+                    title="Close panel"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                </div>
 
-              {activePage === 'problems' && (
-                <Problems
-                  tabId={activeTerminalId ?? 'problems-page'}
-                  cwd={activeCwd}
-                  sources={probSources}
-                  items={probItems}
-                  scanning={probScanning}
-                  cweItems={cweItems}
-                  cweScanning={cweScanning}
-                  onRescan={async (_, scanCwd) => {
-                    setProbScanning(true)
-                    try {
-                      const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
-                      setProbSources(r.sources ?? [])
-                      setProbItems(r.items ?? [])
-                    } catch { /* ignore */ }
-                    setProbScanning(false)
-                  }}
-                  onOpenFile={(path, line, col) => {
-                    void handleOpenFileAtLine(path, line, col)
-                    setActivePage('terminal')
-                  }}
-                  onCweScan={cwd => { void handleCweScan(cwd) }}
-                />
-              )}
-
-              {activePage === 'settings' && (
-                <ConfigEditor
-                  appConfig={appConfig}
-                  onSaveSettings={handleSaveSettings}
-                  onApply={handleApplyColors}
-                  onSaveTheme={handleSaveTheme}
-                />
-              )}
-
-              {activePage === 'plugins' && __PLUGINS__ && (
-                <PluginStore onPluginChange={reloadPlugins} />
-              )}
-
-            </div>
+                {/* Panel B page content */}
+                <div className="flex-1 overflow-hidden relative">
+                  {panelBPage === 'editor' && (
+                    <FullscreenIDE
+                      cwd={activeCwd}
+                      theme={resolvedTheme}
+                      indentGuides={appConfig.indent_guides}
+                      minimap={appConfig.minimap}
+                      wordWrap={appConfig.file_word_wrap}
+                      defaultZoom={currentZoom}
+                    />
+                  )}
+                  {panelBPage === 'database' && (
+                    <DatabasePage
+                      terminalId={activeTerminalId}
+                      cwd={activeCwd}
+                      privacyMode={appConfig.database_privacy}
+                    />
+                  )}
+                  {panelBPage === 'debug' && (
+                    <Problems
+                      tabId={(activeTerminalId ?? 'problems-panelb') + '-b'}
+                      cwd={activeCwd}
+                      sources={probSources}
+                      items={probItems}
+                      scanning={probScanning}
+                      cweItems={cweItems}
+                      cweScanning={cweScanning}
+                      onRescan={async (_, scanCwd) => {
+                        setProbScanning(true)
+                        try {
+                          const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
+                          setProbSources(r.sources ?? [])
+                          setProbItems(r.items ?? [])
+                        } catch { /* ignore */ }
+                        setProbScanning(false)
+                      }}
+                      onOpenFile={(path, line, col) => {
+                        void handleOpenFileAtLine(path, line, col)
+                        setActivePage('terminal')
+                        closePanelB()
+                      }}
+                      onCweScan={cwd => { void handleCweScan(cwd) }}
+                    />
+                  )}
+                  {panelBPage === 'settings' && (
+                    <ConfigEditor
+                      appConfig={appConfig}
+                      onSaveSettings={handleSaveSettings}
+                      onApply={handleApplyColors}
+                      onSaveTheme={handleSaveTheme}
+                    />
+                  )}
+                  {panelBPage === 'plugins' && __PLUGINS__ && (
+                    <PluginStore onPluginChange={reloadPlugins} />
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
