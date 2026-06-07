@@ -1081,7 +1081,7 @@ export default function Terminal({
           onChange={handleInputBarChange}
           onKeyDown={handleInputBarKeyDown}
           disabled={isPtyActive}
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-white font-mono text-[13px] caret-white"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono text-[13px] caret-[var(--info-bar-hover-color)]"
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
@@ -1105,7 +1105,7 @@ export default function Terminal({
           {menu.matches.map((m, i) => (
             <div
               key={m + i}
-              className={`flex items-center justify-between gap-4 px-3 py-[5px] cursor-pointer text-[var(--info-bar-hover-color)] whitespace-nowrap leading-[1.4] transition-[background] duration-[100ms]${i === menu.selectedIdx && menu.applied ? ' bg-surface-selected text-accent-hover' : i === menu.selectedIdx ? ' bg-surface-overlay text-white' : ' hover:bg-surface-raised'}`}
+              className={`flex items-center justify-between gap-4 px-3 py-[5px] cursor-pointer text-[var(--info-bar-hover-color)] whitespace-nowrap leading-[1.4] transition-[background] duration-[100ms]${i === menu.selectedIdx && menu.applied ? ' bg-surface-selected text-accent-hover' : i === menu.selectedIdx ? ' bg-surface-overlay text-[var(--info-bar-hover-color)]' : ' hover:bg-surface-raised'}`}
               onMouseDown={e => {
                 e.preventDefault() // keep terminal focus
                 applyMatchRef.current?.(m)

@@ -121,7 +121,7 @@
   flex-shrink: 0;
 }
 
-.palette__item.is-selected .palette__item-name { color: #fff; }
+.palette__item.is-selected .palette__item-name { color: var(--info-bar-hover-color); }
 
 .palette__item-path {
   font-size: 11px;

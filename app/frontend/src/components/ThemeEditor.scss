@@ -59,7 +59,7 @@
 .te-btn--primary:hover:not(:disabled) {
   background: rgba(10,132,255,0.25);
   border-color: rgba(10,132,255,0.5);
-  color: #fff;
+  color: var(--info-bar-hover-color);
 }
 .te-btn--primary:disabled { opacity: 0.4; cursor: default; }
 .te-btn--primary.is-saved { background: rgba(48,209,88,0.12); border-color: rgba(48,209,88,0.3); color: var(--color-success); }

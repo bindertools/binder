@@ -865,7 +865,7 @@
 }
 
 .prob-cwe-snippet-line--highlight .prob-cwe-snippet-code {
-  color: #fff;
+  color: var(--info-bar-hover-color);
 }
 
 /* ── Remediation block ───────────────────────────────────────────────────────── */

@@ -268,7 +268,7 @@
 }
 .sp-select:hover { border-color: var(--sep-strong); }
 .sp-select:focus { border-color: var(--accent-border); }
-.sp-select option { background: #252527; color: var(--info-bar-hover-color); }
+.sp-select option { background: var(--info-bar-bg); color: var(--info-bar-hover-color); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 .sp-btn {

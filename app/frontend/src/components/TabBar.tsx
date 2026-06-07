@@ -75,7 +75,7 @@ export default function TabBar({
     setCtxMenu({ tabId, x, y })
   }
 
-  const ctxItemBase = "flex items-center w-full px-[14px] py-[7px] bg-transparent border-0 cursor-pointer text-[var(--info-bar-hover-color)] text-left transition-[background] duration-[100ms] whitespace-nowrap font-ui text-[12.5px] hover:bg-surface-raised hover:text-white"
+  const ctxItemBase = "flex items-center w-full px-[14px] py-[7px] bg-transparent border-0 cursor-pointer text-[var(--info-bar-hover-color)] text-left transition-[background] duration-[100ms] whitespace-nowrap font-ui text-[12.5px] hover:bg-surface-raised"
 
   return (
     <div
