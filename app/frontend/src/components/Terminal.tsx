@@ -231,7 +231,7 @@ export default function Terminal({
       window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId } }))
     }))
     term.open(container)
-    fitAddon.fit()
+    if (container.offsetWidth > 0 && container.offsetHeight > 0) fitAddon.fit()
     termRef.current = term
     fitRef.current = fitAddon
 
@@ -390,9 +390,11 @@ export default function Terminal({
     EventsOn(ptyStartEvent, () => { ptyModeRef.current = true  })
     EventsOn(ptyEndEvent,   () => { ptyModeRef.current = false })
 
-    // Forward xterm resize events to the backend PTY
+    // Forward xterm resize events to the backend PTY.
+    // Guard against 0×0 — ConPTY panics on zero-dimension resize (can happen
+    // during panel split layout transitions before the container gets its final size).
     term.onResize(({ cols, rows }) => {
-      ResizeTerminal(tabId, cols, rows).catch(() => {})
+      if (cols > 0 && rows > 0) ResizeTerminal(tabId, cols, rows).catch(() => {})
     })
 
     // lineRef is declared at component scope (useRef) — accessible here and in handlers.
@@ -896,7 +898,12 @@ export default function Terminal({
     }
     window.addEventListener('plugin:execute', handlePluginExec)
 
-    const ro = new ResizeObserver(() => fitAddon.fit())
+    // Guard: skip fit() when the container has no size (e.g. during panel split
+    // layout transitions) to prevent xterm from resizing to 0 cols/rows.
+    const ro = new ResizeObserver(() => {
+      const el = containerRef.current
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) fitAddon.fit()
+    })
     ro.observe(containerRef.current!)
 
     return () => {
@@ -923,7 +930,8 @@ export default function Terminal({
 
   useEffect(() => {
     if (active) {
-      fitRef.current?.fit()
+      const el = containerRef.current
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) fitRef.current?.fit()
       if (commandAlignment !== 'default' && !isPtyActive) {
         setTimeout(() => inputBarRef.current?.focus(), 50)
       } else {
