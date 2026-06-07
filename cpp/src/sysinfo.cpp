@@ -144,6 +144,46 @@ json ports_impl() {
     return results;
 }
 
+// Find the PID owning `port` (TCP first, then UDP) and terminate it.
+// Returns a human-readable status string for display in the UI.
+static std::string kill_port_impl(uint16_t port) {
+    DWORD pid = 0;
+
+    {
+        DWORD size = 0;
+        GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+        std::vector<BYTE> buf(size + 512);
+        auto* table = reinterpret_cast<MIB_TCPTABLE_OWNER_PID*>(buf.data());
+        if (GetExtendedTcpTable(table, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0) == NO_ERROR) {
+            for (DWORD i = 0; i < table->dwNumEntries && !pid; ++i) {
+                if (net_port(table->table[i].dwLocalPort) == port) pid = table->table[i].dwOwningPid;
+            }
+        }
+    }
+    if (!pid) {
+        DWORD size = 0;
+        GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0);
+        std::vector<BYTE> buf(size + 512);
+        auto* table = reinterpret_cast<MIB_UDPTABLE_OWNER_PID*>(buf.data());
+        if (GetExtendedUdpTable(table, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0) == NO_ERROR) {
+            for (DWORD i = 0; i < table->dwNumEntries && !pid; ++i) {
+                if (net_port(table->table[i].dwLocalPort) == port) pid = table->table[i].dwOwningPid;
+            }
+        }
+    }
+    if (!pid) return "no process is listening on port " + std::to_string(port);
+
+    std::string name  = process_name(pid);
+    std::string label = name.empty() ? ("PID " + std::to_string(pid)) : (name + " (PID " + std::to_string(pid) + ")");
+
+    HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+    if (!h) return "access denied terminating " + label;
+    bool ok = TerminateProcess(h, 1);
+    CloseHandle(h);
+    if (!ok) return "failed to terminate " + label;
+    return "terminated " + label + " (was on port " + std::to_string(port) + ")";
+}
+
 // ─── CPU (delta-based, same pattern as Go's windows.go) ───────────────────────
 
 static LONGLONG s_last_idle   = 0;
@@ -406,6 +446,16 @@ bool dispatch(const std::string& type, const json& msg,
         reply({{"ports", ports_impl()}});
         return true;
     }
+    if (type == "sysinfo.ports.kill") {
+        int port = 0;
+        if (msg.contains("port")) {
+            const auto& pv = msg["port"];
+            if (pv.is_string())      port = std::atoi(pv.get<std::string>().c_str());
+            else if (pv.is_number()) port = pv.get<int>();
+        }
+        reply({{"result", kill_port_impl((uint16_t)port)}});
+        return true;
+    }
     if (type == "sysinfo.perf") {
         reply({{"perf", perf_impl()}});
         return true;
@@ -429,6 +479,7 @@ bool dispatch(const std::string& type, const json& msg,
         resp = std::move(body);
     };
     if (type == "sysinfo.ports")     { reply({{"ports", json::array()}}); return true; }
+    if (type == "sysinfo.ports.kill"){ reply({{"result", "not supported on this platform"}}); return true; }
     if (type == "sysinfo.perf")      { reply({{"perf",  json::object()}}); return true; }
     if (type == "sysinfo.processes") { reply({{"processes", json::array()}}); return true; }
     return false;

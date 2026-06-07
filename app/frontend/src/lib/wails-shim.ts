@@ -150,8 +150,9 @@ function textToB64(text: string): string {
       StopPerfMonitor: (id: string) =>
         invoke('sysinfo.perf.stop', { id }),
 
+      // C++ replies with {result:"..."}; frontend expects a flat status string.
       KillPort: (port: string) =>
-        invoke<string>('sysinfo.ports.kill', { port }),
+        invoke<any>('sysinfo.ports.kill', { port }).then((r: any) => typeof r === 'string' ? r : (r?.result ?? '')),
 
       // ── Session ───────────────────────────────────────────────────────────
       // C++ returns {session:{tabs:[...]}} or {session:{}}; frontend expects a
