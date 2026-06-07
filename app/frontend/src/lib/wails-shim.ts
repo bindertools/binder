@@ -137,8 +137,9 @@ function textToB64(text: string): string {
         invoke<string>('shell.selectdir'),
 
       // ── System info ───────────────────────────────────────────────────────
+      // C++ replies with {ports:[...]}; frontend expects a flat array.
       GetSystemPorts: () =>
-        invoke('sysinfo.ports'),
+        invoke<any>('sysinfo.ports').then((r: any) => Array.isArray(r) ? r : (r?.ports ?? [])),
 
       GetSystemPerf: () =>
         invoke('sysinfo.perf'),
