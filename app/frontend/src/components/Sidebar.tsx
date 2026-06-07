@@ -66,9 +66,9 @@ const SettingsIcon = () => (
 
 const PortsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 2v4M15 2v4"/>
-    <path d="M7 6h10v4a5 5 0 01-10 0V6z"/>
-    <path d="M12 15v4M9 22h6"/>
+    <path d="M9 2v5M15 2v5"/>
+    <rect x="6" y="7" width="12" height="6" rx="2"/>
+    <path d="M12 13v4M9 21h6"/>
   </svg>
 )
 
