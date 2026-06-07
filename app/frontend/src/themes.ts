@@ -64,10 +64,10 @@ export const THEMES: Record<string, AppTheme> = {
       cursorAccent: '#ffffff',
       selectionBackground: '#0a84ff33',
       black: '#1c1c1e', red: '#c41a16', green: '#007400', yellow: '#836c28',
-      blue: '#0432ff', magenta: '#ad3da4', cyan: '#007d9a', white: '#8e8e93',
+      blue: '#0432ff', magenta: '#ad3da4', cyan: '#007d9a', white: '#6e6e73',
       brightBlack: '#636366', brightRed: '#ff453a', brightGreen: '#30d158',
       brightYellow: '#ff9f0a', brightBlue: '#0a84ff', brightMagenta: '#bf5af2',
-      brightCyan: '#5ac8fa', brightWhite: '#f2f2f7',
+      brightCyan: '#5ac8fa', brightWhite: '#48484a',
     },
   },
 }
