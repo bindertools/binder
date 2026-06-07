@@ -8,6 +8,7 @@ interface Props {
   onNavigate:   (page: PageId) => void
   onSearch:     () => void
   onPanelMove:  (page: PageId, dir: 'left' | 'right' | 'up' | 'down') => void
+  onOpenPorts:  () => void
   showPlugins:  boolean
 }
 
@@ -63,6 +64,14 @@ const SettingsIcon = () => (
   </svg>
 )
 
+const PortsIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2v4M15 2v4"/>
+    <path d="M7 6h10v4a5 5 0 01-10 0V6z"/>
+    <path d="M12 15v4M9 22h6"/>
+  </svg>
+)
+
 const PluginsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 7h3a1 1 0 0 0 1-1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4h-1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/>
@@ -110,7 +119,7 @@ const TERMINAL_ONLY_PRIMARY: Set<PageId> = new Set(['terminal'])
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove, showPlugins }: Props) {
+export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove, onOpenPorts, showPlugins }: Props) {
   const [ctx, setCtx]   = useState<CtxState | null>(null)
   const ctxRef          = useRef<HTMLDivElement>(null)
 
@@ -225,6 +234,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
         {/* Utilities */}
         <div className="flex flex-col items-center gap-0.5">
           <div className="w-6 h-px bg-sep mb-1" />
+          <SidebarBtn active={false} label="Ports" onClick={onOpenPorts}>
+            <PortsIcon />
+          </SidebarBtn>
           {showPlugins && (
             <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')}>
               <PluginsIcon />

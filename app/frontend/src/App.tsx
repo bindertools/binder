@@ -68,6 +68,8 @@ type TabAction =
   | { type: 'open-config';     terminalId?: string }
   | { type: 'open-tab';        tabType: string; title: string; terminalId?: string; cwd?: string }
   | { type: 'update-problems'; id: string; sources: string[]; items: ProbItem[]; scanning?: boolean }
+  | { type: 'rename-tab';      id: string; title: string }
+  | { type: 'set-tab-color';   id: string; color: string | null }
   | { type: 'close';           id: string }
   | { type: 'select';          id: string }
   | { type: 'restore-session'; tabs: Tab[] }
@@ -200,6 +202,19 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         tabs: state.tabs.map(t => t.id === action.id
           ? { ...t, problemsSources: action.sources, problemsItems: action.items }
           : t),
+      }
+    }
+
+    case 'rename-tab': {
+      const title = action.title.trim()
+      if (!title) return state
+      return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, title } : t) }
+    }
+
+    case 'set-tab-color': {
+      return {
+        ...state,
+        tabs: state.tabs.map(t => t.id === action.id ? { ...t, color: action.color ?? undefined } : t),
       }
     }
 
@@ -997,6 +1012,8 @@ export default function App() {
             onAddSiblingTerminal={id => { void _handleAddSiblingTerminal(id) }}
             onDrop={id => _handleTabDrop(id, 'left')}
             onDuplicate={id => { void handleDuplicateTab(id) }}
+            onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
+            onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
           />
         </div>
 
@@ -1095,6 +1112,10 @@ export default function App() {
           onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
           onPanelMove={handlePanelMove}
+          onOpenPorts={() => {
+            dispatch({ type: 'open-tab', tabType: 'ports', title: 'ports', terminalId: activeTerminalId ?? undefined })
+            setActivePage('terminal')
+          }}
           showPlugins={__PLUGINS__}
         />
 

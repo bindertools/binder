@@ -17,7 +17,22 @@ interface Props {
   onAddSiblingTerminal: (parentId: string) => void
   onDrop:               (tabId: string) => void
   onDuplicate:          (id: string) => void
+  onRename:             (id: string, title: string) => void
+  onSetColor:           (id: string, color: string | null) => void
 }
+
+// ── Selectable tab colors ─────────────────────────────────────────────────────
+
+const TAB_COLORS: { name: string; value: string }[] = [
+  { name: 'Red',    value: '#FF453A' },
+  { name: 'Orange', value: '#FF9F0A' },
+  { name: 'Yellow', value: '#FFD60A' },
+  { name: 'Green',  value: '#30D158' },
+  { name: 'Blue',   value: '#0A84FF' },
+  { name: 'Purple', value: '#BF5AF2' },
+  { name: 'Pink',   value: '#FF375F' },
+  { name: 'Gray',   value: '#98989D' },
+]
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -45,11 +60,32 @@ export default function TabBar({
   panel: _panel, tabs, activeId, focused: _focused,
   onSelect, onClose, onCloseOthers, onMoveRight, onMoveLeft,
   onNewTerminal, onAddSiblingTerminal: _onAddSibling, onDrop, onDuplicate,
+  onRename, onSetColor,
 }: Props) {
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const ctxRef = useRef<HTMLDivElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const dragCounter = useRef(0)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renamingId) {
+      renameRef.current?.focus()
+      renameRef.current?.select()
+    }
+  }, [renamingId])
+
+  function startRename(tab: Tab) {
+    setRenamingId(tab.id)
+    setRenameValue(tab.title)
+  }
+
+  function commitRename() {
+    if (renamingId) onRename(renamingId, renameValue)
+    setRenamingId(null)
+  }
 
   useEffect(() => {
     if (!ctxMenu) return
@@ -109,20 +145,41 @@ export default function TabBar({
                   ? 'tabbar__tab--active text-[var(--tab-color-hover)] bg-[var(--surface-raised,rgba(255,255,255,0.05))]'
                   : 'text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-[rgba(255,255,255,0.03)] active:opacity-70',
               ].join(' ')}
-              draggable
+              draggable={renamingId !== tab.id}
               onDragStart={e => { e.dataTransfer.setData('tabId', tab.id); e.dataTransfer.effectAllowed = 'move' }}
               onClick={() => onSelect(tab.id)}
               onContextMenu={e => openCtx(e, tab.id)}
+              onDoubleClick={() => startRename(tab)}
               title={tab.title}
             >
-              {/* Active indicator — bottom border */}
-              {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t-full" />
+              {/* Bottom border — custom color takes precedence over the active accent */}
+              {(isActive || tab.color) && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full"
+                  style={{ background: tab.color ?? 'var(--accent)' }}
+                />
               )}
 
               <TerminalIcon />
 
-              <span className="max-w-[120px] overflow-hidden text-ellipsis">{tab.title}</span>
+              {renamingId === tab.id ? (
+                <input
+                  ref={renameRef}
+                  className="max-w-[120px] w-[120px] bg-transparent border-0 border-b border-[var(--accent)] outline-none text-inherit font-ui text-[12px] tracking-[0.01em] px-0"
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  onBlur={commitRename}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+                    else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null) }
+                    e.stopPropagation()
+                  }}
+                  spellCheck={false}
+                />
+              ) : (
+                <span className="max-w-[120px] overflow-hidden text-ellipsis">{tab.title}</span>
+              )}
 
               <button
                 className={[
@@ -160,6 +217,49 @@ export default function TabBar({
         >
           <button className={ctxItemBase} onClick={() => { onMoveLeft(ctxMenu.tabId); setCtxMenu(null) }}>Move Left</button>
           <button className={ctxItemBase} onClick={() => { onMoveRight(ctxMenu.tabId); setCtxMenu(null) }}>Move Right</button>
+          <div className="h-px bg-sep my-[3px]" />
+          <button
+            className={ctxItemBase}
+            onClick={() => {
+              const t = tabs.find(t => t.id === ctxMenu.tabId)
+              if (t) startRename(t)
+              setCtxMenu(null)
+            }}
+          >
+            Rename Tab
+          </button>
+          <div className="px-[14px] pt-[6px] pb-[8px]">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--info-bar-color)] opacity-50 select-none mb-[7px]">
+              Tab Color
+            </div>
+            <div className="flex items-center gap-[7px]">
+              {TAB_COLORS.map(c => {
+                const tab = tabs.find(t => t.id === ctxMenu.tabId)
+                const selected = tab?.color === c.value
+                return (
+                  <button
+                    key={c.value}
+                    className="w-[16px] h-[16px] rounded-full border-0 cursor-pointer p-0 shrink-0 transition-transform duration-[100ms] hover:scale-[1.15]"
+                    style={{
+                      background: c.value,
+                      boxShadow: selected ? `0 0 0 2px var(--info-bar-bg), 0 0 0 4px ${c.value}` : 'none',
+                    }}
+                    title={c.name}
+                    onClick={() => { onSetColor(ctxMenu.tabId, c.value); setCtxMenu(null) }}
+                    aria-label={`Set tab color to ${c.name}`}
+                  />
+                )
+              })}
+              <button
+                className="w-[16px] h-[16px] rounded-full bg-transparent border border-[var(--sep-strong)] cursor-pointer p-0 shrink-0 flex items-center justify-center text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] hover:border-[var(--info-bar-hover-color)] transition-colors duration-[100ms]"
+                title="Clear color"
+                onClick={() => { onSetColor(ctxMenu.tabId, null); setCtxMenu(null) }}
+                aria-label="Clear tab color"
+              >
+                <svg width="7" height="7" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
           <div className="h-px bg-sep my-[3px]" />
           <button className={ctxItemBase} onClick={() => { onDuplicate(ctxMenu.tabId); setCtxMenu(null) }}>Duplicate Tab</button>
           <div className="h-px bg-sep my-[3px]" />

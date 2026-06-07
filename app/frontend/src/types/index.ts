@@ -1,4 +1,4 @@
-export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'problems' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
+export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'debug' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
 
 export interface ProbItem {
   file: string
@@ -13,6 +13,7 @@ export interface Tab {
   id: string
   type: TabType
   title: string
+  color?: string      // custom accent color for the tab pill's bottom border
   parentId?: string   // for editor/database/preview/problems tabs
   // editor-only
   filePath?: string
