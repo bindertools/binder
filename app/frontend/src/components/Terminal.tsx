@@ -343,7 +343,8 @@ export default function Terminal({
       CtrlClickPath(tabId, token).then((result: unknown) => {
         const r = result as { resolved: string; isDir: boolean; exists: boolean }
         if (r.exists && r.isDir) {
-          ExecuteCommand(tabId, 'cd "' + r.resolved.replace(/"/g, '\\"') + '"').catch(() => {})
+          const escaped = r.resolved.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+          ExecuteCommand(tabId, 'cd "' + escaped + '"').catch(() => {})
         } else if (r.exists && !r.isDir) {
           window.dispatchEvent(new CustomEvent('ide:ctrl-click-file', { detail: { path: r.resolved } }))
         }
