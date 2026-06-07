@@ -746,9 +746,20 @@ export default function App() {
   }, [])
 
   const handleSidebarNavigate = useCallback((page: PageId) => {
+    if (page === 'terminal') {
+      const current = tabs.find(t => t.id === activeId)
+      if (current?.type === 'ports') {
+        const parent = tabs.find(t => t.id === current.parentId && t.type === 'terminal')
+          ?? tabs.find(t => t.type === 'terminal')
+        if (parent && parent.id !== activeId) {
+          dispatch({ type: 'select', id: parent.id })
+          setFocusedPanel('left')
+        }
+      }
+    }
     setActivePage(page)
     if (page === panelBPage) closePanelB()
-  }, [panelBPage, closePanelB])
+  }, [tabs, activeId, panelBPage, closePanelB])
 
   const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
     if (dir === 'right' || dir === 'down') {
