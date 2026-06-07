@@ -102,7 +102,6 @@ function JsonView({
       <div className="db-json-privacy-wrap" onClick={onReveal} title="Click to reveal">
         <pre
           className="db-json db-json--blurred"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: highlighted }}
         />
         <div className="db-json-privacy-overlay">
@@ -122,7 +121,6 @@ function JsonView({
       )}
       <pre
         className="db-json"
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: highlighted }}
       />
     </div>
