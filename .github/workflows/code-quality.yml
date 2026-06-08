@@ -79,7 +79,7 @@ jobs:
         run: |
           $expected = @(
             'cpp\build\Release\cmdide-host.exe',
-            'cpp\build\Release\cmdide-installer.exe'
+            'cpp\build\Release\cmdide-setup.exe'
           )
           foreach ($path in $expected) {
             if (-not (Test-Path $path)) {

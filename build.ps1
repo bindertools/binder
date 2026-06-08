@@ -130,10 +130,10 @@ if (-not $InstallerOnly) {
 # STEP 5 - Build stable installer
 # =============================================================================
 if (-not $AppOnly) {
-    Step "Build stable installer"
-    & cmake --build $cppBuild --config Release --target cmdide-installer
-    if ($LASTEXITCODE -ne 0) { Fail "Stable installer build failed" }
-    $instSrc = Join-Path $releaseDir "cmdide-installer$binExt"
+    Step "Build stable setup"
+    & cmake --build $cppBuild --config Release --target cmdide-setup
+    if ($LASTEXITCODE -ne 0) { Fail "Stable setup build failed" }
+    $instSrc = Join-Path $releaseDir "cmdide-setup$binExt"
     $instDst = Join-Path $releaseDir $instName
     if (Test-Path $instSrc) { Copy-Item -Force $instSrc $instDst }
     Ok "Built -> $instName"
@@ -143,16 +143,16 @@ if (-not $AppOnly) {
 # STEP 6 - Build dev installer
 # =============================================================================
 if (-not $AppOnly) {
-    Step "Build dev installer"
+    Step "Build dev setup"
     $sharedInstalled = Join-Path $cppBuild 'vcpkg_installed'
-    $devExtra = @{ CMDIDE_INSTALLER_DEV = 'ON' }
+    $devExtra = @{ CMDIDE_SETUP_DEV = 'ON' }
     if (Test-Path $sharedInstalled) {
         $devExtra['VCPKG_INSTALLED_DIR'] = $sharedInstalled
     }
     Cmake-Configure -buildDir $devBuild -extra $devExtra
-    & cmake --build $devBuild --config Release --target cmdide-installer
-    if ($LASTEXITCODE -ne 0) { Fail "Dev installer build failed" }
-    $devSrc = Join-Path $devBuild "Release\cmdide-installer$binExt"
+    & cmake --build $devBuild --config Release --target cmdide-setup
+    if ($LASTEXITCODE -ne 0) { Fail "Dev setup build failed" }
+    $devSrc = Join-Path $devBuild "Release\cmdide-setup$binExt"
     $devDst = Join-Path $releaseDir $instDevName
     if (Test-Path $devSrc) { Copy-Item -Force $devSrc $devDst }
     Ok "Built -> $instDevName"
