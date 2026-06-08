@@ -1,5 +1,4 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import SplitModal from './components/SplitModal'
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
@@ -8,24 +7,35 @@ import Problems, { type CweItem } from './components/Problems'
 import ConfigEditor from './components/ConfigEditor'
 import ZoomIndicator from './components/ZoomIndicator'
 import SearchPalette from './components/SearchPalette'
-import TabBar from './components/TabBar'
-import Sidebar, { PageId } from './components/Sidebar'
+import SplitPaneView from './components/SplitPaneView'
+import Sidebar from './components/Sidebar'
+import type { PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import { buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins, type InstalledPluginCommand, type Plugin, type PluginContext } from './plugins'
+import {
+  buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins,
+  type InstalledPluginCommand, type Plugin, type PluginContext,
+} from './plugins'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
+import {
+  createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
+  updateLeafInTree, updateRatioInTree, moveTabToPane, findLeaf, getAllLeaves, getFirstLeaf,
+  serializeLayout, deserializeLayout,
+  type PaneNode, type LeafPane, type SerializedNode,
+} from './paneModel'
 import { EventsOn, EventsOff, Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
-import { GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd, ScanProblems, ScanCWE, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate } from '../wailsjs/go/main/App'
+import {
+  GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd,
+  ScanProblems, ScanCWE, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate,
+} from '../wailsjs/go/main/App'
 import { useDragRegions } from './lib/useDragRegions'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
 
 let tabCounter = 0
-// Include a per-session timestamp so IDs never collide with a zombie PTY left
-// by a previous crash (backend reuses the same ID if the process didn't restart).
 const SESSION_TS = Date.now()
 const nextId = () => `tab-${SESSION_TS}-${++tabCounter}`
 
@@ -43,8 +53,7 @@ function loadRecentPaths(): string[] {
 function saveRecentPath(newPath: string): void {
   try {
     const current = loadRecentPaths().filter(p => p !== newPath)
-    const updated = [newPath, ...current].slice(0, 7)
-    localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(updated))
+    localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify([newPath, ...current].slice(0, 7)))
   } catch { /* ignore */ }
 }
 
@@ -57,6 +66,8 @@ function makeTerminalTab(id?: string, initialCwd?: string, parentId?: string): T
     ...(parentId   ? { parentId }   : {}),
   }
 }
+
+// ── Tab reducer ───────────────────────────────────────────────────────────────
 
 type TabState = { tabs: Tab[]; activeId: string }
 type TabAction =
@@ -84,18 +95,14 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         let insertIdx = newTabs.length
         for (let i = newTabs.length - 1; i >= 0; i--) {
           if (newTabs[i].id === action.parentId || newTabs[i].parentId === action.parentId) {
-            insertIdx = i + 1
-            break
+            insertIdx = i + 1; break
           }
         }
         newTabs.splice(insertIdx, 0, tab)
       } else {
         newTabs.push(tab)
       }
-      return {
-        tabs: newTabs,
-        activeId: action.keepActive ? state.activeId : tab.id,
-      }
+      return { tabs: newTabs, activeId: action.keepActive ? state.activeId : tab.id }
     }
 
     case 'open-file': {
@@ -124,10 +131,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       const existing = state.tabs.find(t => t.type === 'database' && t.dbPath === payload.path)
       if (existing) return { ...state, activeId: existing.id }
       const fileName = payload.path.replace(/\\/g, '/').split('/').pop() ?? payload.path
-      const tab: Tab = {
-        id: nextId(), type: 'database', title: fileName,
-        dbPath: payload.path, parentId: payload.terminalId,
-      }
+      const tab: Tab = { id: nextId(), type: 'database', title: fileName, dbPath: payload.path, parentId: payload.terminalId }
       return insertNearParent(state, tab, payload.terminalId)
     }
 
@@ -137,15 +141,10 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       const existing = state.tabs.find(t => t.type === 'preview' && t.previewPath === previewKey)
       if (existing) return { ...state, activeId: existing.id }
       const title = previewKey.replace(/\\/g, '/').split('/').pop() ?? previewKey
-      const previewSrc = payload.type === 'url'
-        ? payload.url!
-        : (payload.url ?? payload.content ?? '')
+      const previewSrc = payload.type === 'url' ? payload.url! : (payload.url ?? payload.content ?? '')
       const tab: Tab = {
         id: nextId(), type: 'preview', title,
-        previewType: payload.type,
-        previewSrc,
-        previewPath: previewKey,
-        parentId: payload.terminalId,
+        previewType: payload.type, previewSrc, previewPath: previewKey, parentId: payload.terminalId,
       }
       return insertNearParent(state, tab, payload.terminalId)
     }
@@ -157,16 +156,12 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         return {
           ...state, activeId: existing.id,
           tabs: state.tabs.map(t => t.id === existing.id
-            ? { ...t, problemsSources: payload.sources, problemsItems: payload.items }
-            : t),
+            ? { ...t, problemsSources: payload.sources, problemsItems: payload.items } : t),
         }
       }
       const tab: Tab = {
-        id: nextId(), type: 'debug', title: 'Debug',
-        parentId: payload.terminalId,
-        problemsCwd: payload.cwd,
-        problemsSources: payload.sources,
-        problemsItems: payload.items,
+        id: nextId(), type: 'debug', title: 'Debug', parentId: payload.terminalId,
+        problemsCwd: payload.cwd, problemsSources: payload.sources, problemsItems: payload.items,
       }
       return insertNearParent(state, tab, payload.terminalId)
     }
@@ -174,11 +169,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
     case 'open-config': {
       const existing = state.tabs.find(t => t.type === 'config')
       if (existing) return { ...state, activeId: existing.id }
-      const tab: Tab = {
-        id: nextId(), type: 'config', title: 'Settings',
-        parentId: action.terminalId,
-      }
-      return insertNearParent(state, tab, action.terminalId)
+      return insertNearParent(state, { id: nextId(), type: 'config', title: 'Settings', parentId: action.terminalId }, action.terminalId)
     }
 
     case 'open-tab': {
@@ -187,23 +178,19 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         if (existing) return { ...state, activeId: existing.id }
       }
       const tab: Tab = {
-        id: nextId(),
-        type: action.tabType as Tab['type'],
-        title: action.title,
+        id: nextId(), type: action.tabType as Tab['type'], title: action.title,
         parentId: action.terminalId,
         ...(action.cwd ? { meta: { cwd: action.cwd } } : {}),
       }
       return insertNearParent(state, tab, action.terminalId)
     }
 
-    case 'update-problems': {
+    case 'update-problems':
       return {
         ...state,
         tabs: state.tabs.map(t => t.id === action.id
-          ? { ...t, problemsSources: action.sources, problemsItems: action.items }
-          : t),
+          ? { ...t, problemsSources: action.sources, problemsItems: action.items } : t),
       }
-    }
 
     case 'rename-tab': {
       const title = action.title.trim()
@@ -211,21 +198,19 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, title } : t) }
     }
 
-    case 'set-tab-color': {
-      return {
-        ...state,
-        tabs: state.tabs.map(t => t.id === action.id ? { ...t, color: action.color ?? undefined } : t),
-      }
-    }
+    case 'set-tab-color':
+      return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, color: action.color ?? undefined } : t) }
 
     case 'close': {
       if (state.tabs.length <= 1) return state
       const idx = state.tabs.findIndex(t => t.id === action.id)
       const newTabs = state.tabs.filter(t => t.id !== action.id)
-      const newActiveId = state.activeId === action.id
-        ? newTabs[Math.min(idx, newTabs.length - 1)].id
-        : state.activeId
-      return { tabs: newTabs, activeId: newActiveId }
+      return {
+        tabs: newTabs,
+        activeId: state.activeId === action.id
+          ? newTabs[Math.min(idx, newTabs.length - 1)].id
+          : state.activeId,
+      }
     }
 
     case 'select':
@@ -246,8 +231,7 @@ function insertNearParent(state: TabState, tab: Tab, terminalId?: string): TabSt
     let insertIdx = newTabs.length
     for (let i = newTabs.length - 1; i >= 0; i--) {
       if (newTabs[i].id === terminalId || newTabs[i].parentId === terminalId) {
-        insertIdx = i + 1
-        break
+        insertIdx = i + 1; break
       }
     }
     newTabs.splice(insertIdx, 0, tab)
@@ -257,7 +241,8 @@ function insertNearParent(state: TabState, tab: Tab, terminalId?: string): TabSt
   return { tabs: newTabs, activeId: tab.id }
 }
 
-// ── default config ────────────────────────────────────────────────────────────
+// ── Default config ────────────────────────────────────────────────────────────
+
 const defaultConfig: AppConfig = {
   default_directory: '', indent_guides: false, order_directory: false,
   minimap: false, theme: 'dark', show_timestamps: false,
@@ -267,115 +252,83 @@ const defaultConfig: AppConfig = {
   preferred_shell: '', database_privacy: false,
 }
 
-const initialTab = makeTerminalTab()
+const LAYOUT_STORAGE_KEY = 'cmdide_pane_layout'
+
+const initialTab  = makeTerminalTab()
+const initialLeaf = createLeaf([initialTab.id], initialTab.id)
 const initialState: TabState = { tabs: [initialTab], activeId: initialTab.id }
 
-const DIVIDER_PX = 4
+// ── PluginErrorBoundary ───────────────────────────────────────────────────────
 
-interface PluginErrorBoundaryProps {
-  pluginName: string
-  children: React.ReactNode
-}
-
-interface PluginErrorBoundaryState {
-  error: Error | null
-}
-
-class PluginErrorBoundary extends React.Component<PluginErrorBoundaryProps, PluginErrorBoundaryState> {
-  state: PluginErrorBoundaryState = { error: null }
-
-  static getDerivedStateFromError(error: Error): PluginErrorBoundaryState {
-    return { error }
-  }
-
-  componentDidCatch(error: Error) {
-    console.error(`[plugins] ${this.props.pluginName} crashed`, error)
-  }
-
+class PluginErrorBoundary extends React.Component<
+  { pluginName: string; children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error) { console.error(`[plugins] ${this.props.pluginName} crashed`, error) }
   render() {
     if (this.state.error) {
       return (
         <div className="h-full flex items-center justify-center p-6 bg-[var(--app-bg)]">
           <div className="max-w-[720px] w-full border border-sep rounded-[18px] p-5 bg-[rgba(255,255,255,0.03)] text-[var(--tab-color)] font-mono">
-            <div className="text-[12px] tracking-[0.12em] uppercase opacity-60 mb-2">
-              Plugin Error
-            </div>
-            <div className="text-[18px] font-bold mb-2.5">
-              {this.props.pluginName} failed to render
-            </div>
+            <div className="text-[12px] tracking-[0.12em] uppercase opacity-60 mb-2">Plugin Error</div>
+            <div className="text-[18px] font-bold mb-2.5">{this.props.pluginName} failed to render</div>
             <div className="text-[12px] leading-[1.7] opacity-[0.82] whitespace-pre-wrap">
-              {this.state.error.message}
+              {(this.state.error as Error).message}
             </div>
           </div>
         </div>
       )
     }
-
     return this.props.children
   }
 }
 
+// ── App ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [state, dispatch] = useReducer(tabReducer, initialState)
-  const { tabs, activeId } = state
+  const { tabs } = state
 
   useDragRegions()
 
-  // ── per-panel state ──────────────────────────────────────────────────────────
-  const [tabPanels,      setTabPanels]      = useState<Record<string, 'left' | 'right'>>({})
-  const [rightActiveId,  setRightActiveId]  = useState('')
-  const [focusedPanel,   setFocusedPanel]   = useState<'left' | 'right'>('left')
-  const [splitEnabled,   setSplitEnabled]   = useState(false)
-  const [splitRatio,     setSplitRatio]     = useState(0.5)
+  // ── Pane tree state ──────────────────────────────────────────────────────────
+  const [layoutRoot,    setLayoutRoot]    = useState<PaneNode>(initialLeaf)
+  const [focusedPaneId, setFocusedPaneId] = useState<string>(initialLeaf.id)
+  const [splitMenuOpen, setSplitMenuOpen] = useState(false)
+  const splitMenuRef = useRef<HTMLDivElement>(null)
+
+  // ── General state ────────────────────────────────────────────────────────────
   const [searchOpen,     setSearchOpen]     = useState(false)
-  const [splitModalOpen, setSplitModalOpen] = useState(false)
   const [terminalCwds,   setTerminalCwds]   = useState<Record<string, string>>({})
-  const [activePage,     setActivePage]     = useState<PageId>('terminal')
-  const [panelSplitAxis, setPanelSplitAxis] = useState<'h' | 'v' | null>(null)
-  const [panelBPage,     setPanelBPage]     = useState<PageId | null>(null)
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
   const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
   const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
 
-  const contentRef    = useRef<HTMLDivElement>(null)
-  const dragging      = useRef(false)
-  const pathDwellRef  = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
+  const pathDwellRef = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
 
-  // ── plugin loader ─────────────────────────────────────────────────────────────
+  // ── Plugin loader ─────────────────────────────────────────────────────────────
   const reloadPlugins = useCallback(async () => {
     if (!__PLUGINS__) return
     bootstrapBuiltins()
     const loaded = await loadInstalledPlugins().catch(() => [] as Plugin[])
     const map: Record<string, Plugin> = {}
-    for (const p of loaded) {
-      if (p.tabType) map[p.tabType] = p
-    }
+    for (const p of loaded) { if (p.tabType) map[p.tabType] = p }
     setPlugins(map)
     setPluginCommands(buildInstalledPluginCommandMap(loaded))
   }, [])
 
   useEffect(() => { void reloadPlugins() }, [reloadPlugins])
 
-  const leftTabs = useMemo(
-    () => tabs.filter(t => (tabPanels[t.id] ?? 'left') === 'left'),
-    [tabs, tabPanels]
-  )
-  const rightTabs = useMemo(
-    () => tabs.filter(t => tabPanels[t.id] === 'right'),
-    [tabs, tabPanels]
-  )
-
-  // Only terminal tabs appear in the header tab bar
-  const terminalTabs = useMemo(() => tabs.filter(t => t.type === 'terminal'), [tabs])
-
-  // ── app config ───────────────────────────────────────────────────────────────
+  // ── App config ───────────────────────────────────────────────────────────────
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
   const [currentZoom, setCurrentZoom] = useState(() => {
     const saved = parseFloat(localStorage.getItem('cmdide_zoom') ?? '')
     return isFinite(saved) && saved > 0 ? saved : defaultConfig.default_zoom
   })
-  const [liveColors,  setLiveColors]  = useState<Record<string, string> | null>(null)
-  const [updateTag,   setUpdateTag]   = useState<string>('')
+  const [liveColors, setLiveColors] = useState<Record<string, string> | null>(null)
+  const [updateTag,  setUpdateTag]  = useState<string>('')
 
   const resolvedTheme = useMemo(() => {
     if (liveColors) return customColorsToTheme(liveColors)
@@ -385,33 +338,63 @@ export default function App() {
     return getTheme(appConfig.theme)
   }, [liveColors, appConfig.theme, appConfig.custom_theme])
 
-  // ── cleanup stale tabPanels entries when tabs close ──────────────────────────
+  // ── Derived: focused pane ────────────────────────────────────────────────────
+  const focusedPane = useMemo(() => findLeaf(layoutRoot, focusedPaneId), [layoutRoot, focusedPaneId])
+  const activePage  = focusedPane?.activePage ?? 'terminal'
+
+  const activeTerminalId = useMemo(() => {
+    if (!focusedPane) return null
+    const activeTab = tabs.find(t => t.id === focusedPane.activeTabId)
+    if (activeTab?.type === 'terminal') return activeTab.id
+    return focusedPane.tabIds.find(id => tabs.find(t => t.id === id)?.type === 'terminal') ?? null
+  }, [focusedPane, tabs])
+
+  const activeCwd = useMemo(() => {
+    return activeTerminalId ? (terminalCwds[activeTerminalId] ?? '') : ''
+  }, [activeTerminalId, terminalCwds])
+
+  // ── Sync: remove closed tabs from layout tree ─────────────────────────────────
   useEffect(() => {
-    const valid = new Set(tabs.map(t => t.id))
-    setTabPanels(prev => {
-      const next: Record<string, 'left' | 'right'> = {}
+    const validIds = new Set(tabs.map(t => t.id))
+    setLayoutRoot(prev => {
+      let root = prev
       let changed = false
-      for (const [id, panel] of Object.entries(prev)) {
-        if (valid.has(id)) { next[id] = panel } else { changed = true }
+      for (const leaf of getAllLeaves(prev)) {
+        for (const id of leaf.tabIds) {
+          if (!validIds.has(id)) { root = removeTabFromTree(root, id); changed = true }
+        }
       }
-      return changed ? next : prev
+      return changed ? root : prev
     })
   }, [tabs])
 
-  // ── update rightActiveId when right-panel active tab is closed ───────────────
+  // ── Sync: assign new tabs (unassigned) to focused pane ───────────────────────
   useEffect(() => {
-    if (!rightActiveId) return
-    if (tabs.find(t => t.id === rightActiveId)) return
-    const nextRight = rightTabs.find(t => t.id !== rightActiveId)
-    if (nextRight) {
-      setRightActiveId(nextRight.id)
-    } else {
-      setRightActiveId('')
-      setSplitEnabled(false)
-    }
-  }, [tabs, rightActiveId, rightTabs])
+    const paneTabIds = new Set(getAllLeaves(layoutRoot).flatMap(l => l.tabIds))
+    const unassigned = tabs.filter(t => !paneTabIds.has(t.id))
+    if (unassigned.length === 0) return
+    setLayoutRoot(prev => {
+      let root = prev
+      for (const tab of unassigned) root = addTabToLeaf(root, focusedPaneId, tab.id)
+      return root
+    })
+  }, [tabs, layoutRoot, focusedPaneId])
 
-  // ── config load ──────────────────────────────────────────────────────────────
+  // ── Sync: keep focusedPaneId valid ────────────────────────────────────────────
+  useEffect(() => {
+    if (!findLeaf(layoutRoot, focusedPaneId)) {
+      setFocusedPaneId(getFirstLeaf(layoutRoot).id)
+    }
+  }, [layoutRoot, focusedPaneId])
+
+  // ── Sync: path dwell for debug pages ─────────────────────────────────────────
+  useEffect(() => {
+    if (activePage === 'debug' || activePage === 'database' || activePage === 'editor') {
+      pathDwellRef.current.forEach(entry => { entry.relatedPageVisited = true })
+    }
+  }, [activePage])
+
+  // ── Config load ──────────────────────────────────────────────────────────────
   useEffect(() => {
     CheckForUpdate().then(tag => { if (tag) setUpdateTag(tag) }).catch(() => {})
   }, [])
@@ -428,37 +411,28 @@ export default function App() {
   useEffect(() => {
     EventsOn('app:config', (cfg: AppConfig) => {
       const zoom = cfg.default_zoom || defaultConfig.default_zoom
-      setAppConfig(cfg)
-      setCurrentZoom(zoom)
+      setAppConfig(cfg); setCurrentZoom(zoom)
       localStorage.setItem('cmdide_zoom', String(zoom))
       setLiveColors(null)
     })
     return () => EventsOff('app:config')
   }, [])
 
-  // ── session restore ──────────────────────────────────────────────────────────
+  // ── Session restore ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!appConfig.soft_close) return
     LoadSession().then(async (sessionTabs) => {
       if (!sessionTabs || sessionTabs.length === 0) return
       const restoredTabs: Tab[] = []
-      let lastTerminalId: string | undefined
-
       for (const st of sessionTabs) {
         if (st.type === 'terminal') {
-          const tab = makeTerminalTab(undefined, st.cwd || undefined)
-          lastTerminalId = tab.id
-          restoredTabs.push(tab)
+          restoredTabs.push(makeTerminalTab(undefined, st.cwd || undefined))
         } else if (st.type === 'editor' && st.file_path) {
           try {
             const content = await ReadFile(st.file_path)
             const fileName = st.file_path.replace(/\\/g, '/').split('/').pop() ?? st.file_path
-            restoredTabs.push({
-              id: nextId(), type: 'editor', title: fileName,
-              filePath: st.file_path, content,
-              language: st.language || 'plaintext', parentId: lastTerminalId,
-            })
-          } catch { /* file gone */ }
+            restoredTabs.push({ id: nextId(), type: 'editor', title: fileName, filePath: st.file_path, content, language: st.language || 'plaintext' })
+          } catch { /* gone */ }
         }
       }
       if (restoredTabs.length > 0) dispatch({ type: 'restore-session', tabs: restoredTabs })
@@ -466,11 +440,10 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appConfig.soft_close])
 
-  // ── theme CSS vars ───────────────────────────────────────────────────────────
+  // ── Theme CSS vars ───────────────────────────────────────────────────────────
   useEffect(() => {
     const root = document.documentElement
     const isCustom = appConfig.theme === 'custom' || liveColors !== null
-
     if (isCustom) {
       root.setAttribute('data-theme', 'custom')
       const t = resolvedTheme
@@ -508,10 +481,11 @@ export default function App() {
       const payload = args[0] as OpenDatabasePayload
       if (!payload?.path) return
       setForcedDbPath(payload.path)
-      setActivePage('database')
+      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'database' })))
     })
     return () => EventsOff('app:open-database')
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedPaneId])
 
   useEffect(() => {
     EventsOn('app:open-preview', (...args: any[]) => {
@@ -526,28 +500,27 @@ export default function App() {
     const handler = (e: Event) => {
       const { url, tabId } = (e as CustomEvent<{ url: string; tabId: string }>).detail
       if (!url) return
-      const payload: OpenPreviewPayload = { type: 'url', url, path: url, terminalId: tabId }
-      dispatch({ type: 'open-preview', payload })
+      dispatch({ type: 'open-preview', payload: { type: 'url', url, path: url, terminalId: tabId } })
     }
     window.addEventListener('ide:open-url', handler)
     return () => window.removeEventListener('ide:open-url', handler)
   }, [])
 
   useEffect(() => {
-    EventsOn('app:open-problems', (...args: any[]) => {
-      const payload = args[0] as OpenProblemsPayload
-      if (!payload?.cwd) return
-      setActivePage('debug')
+    EventsOn('app:open-problems', () => {
+      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'debug' })))
     })
     return () => EventsOff('app:open-problems')
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedPaneId])
 
   useEffect(() => {
     EventsOn('app:open-config', () => {
-      setActivePage('settings')
+      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'settings' })))
     })
     return () => EventsOff('app:open-config')
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedPaneId])
 
   useEffect(() => {
     EventsOn('app:open-tab', (...args: any[]) => {
@@ -555,17 +528,18 @@ export default function App() {
       if (!p?.type) return
       if (p.type === 'plugins') {
         if (!__PLUGINS__) return
-        setActivePage('plugins')
+        setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'plugins' })))
         return
       }
       if (p.type === 'fullscreen') {
-        setActivePage('editor')
+        setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'editor' })))
         return
       }
       dispatch({ type: 'open-tab', tabType: p.type, title: p.title, terminalId: p.terminalId, cwd: p.cwd })
     })
     return () => EventsOff('app:open-tab')
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedPaneId])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -579,7 +553,7 @@ export default function App() {
     return () => window.removeEventListener('terminal:open-plugin-tab', handler)
   }, [])
 
-  // ── keyboard shortcuts ────────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && (e.key === 'k' || e.key === '`')) { e.preventDefault(); setSearchOpen(v => !v) }
@@ -588,7 +562,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // ── quit ─────────────────────────────────────────────────────────────────────
+  // ── Split menu close on outside click ─────────────────────────────────────────
+  useEffect(() => {
+    if (!splitMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (splitMenuRef.current && !splitMenuRef.current.contains(e.target as Node)) setSplitMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [splitMenuOpen])
+
+  // ── Quit ─────────────────────────────────────────────────────────────────────
   const handleQuit = useCallback(async () => {
     try {
       if (appConfig.soft_close) {
@@ -608,353 +592,104 @@ export default function App() {
     Quit()
   }, [appConfig.soft_close, tabs])
 
-  // ── tab select ────────────────────────────────────────────────────────────────
-  const handleLeftSelect = useCallback((id: string) => {
-    dispatch({ type: 'select', id })
-    setFocusedPanel('left')
-    setActivePage('terminal')
+  // ── Pane operations ───────────────────────────────────────────────────────────
+
+  const handleFocusPane = useCallback((paneId: string) => {
+    setFocusedPaneId(paneId)
   }, [])
 
-  const _handleRightSelect = useCallback((id: string) => {
-    setRightActiveId(id)
-    setFocusedPanel('right')
-    setActivePage('terminal')
-  }, [])
-
-  // ── move to right panel ───────────────────────────────────────────────────────
-  const handleMoveRight = useCallback((id: string) => {
-    const current = tabPanels[id] ?? 'left'
-    if (current === 'right') return
-
-    if (id === activeId) {
-      const otherLeft = leftTabs.find(t => t.id !== id)
-      if (otherLeft) dispatch({ type: 'select', id: otherLeft.id })
-    }
-    setTabPanels(prev => ({ ...prev, [id]: 'right' }))
-    setRightActiveId(id)
-    setSplitEnabled(true)
-    setFocusedPanel('right')
-  }, [tabPanels, activeId, leftTabs])
-
-  // ── move to left panel ────────────────────────────────────────────────────────
-  const handleMoveLeft = useCallback((id: string) => {
-    const current = tabPanels[id] ?? 'left'
-    if (current === 'left') return
-
-    setTabPanels(prev => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
-    dispatch({ type: 'select', id })
-    setFocusedPanel('left')
-
-    const remaining = rightTabs.filter(t => t.id !== id)
-    if (remaining.length === 0) {
-      setSplitEnabled(false)
-      setRightActiveId('')
-    } else if (rightActiveId === id) {
-      setRightActiveId(remaining[0].id)
-    }
-  }, [tabPanels, rightTabs, rightActiveId])
-
-  const _handleTabDrop = useCallback((tabId: string, targetPanel: 'left' | 'right') => {
-    const current = tabPanels[tabId] ?? 'left'
-    if (current === targetPanel) return
-    if (targetPanel === 'right') handleMoveRight(tabId)
-    else handleMoveLeft(tabId)
-  }, [tabPanels, handleMoveRight, handleMoveLeft])
-
-  const _handleCloseOthers = useCallback((id: string) => {
-    const panel = tabPanels[id] ?? 'left'
-    const samePanel = tabs.filter(t => (tabPanels[t.id] ?? 'left') === panel && t.id !== id)
-    for (const t of samePanel) {
-      dispatch({ type: 'close', id: t.id })
-    }
-    if (panel === 'left') {
-      dispatch({ type: 'select', id })
-    } else {
-      setRightActiveId(id)
-    }
-  }, [tabs, tabPanels])
-
-  const _handleRightClose = useCallback((id: string) => {
-    dispatch({ type: 'close', id })
-  }, [])
-
-  const _handleAddSiblingTerminal = useCallback(async (parentId: string) => {
-    const cwd   = await GetTerminalCwd(parentId).catch(() => '')
-    const panel = tabPanels[parentId] ?? 'left'
-
-    if (panel === 'right') {
-      const newId = nextId()
-      dispatch({ type: 'add-terminal', id: newId, parentId, initialCwd: cwd || undefined, keepActive: true })
-      setTabPanels(prev => ({ ...prev, [newId]: 'right' }))
-      setRightActiveId(newId)
-    } else {
-      dispatch({ type: 'add-terminal', parentId, initialCwd: cwd || undefined })
-    }
-    setActivePage('terminal')
-  }, [tabPanels])
-
-  const handleRightNewTerminal = useCallback(() => {
+  const handleSplitPane = useCallback((paneId: string, dir: 'h' | 'v') => {
     const newId = nextId()
     dispatch({ type: 'add-terminal', id: newId, keepActive: true })
-    setTabPanels(prev => ({ ...prev, [newId]: 'right' }))
-    setRightActiveId(newId)
-    setFocusedPanel('right')
+    const newLeaf = createLeaf([newId], newId)
+    setLayoutRoot(prev => splitPaneInTree(prev, paneId, dir, newLeaf))
+    setFocusedPaneId(newLeaf.id)
   }, [])
 
-  const handleNewTab = useCallback(() => {
-    dispatch({ type: 'add-terminal' })
-    setActivePage('terminal')
+  const handleClosePane = useCallback((paneId: string) => {
+    setLayoutRoot(prev => {
+      const result = closePaneInTree(prev, paneId)
+      if (result === null) return prev
+      setFocusedPaneId(fid => fid === paneId ? getFirstLeaf(result).id : fid)
+      return result
+    })
   }, [])
 
-  const handleDuplicateTab = useCallback(async (id: string) => {
-    const cwd   = await GetTerminalCwd(id).catch(() => '')
-    const panel = tabPanels[id] ?? 'left'
-    if (panel === 'right') {
-      const newId = nextId()
-      dispatch({ type: 'add-terminal', id: newId, parentId: id, initialCwd: cwd || undefined, keepActive: true })
-      setTabPanels(prev => ({ ...prev, [newId]: 'right' }))
-      setRightActiveId(newId)
-    } else {
-      dispatch({ type: 'add-terminal', parentId: id, initialCwd: cwd || undefined })
+  const handleRatioChange = useCallback((splitId: string, ratio: number) => {
+    setLayoutRoot(prev => updateRatioInTree(prev, splitId, ratio))
+  }, [])
+
+  const handleSelectTab = useCallback((paneId: string, tabId: string) => {
+    setLayoutRoot(prev => updateLeafInTree(prev, paneId, leaf => ({ ...leaf, activeTabId: tabId, activePage: 'terminal' })))
+    setFocusedPaneId(paneId)
+  }, [])
+
+  const handleCloseTab = useCallback((tabId: string) => {
+    dispatch({ type: 'close', id: tabId })
+  }, [])
+
+  const handleNewTerminal = useCallback((paneId: string) => {
+    const newId = nextId()
+    dispatch({ type: 'add-terminal', id: newId, keepActive: true })
+    setLayoutRoot(prev => {
+      const withTab = addTabToLeaf(prev, paneId, newId)
+      return updateLeafInTree(withTab, paneId, leaf => ({ ...leaf, activePage: 'terminal' }))
+    })
+    setFocusedPaneId(paneId)
+  }, [])
+
+  const handleDropTab = useCallback((tabId: string, toPaneId: string) => {
+    setLayoutRoot(prev => moveTabToPane(prev, tabId, toPaneId))
+    setFocusedPaneId(toPaneId)
+  }, [])
+
+  const handleDuplicateTab = useCallback(async (tabId: string) => {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab || tab.type !== 'terminal') return
+    const cwd = await GetTerminalCwd(tabId).catch(() => '')
+    const newId = nextId()
+    const pane = findLeaf(layoutRoot, focusedPaneId)
+    dispatch({ type: 'add-terminal', id: newId, parentId: tabId, initialCwd: cwd || undefined, keepActive: true })
+    if (pane) {
+      setLayoutRoot(prev => addTabToLeaf(prev, pane.id, newId))
     }
-    setActivePage('terminal')
-  }, [tabPanels])
+  }, [tabs, layoutRoot, focusedPaneId])
 
-  // ── theme helpers ─────────────────────────────────────────────────────────────
-  const handleApplyColors = useCallback((colors: Record<string, string>) => {
-    setLiveColors(colors)
-  }, [])
+  const handleAddSiblingTerminal = useCallback(async (parentTabId: string) => {
+    const cwd = await GetTerminalCwd(parentTabId).catch(() => '')
+    const newId = nextId()
+    const pane = findLeaf(layoutRoot, focusedPaneId)
+    dispatch({ type: 'add-terminal', id: newId, parentId: parentTabId, initialCwd: cwd || undefined, keepActive: true })
+    if (pane) {
+      setLayoutRoot(prev => addTabToLeaf(prev, pane.id, newId))
+    }
+  }, [layoutRoot, focusedPaneId])
 
-  const handleSaveTheme = useCallback(async (colors: Record<string, string>) => {
-    await SaveCustomTheme(colors)
-  }, [])
+  // ── Sidebar navigation ────────────────────────────────────────────────────────
 
+  const handleSidebarNavigate = useCallback((page: PageId) => {
+    setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: page })))
+  }, [focusedPaneId])
+
+  const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
+    const newId = nextId()
+    dispatch({ type: 'add-terminal', id: newId, keepActive: true })
+    const newLeaf = createLeaf([newId], newId, page)
+    const direction = (dir === 'left' || dir === 'right') ? 'h' : 'v'
+    const newLeafFirst = dir === 'left' || dir === 'up'
+    setLayoutRoot(prev => splitPaneInTree(prev, focusedPaneId, direction, newLeaf, newLeafFirst))
+    setFocusedPaneId(newLeaf.id)
+  }, [focusedPaneId])
+
+  // ── Theme helpers ─────────────────────────────────────────────────────────────
+  const handleApplyColors  = useCallback((colors: Record<string, string>) => setLiveColors(colors), [])
+  const handleSaveTheme    = useCallback(async (colors: Record<string, string>) => SaveCustomTheme(colors), [])
   const handleSaveSettings = useCallback(async (cfg: AppConfig) => {
     await SaveAppConfig(cfg as unknown as Parameters<typeof SaveAppConfig>[0])
     setAppConfig(cfg)
   }, [])
 
-  // ── panel split ──────────────────────────────────────────────────────────────
-
-  const closePanelB = useCallback(() => {
-    setPanelSplitAxis(null)
-    setPanelBPage(null)
-  }, [])
-
-  const handleSidebarNavigate = useCallback((page: PageId) => {
-    if (page === 'terminal') {
-      const current = tabs.find(t => t.id === activeId)
-      if (current?.type === 'ports') {
-        const parent = tabs.find(t => t.id === current.parentId && t.type === 'terminal')
-          ?? tabs.find(t => t.type === 'terminal')
-        if (parent && parent.id !== activeId) {
-          dispatch({ type: 'select', id: parent.id })
-          setFocusedPanel('left')
-        }
-      }
-    }
-    setActivePage(page)
-    if (page === panelBPage) closePanelB()
-  }, [tabs, activeId, panelBPage, closePanelB])
-
-  const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
-    if (dir === 'right' || dir === 'down') {
-      // Page goes into Panel B (right or bottom slot)
-      setPanelSplitAxis(dir === 'right' ? 'h' : 'v')
-      setPanelBPage(page)
-    } else {
-      // Page goes into Panel A (left or top slot)
-      setActivePage(page)
-      if (page === panelBPage) {
-        closePanelB()
-      } else if (panelBPage) {
-        // Already have a Panel B — keep it, just change axis
-        setPanelSplitAxis(dir === 'left' ? 'h' : 'v')
-      }
-    }
-  }, [panelBPage, closePanelB])
-
-  // ── derive active terminal ID ────────────────────────────────────────────────
-  const activeTerminalId = useMemo(() => {
-    const focused = focusedPanel === 'left' ? activeId : rightActiveId
-    const tab = tabs.find(t => t.id === focused)
-    if (tab?.type === 'terminal') return tab.id
-    return tabs.find(t => t.type === 'terminal')?.id ?? null
-  }, [focusedPanel, activeId, rightActiveId, tabs])
-
-  // The terminal tab that should be highlighted in the tab bar
-  const activeTerminalTabId = useMemo(() => {
-    if (!activeTerminalId) return activeId
-    return activeTerminalId
-  }, [activeTerminalId, activeId])
-
-  const activeCwd = useMemo(() => {
-    if (!activeTerminalId) return ''
-    return terminalCwds[activeTerminalId] ?? ''
-  }, [activeTerminalId, terminalCwds])
-
-  // ── tab assign ────────────────────────────────────────────────────────────────
-  const handleTabAssign = useCallback((tabId: string, panel: 'left' | 'right') => {
-    if (panel === 'right') handleMoveRight(tabId)
-    else handleMoveLeft(tabId)
-  }, [handleMoveRight, handleMoveLeft])
-
-  // ── problems helpers ──────────────────────────────────────────────────────────
-  const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
-    const result = await ScanProblems(cwd).catch(() => null)
-    if (!result) return
-    const r = result as { sources?: string[]; items?: ProbItem[] }
-    dispatch({ type: 'update-problems', id: tabId, sources: r.sources ?? [], items: r.items ?? [] })
-  }, [])
-
-  const handleOpenFileAtLine = useCallback(async (path: string, line: number, _col: number) => {
-    try {
-      const content = await ReadFile(path)
-      const lang    = await GetFileLanguage(path)
-      dispatch({ type: 'open-file', payload: { path, content, language: lang, gotoLine: line } })
-    } catch { /* file gone */ }
-  }, [])
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { path } = (e as CustomEvent<{ path: string }>).detail
-      if (path) void handleOpenFileAtLine(path, 0, 0)
-    }
-    window.addEventListener('ide:ctrl-click-file', handler)
-    return () => window.removeEventListener('ide:ctrl-click-file', handler)
-  }, [handleOpenFileAtLine])
-
-  // ── divider drag ──────────────────────────────────────────────────────────────
-  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    dragging.current = true
-
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current || !contentRef.current) return
-      const rect = contentRef.current.getBoundingClientRect()
-      const ratio = (ev.clientX - rect.left) / rect.width
-      setSplitRatio(Math.max(0.2, Math.min(0.8, ratio)))
-    }
-    const onUp = () => {
-      dragging.current = false
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [])
-
-  // ── render tab content (for terminal panels) ──────────────────────────────────
-  function renderTabContent(tab: Tab, isLeft: boolean) {
-    const isActive = isLeft ? tab.id === activeId : tab.id === rightActiveId
-
-    if (tab.type === 'terminal') {
-      return (
-        <Terminal
-          tabId={tab.id}
-          active={isActive && activePage === 'terminal'}
-          xtermTheme={resolvedTheme.xtermTheme}
-          initialCwd={tab.initialCwd}
-          defaultZoom={currentZoom}
-          commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
-          pluginCommands={pluginCommands}
-          quickPaths={loadRecentPaths()}
-          onCwdChange={cwd => {
-            setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))
-            const prev = pathDwellRef.current.get(tab.id)
-            if (prev && prev.path !== cwd) {
-              const dwell = Date.now() - prev.enteredAt
-              if (dwell >= 60000 || prev.relatedPageVisited) {
-                saveRecentPath(prev.path)
-              }
-            }
-            pathDwellRef.current.set(tab.id, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
-          }}
-        />
-      )
-    }
-    if (tab.type === 'editor') {
-      return (
-        <Editor
-          tabId={tab.id}
-          filePath={tab.filePath!}
-          content={tab.content ?? ''}
-          language={tab.language ?? 'plaintext'}
-          active={isActive}
-          indentGuides={appConfig.indent_guides}
-          monacoTheme={resolvedTheme.monacoThemeId}
-          monacoThemeDef={resolvedTheme.monacoThemeDef}
-          minimap={appConfig.minimap}
-          defaultZoom={currentZoom}
-          gotoLine={tab.gotoLine}
-        />
-      )
-    }
-    if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />
-    if (tab.type === 'problems') {
-      return (
-        <Problems
-          tabId={tab.id}
-          cwd={tab.problemsCwd!}
-          sources={tab.problemsSources ?? []}
-          items={tab.problemsItems ?? []}
-          scanning={false}
-          onRescan={(id, cwd) => { void handleRescanProblems(id, cwd) }}
-          onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }}
-        />
-      )
-    }
-    if (tab.type === 'preview') {
-      return (
-        <Preview
-          previewType={tab.previewType!}
-          src={tab.previewSrc!}
-          path={tab.previewPath!}
-        />
-      )
-    }
-    if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={isActive} />
-    if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={isActive} />
-    if (tab.type === 'plugins') {
-      if (!__PLUGINS__) return null
-      return <PluginStore onPluginChange={reloadPlugins} />
-    }
-    if (!__PLUGINS__) return null
-    const plugin = plugins[tab.type]
-    if (plugin?.TabComponent) {
-      const context: PluginContext = {
-        terminalId: tab.parentId,
-        cwd: tab.meta?.cwd,
-        executeCommand: tab.parentId
-          ? (cmd: string) => window.dispatchEvent(
-              new CustomEvent('plugin:execute', { detail: { terminalId: tab.parentId, cmd } })
-            )
-          : undefined,
-        openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
-      }
-      return (
-        <PluginErrorBoundary pluginName={plugin.name}>
-          <plugin.TabComponent tabId={tab.id} active={isActive} context={context} />
-        </PluginErrorBoundary>
-      )
-    }
-    return null
-  }
-
-  // ── Path dwell: mark related page visits ─────────────────────────────────────
-  useEffect(() => {
-    if (activePage === 'debug' || activePage === 'database' || activePage === 'editor') {
-      pathDwellRef.current.forEach(entry => {
-        entry.relatedPageVisited = true
-      })
-    }
-  }, [activePage])
-
-  // ── ProblemsPage inline state ─────────────────────────────────────────────────
+  // ── Problems helpers ──────────────────────────────────────────────────────────
   const [probSources,  setProbSources]  = useState<string[]>([])
   const [probItems,    setProbItems]    = useState<ProbItem[]>([])
   const [probScanning, setProbScanning] = useState(false)
@@ -967,8 +702,7 @@ export default function App() {
     ScanProblems(activeCwd)
       .then(result => {
         const r = result as { sources?: string[]; items?: ProbItem[] }
-        setProbSources(r.sources ?? [])
-        setProbItems(r.items ?? [])
+        setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
       })
       .catch(() => {})
       .finally(() => setProbScanning(false))
@@ -979,146 +713,311 @@ export default function App() {
 
   const handleCweScan = useCallback(async (scanCwd: string) => {
     setCweScanning(true)
-    try {
-      const result = await ScanCWE(scanCwd)
-      setCweItems(Array.isArray(result) ? result as CweItem[] : [])
-    } catch { /* ignore */ }
+    try { setCweItems(Array.isArray(await ScanCWE(scanCwd)) ? await ScanCWE(scanCwd) as CweItem[] : []) }
+    catch { /* ignore */ }
     setCweScanning(false)
   }, [])
 
-  // ── render ────────────────────────────────────────────────────────────────────
+  const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
+    const result = await ScanProblems(cwd).catch(() => null)
+    if (!result) return
+    const r = result as { sources?: string[]; items?: ProbItem[] }
+    dispatch({ type: 'update-problems', id: tabId, sources: r.sources ?? [], items: r.items ?? [] })
+  }, [])
+
+  const handleOpenFileAtLine = useCallback(async (path: string, line: number, _col: number) => {
+    try {
+      const content = await ReadFile(path)
+      const lang    = await GetFileLanguage(path)
+      dispatch({ type: 'open-file', payload: { path, content, language: lang, gotoLine: line } })
+    } catch { /* gone */ }
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      if (path) void handleOpenFileAtLine(path, 0, 0)
+    }
+    window.addEventListener('ide:ctrl-click-file', handler)
+    return () => window.removeEventListener('ide:ctrl-click-file', handler)
+  }, [handleOpenFileAtLine])
+
+  // ── Ctrl+C copy (handled before xterm) ────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'c') {
+        const sel = window.getSelection()?.toString()
+        if (sel) { e.preventDefault(); void navigator.clipboard.writeText(sel) }
+      }
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [])
+
+  // ── Render: pane sidebar page ─────────────────────────────────────────────────
+  function renderSidebarPage(pane: LeafPane, paneTerminalId: string | null, paneCwd: string): React.ReactNode {
+    return (
+      <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
+        {pane.activePage === 'editor' && (
+          <FullscreenIDE cwd={paneCwd} theme={resolvedTheme} indentGuides={appConfig.indent_guides}
+            minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom} />
+        )}
+        {pane.activePage === 'database' && (
+          <DatabasePage key={paneTerminalId ?? 'no-terminal'} terminalId={paneTerminalId} cwd={paneCwd}
+            initialDbPath={forcedDbPath} privacyMode={appConfig.database_privacy} />
+        )}
+        {pane.activePage === 'debug' && (
+          <Problems
+            tabId={(paneTerminalId ?? 'prb') + '-' + pane.id}
+            cwd={paneCwd} sources={probSources} items={probItems}
+            scanning={probScanning} cweItems={cweItems} cweScanning={cweScanning}
+            onRescan={async (_, scanCwd) => {
+              setProbScanning(true)
+              try {
+                const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
+                setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
+              } catch { /* ignore */ }
+              setProbScanning(false)
+            }}
+            onOpenFile={(path, line, col) => {
+              void handleOpenFileAtLine(path, line, col)
+              setLayoutRoot(prev => updateLeafInTree(prev, pane.id, l => ({ ...l, activePage: 'terminal' })))
+            }}
+            onCweScan={cwd => { void handleCweScan(cwd) }}
+          />
+        )}
+        {pane.activePage === 'settings' && (
+          <ConfigEditor appConfig={appConfig} onSaveSettings={handleSaveSettings}
+            onApply={handleApplyColors} onSaveTheme={handleSaveTheme} />
+        )}
+        {pane.activePage === 'plugins' && __PLUGINS__ && (
+          <PluginStore onPluginChange={reloadPlugins} />
+        )}
+      </div>
+    )
+  }
+
+  // ── Render: non-terminal tab content ─────────────────────────────────────────
+  function renderNonTerminalContent(tab: Tab): React.ReactNode {
+    if (tab.type === 'editor') {
+      return (
+        <Editor tabId={tab.id} filePath={tab.filePath!} content={tab.content ?? ''}
+          language={tab.language ?? 'plaintext'} active={true}
+          indentGuides={appConfig.indent_guides} monacoTheme={resolvedTheme.monacoThemeId}
+          monacoThemeDef={resolvedTheme.monacoThemeDef} minimap={appConfig.minimap}
+          defaultZoom={currentZoom} gotoLine={tab.gotoLine} />
+      )
+    }
+    if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />
+    if (tab.type === 'debug') {
+      return (
+        <Problems tabId={tab.id} cwd={tab.problemsCwd!} sources={tab.problemsSources ?? []}
+          items={tab.problemsItems ?? []} scanning={false}
+          onRescan={(id, cwd) => { void handleRescanProblems(id, cwd) }}
+          onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
+      )
+    }
+    if (tab.type === 'preview') return <Preview previewType={tab.previewType!} src={tab.previewSrc!} path={tab.previewPath!} />
+    if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} />
+    if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={true} />
+    if (tab.type === 'plugins' && __PLUGINS__) return <PluginStore onPluginChange={reloadPlugins} />
+    if (!__PLUGINS__) return null
+    const plugin = plugins[tab.type]
+    if (plugin?.TabComponent) {
+      const context: PluginContext = {
+        terminalId: tab.parentId, cwd: tab.meta?.cwd,
+        executeCommand: tab.parentId
+          ? (cmd: string) => window.dispatchEvent(new CustomEvent('plugin:execute', { detail: { terminalId: tab.parentId, cmd } }))
+          : undefined,
+        openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
+      }
+      return (
+        <PluginErrorBoundary pluginName={plugin.name}>
+          <plugin.TabComponent tabId={tab.id} active={true} context={context} />
+        </PluginErrorBoundary>
+      )
+    }
+    return null
+  }
+
+  // ── Render: leaf pane content callback ───────────────────────────────────────
+  const renderContent = useCallback((pane: LeafPane): React.ReactNode => {
+    const paneTabs = pane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+    const activeTab = paneTabs.find(t => t.id === pane.activeTabId)
+
+    const paneTerminalId = (activeTab?.type === 'terminal' ? activeTab.id : null)
+      ?? paneTabs.find(t => t.type === 'terminal')?.id ?? null
+    const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
+
+    if (pane.activePage !== 'terminal') {
+      return renderSidebarPage(pane, paneTerminalId, paneCwd)
+    }
+
+    if (paneTabs.length === 0) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <button
+            className="px-3 py-1.5 text-[12px] text-[var(--tab-color)] bg-surface-raised rounded-md border border-[var(--border-color)] hover:text-[var(--tab-color-hover)] cursor-pointer transition-colors"
+            onClick={() => handleNewTerminal(pane.id)}
+          >
+            New Terminal
+          </button>
+        </div>
+      )
+    }
+
+    const termTabs = paneTabs.filter(t => t.type === 'terminal')
+    const nonTermActive = activeTab && activeTab.type !== 'terminal'
+
+    return (
+      <>
+        {termTabs.map(tab => (
+          <div
+            key={tab.id}
+            className="absolute inset-0 flex flex-col"
+            style={{ display: (!nonTermActive && tab.id === pane.activeTabId) ? 'flex' : 'none' }}
+          >
+            <Terminal
+              tabId={tab.id}
+              active={tab.id === pane.activeTabId && pane.id === focusedPaneId && !nonTermActive}
+              xtermTheme={resolvedTheme.xtermTheme}
+              initialCwd={tab.initialCwd}
+              defaultZoom={currentZoom}
+              commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
+              pluginCommands={pluginCommands}
+              quickPaths={loadRecentPaths()}
+              onCwdChange={cwd => {
+                setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))
+                const prev = pathDwellRef.current.get(tab.id)
+                if (prev && prev.path !== cwd) {
+                  const dwell = Date.now() - prev.enteredAt
+                  if (dwell >= 60000 || prev.relatedPageVisited) saveRecentPath(prev.path)
+                }
+                pathDwellRef.current.set(tab.id, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
+              }}
+            />
+          </div>
+        ))}
+        {nonTermActive && (
+          <div className="absolute inset-0">
+            {renderNonTerminalContent(activeTab!)}
+          </div>
+        )}
+      </>
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs, terminalCwds, focusedPaneId, appConfig, currentZoom, resolvedTheme, pluginCommands, plugins,
+      forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal])
+
+  // ── Determine if tree has only one pane ───────────────────────────────────────
+  const isOnlyPane = useMemo(() => getAllLeaves(layoutRoot).length <= 1, [layoutRoot])
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+  const splitMenuItemCls = "flex items-center gap-2 w-full px-3 py-[7px] bg-transparent border-0 cursor-pointer text-[var(--info-bar-hover-color)] text-left font-ui text-[12px] whitespace-nowrap hover:bg-surface-raised transition-[background] duration-[100ms]"
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui" onContextMenu={e => e.preventDefault()}>
 
       {/* ── App header ──────────────────────────────────────────────────────────── */}
       <div className="flex h-[36px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none">
-        {/* Brand/logo placeholder — matches sidebar width, reserved for future branding */}
-        <div
-          className="w-[48px] shrink-0 border-r border-[var(--border-color)]"
-          style={{ ['--wails-draggable' as any]: 'no-drag' }}
-        />
-        {/* Navigation bar */}
-        <div
-          className="flex-1 flex items-center overflow-hidden"
+        <div className="w-[48px] shrink-0 border-r border-[var(--border-color)]"
+          style={{ ['--wails-draggable' as any]: 'no-drag' }} />
+
+        <div className="flex-1 flex items-center overflow-hidden"
           style={{ ['--wails-draggable' as any]: 'drag' }}
-          onDoubleClick={WindowToggleMaximise}
-        >
-        {/* Left: terminal tab bar (flex-1, scrollable) */}
-        <div
-          className="flex-1 min-w-0 h-full overflow-hidden"
-          style={{ ['--wails-draggable' as any]: 'no-drag' }}
-        >
-          <TabBar
-            panel="left"
-            tabs={terminalTabs}
-            activeId={activeTerminalTabId}
-            focused={focusedPanel === 'left'}
-            onSelect={handleLeftSelect}
-            onClose={id => dispatch({ type: 'close', id })}
-            onCloseOthers={_handleCloseOthers}
-            onMoveRight={handleMoveRight}
-            onMoveLeft={handleMoveLeft}
-            onNewTerminal={handleNewTab}
-            onAddSiblingTerminal={id => { void _handleAddSiblingTerminal(id) }}
-            onDrop={id => _handleTabDrop(id, 'left')}
-            onDuplicate={id => { void handleDuplicateTab(id) }}
-            onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
-            onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
-          />
-        </div>
+          onDoubleClick={WindowToggleMaximise}>
 
-        {/* Right: split, update badge, window controls */}
-        <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          {/* Draggable space */}
+          <div className="flex-1 h-full" />
 
-          {/* Split view */}
-          <button
-            className={"flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent border-0 cursor-pointer transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]" + (splitEnabled ? ' text-accent' : ' text-[var(--tab-color)]')}
-            onClick={() => setSplitModalOpen(true)}
-            title="Arrange split view layout"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="1" y="1" width="6" height="6" rx="1.2"/>
-              <rect x="9" y="1" width="6" height="6" rx="1.2"/>
-              <rect x="1" y="9" width="6" height="6" rx="1.2"/>
-              <rect x="9" y="9" width="6" height="6" rx="1.2"/>
-            </svg>
-          </button>
+          {/* Controls */}
+          <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
 
-          {/* Update badge */}
-          {updateTag && (
-            <button
-              className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
-              title={`Update available: ${updateTag} — click to install`}
-              onClick={() => PerformUpdate(updateTag).catch(() => {})}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+            {/* Split menu */}
+            <div className="relative" ref={splitMenuRef}>
+              <button
+                className={`flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent border-0 cursor-pointer transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised ${!isOnlyPane ? 'text-accent' : 'text-[var(--tab-color)]'} hover:text-[var(--tab-color-hover)]`}
+                onClick={() => setSplitMenuOpen(v => !v)}
+                title="Split pane"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="1" y="1" width="6" height="6" rx="1.2"/>
+                  <rect x="9" y="1" width="6" height="6" rx="1.2"/>
+                  <rect x="1" y="9" width="6" height="6" rx="1.2"/>
+                  <rect x="9" y="9" width="6" height="6" rx="1.2"/>
+                </svg>
+              </button>
+              {splitMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 z-[9999] min-w-[200px] shadow-overlay">
+                  <button className={splitMenuItemCls} onClick={() => { handleSplitPane(focusedPaneId, 'h'); setSplitMenuOpen(false) }}>
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                      <rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="7" y1="1" x2="7" y2="13"/>
+                    </svg>
+                    Split Pane Horizontally
+                  </button>
+                  <button className={splitMenuItemCls} onClick={() => { handleSplitPane(focusedPaneId, 'v'); setSplitMenuOpen(false) }}>
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                      <rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="1" y1="7" x2="13" y2="7"/>
+                    </svg>
+                    Split Pane Vertically
+                  </button>
+                </div>
+              )}
+            </div>
 
-          <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+            {/* Update badge */}
+            {updateTag && (
+              <button
+                className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
+                title={`Update available: ${updateTag} — click to install`}
+                onClick={() => PerformUpdate(updateTag).catch(() => {})}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
 
-          {/* Window controls */}
-          <div className="flex items-center gap-0.5">
-            <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
-              <svg width="10" height="2" viewBox="0 0 10 2">
-                <path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise">
-              <svg width="10" height="10" viewBox="0 0 10 10">
-                <rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-              </svg>
-            </button>
-            <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
-              <svg width="10" height="10" viewBox="0 0 10 10">
-                <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
+            <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+
+            {/* Window controls */}
+            <div className="flex items-center gap-0.5">
+              <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
+                <svg width="10" height="2" viewBox="0 0 10 2"><path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+              <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise">
+                <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+              </button>
+              <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
+                <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
           </div>
-        </div>
         </div>
       </div>
 
-      {/* ── Modals ───────────────────────────────────────────────────────────────── */}
-      <SplitModal
-        open={splitModalOpen}
-        tabs={tabs}
-        tabPanels={tabPanels}
-        splitEnabled={splitEnabled}
-        terminalCwds={terminalCwds}
-        onAssign={handleTabAssign}
-        onSetSplit={enabled => {
-          setSplitEnabled(enabled)
-          if (enabled && rightTabs.length === 0) handleRightNewTerminal()
-        }}
-        onDismiss={() => setSplitModalOpen(false)}
-      />
-
+      {/* ── Overlays ─────────────────────────────────────────────────────────────── */}
       {searchOpen && (
         <SearchPalette
           tabs={tabs}
           activeTerminalId={activeTerminalId}
-          onSelectTab={id => { handleLeftSelect(id); setSearchOpen(false) }}
-          onOpenFile={(path, line) => { void handleOpenFileAtLine(path, line ?? 0, 0); setActivePage('terminal'); setSearchOpen(false) }}
+          onSelectTab={id => {
+            const pane = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(id))
+            if (pane) { handleSelectTab(pane.id, id) }
+            setSearchOpen(false)
+          }}
+          onOpenFile={(path, line) => { void handleOpenFileAtLine(path, line ?? 0, 0); setSearchOpen(false) }}
           onClose={() => setSearchOpen(false)}
         />
       )}
 
-      <ZoomIndicator
-        enabled={appConfig.zoom_insights}
-        defaultZoom={appConfig.default_zoom}
-        onZoomChange={setCurrentZoom}
-      />
+      <ZoomIndicator enabled={appConfig.zoom_insights} defaultZoom={appConfig.default_zoom} onZoomChange={setCurrentZoom} />
 
-      {/* ── Body: sidebar + content ───────────────────────────────────────────── */}
+      {/* ── Body: sidebar + pane tree ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden flex">
 
-        {/* Sidebar */}
         <Sidebar
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
@@ -1126,224 +1025,29 @@ export default function App() {
           onPanelMove={handlePanelMove}
           onOpenPorts={() => {
             dispatch({ type: 'open-tab', tabType: 'ports', title: 'ports', terminalId: activeTerminalId ?? undefined })
-            setActivePage('terminal')
           }}
           showPlugins={__PLUGINS__}
         />
 
-        {/* Content — supports optional side-by-side or top/bottom panel split */}
-        <div className={`flex-1 overflow-hidden ${panelSplitAxis ? `flex ${panelSplitAxis === 'v' ? 'flex-col' : 'flex-row'}` : 'relative'}`}>
-
-          {/* ── Panel A (primary — always present) ────────────────────────────── */}
-          <div className={`${panelSplitAxis ? 'flex-1 relative' : 'absolute inset-0'} overflow-hidden`} ref={contentRef}>
-
-            {/* Terminal panels — always mounted, hidden when a page is active */}
-            <div
-              className="absolute inset-0"
-              style={{
-                visibility:    activePage === 'terminal' ? 'visible' : 'hidden',
-                pointerEvents: activePage === 'terminal' ? 'auto'    : 'none',
-              }}
-            >
-              {tabs.map(tab => {
-                const panel    = tabPanels[tab.id] ?? 'left'
-                const isLeft   = panel === 'left'
-                const isActive = isLeft ? tab.id === activeId : tab.id === rightActiveId
-                const visible  = isActive && (isLeft || splitEnabled)
-
-                let style: React.CSSProperties
-                if (!visible) {
-                  style = { display: 'none', left: 0, right: 0 }
-                } else if (!splitEnabled) {
-                  style = { display: 'flex', left: 0, right: 0 }
-                } else if (isLeft) {
-                  style = {
-                    display: 'flex',
-                    left: 0,
-                    width: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)`,
-                  }
-                } else {
-                  style = {
-                    display: 'flex',
-                    left: `calc(${splitRatio * 100}% + ${DIVIDER_PX / 2}px)`,
-                    right: 0,
-                  }
-                }
-
-                const isFocused = splitEnabled && (isLeft ? focusedPanel === 'left' : focusedPanel === 'right')
-
-                return (
-                  <div
-                    key={tab.id}
-                    className={`absolute top-0 bottom-0 flex flex-col overflow-hidden${isFocused ? ' pane--focused' : ''}`}
-                    style={style}
-                    onMouseDown={() => setFocusedPanel(isLeft ? 'left' : 'right')}
-                  >
-                    {renderTabContent(tab, isLeft)}
-                  </div>
-                )
-              })}
-
-              {splitEnabled && (
-                <div
-                  className="absolute top-0 bottom-0 w-[4px] cursor-col-resize bg-[var(--border-color)] z-20 transition-[background] duration-[180ms] hover:bg-[rgba(10,132,255,0.5)] active:bg-[rgba(10,132,255,0.5)]"
-                  style={{ left: `calc(${splitRatio * 100}% - ${DIVIDER_PX / 2}px)` }}
-                  onMouseDown={handleDividerMouseDown}
-                />
-              )}
-            </div>
-
-            {/* Page overlay — Panel A */}
-            {activePage !== 'terminal' && (
-              <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
-                {activePage === 'editor' && (
-                  <FullscreenIDE
-                    cwd={activeCwd}
-                    theme={resolvedTheme}
-                    indentGuides={appConfig.indent_guides}
-                    minimap={appConfig.minimap}
-                    wordWrap={appConfig.file_word_wrap}
-                    defaultZoom={currentZoom}
-                  />
-                )}
-                {activePage === 'database' && (
-                  <DatabasePage
-                    key={activeTerminalId ?? 'no-terminal'}
-                    terminalId={activeTerminalId}
-                    cwd={activeCwd}
-                    initialDbPath={forcedDbPath}
-                    privacyMode={appConfig.database_privacy}
-                  />
-                )}
-                {activePage === 'debug' && (
-                  <Problems
-                    tabId={activeTerminalId ?? 'problems-page'}
-                    cwd={activeCwd}
-                    sources={probSources}
-                    items={probItems}
-                    scanning={probScanning}
-                    cweItems={cweItems}
-                    cweScanning={cweScanning}
-                    onRescan={async (_, scanCwd) => {
-                      setProbScanning(true)
-                      try {
-                        const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
-                        setProbSources(r.sources ?? [])
-                        setProbItems(r.items ?? [])
-                      } catch { /* ignore */ }
-                      setProbScanning(false)
-                    }}
-                    onOpenFile={(path, line, col) => {
-                      void handleOpenFileAtLine(path, line, col)
-                      setActivePage('terminal')
-                    }}
-                    onCweScan={cwd => { void handleCweScan(cwd) }}
-                  />
-                )}
-                {activePage === 'settings' && (
-                  <ConfigEditor
-                    appConfig={appConfig}
-                    onSaveSettings={handleSaveSettings}
-                    onApply={handleApplyColors}
-                    onSaveTheme={handleSaveTheme}
-                  />
-                )}
-                {activePage === 'plugins' && __PLUGINS__ && (
-                  <PluginStore onPluginChange={reloadPlugins} />
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Panel B (secondary — only when split is active) ────────────────── */}
-          {panelSplitAxis && panelBPage && (
-            <>
-              {/* Split divider */}
-              <div className={panelSplitAxis === 'h'
-                ? 'w-[1px] bg-[var(--border-color)] shrink-0'
-                : 'h-[1px] bg-[var(--border-color)] shrink-0'}
-              />
-
-              {/* Panel B container */}
-              <div className="flex-1 overflow-hidden flex flex-col">
-
-                {/* Panel B header */}
-                <div className="flex items-center justify-between h-[28px] px-3 bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] shrink-0 select-none">
-                  <span className="text-[10.5px] font-ui font-semibold uppercase tracking-[0.07em] text-[var(--info-bar-color)]">
-                    {{ editor: 'Code Editor', database: 'Database', debug: 'Debug', settings: 'Settings', plugins: 'Plugins', terminal: 'Terminal' }[panelBPage] ?? panelBPage}
-                  </span>
-                  <button
-                    className="flex items-center justify-center w-5 h-5 rounded bg-transparent border-0 cursor-pointer text-[var(--info-bar-color)] transition-[background,color] duration-[100ms] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"
-                    onClick={closePanelB}
-                    title="Close panel"
-                  >
-                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
-                      <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Panel B page content */}
-                <div className="flex-1 overflow-hidden relative">
-                  {panelBPage === 'editor' && (
-                    <FullscreenIDE
-                      cwd={activeCwd}
-                      theme={resolvedTheme}
-                      indentGuides={appConfig.indent_guides}
-                      minimap={appConfig.minimap}
-                      wordWrap={appConfig.file_word_wrap}
-                      defaultZoom={currentZoom}
-                    />
-                  )}
-                  {panelBPage === 'database' && (
-                    <DatabasePage
-                      key={activeTerminalId ?? 'no-terminal'}
-                      terminalId={activeTerminalId}
-                      cwd={activeCwd}
-                      privacyMode={appConfig.database_privacy}
-                    />
-                  )}
-                  {panelBPage === 'debug' && (
-                    <Problems
-                      tabId={(activeTerminalId ?? 'problems-panelb') + '-b'}
-                      cwd={activeCwd}
-                      sources={probSources}
-                      items={probItems}
-                      scanning={probScanning}
-                      cweItems={cweItems}
-                      cweScanning={cweScanning}
-                      onRescan={async (_, scanCwd) => {
-                        setProbScanning(true)
-                        try {
-                          const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
-                          setProbSources(r.sources ?? [])
-                          setProbItems(r.items ?? [])
-                        } catch { /* ignore */ }
-                        setProbScanning(false)
-                      }}
-                      onOpenFile={(path, line, col) => {
-                        void handleOpenFileAtLine(path, line, col)
-                        setActivePage('terminal')
-                        closePanelB()
-                      }}
-                      onCweScan={cwd => { void handleCweScan(cwd) }}
-                    />
-                  )}
-                  {panelBPage === 'settings' && (
-                    <ConfigEditor
-                      appConfig={appConfig}
-                      onSaveSettings={handleSaveSettings}
-                      onApply={handleApplyColors}
-                      onSaveTheme={handleSaveTheme}
-                    />
-                  )}
-                  {panelBPage === 'plugins' && __PLUGINS__ && (
-                    <PluginStore onPluginChange={reloadPlugins} />
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+        <div className="flex-1 overflow-hidden">
+          <SplitPaneView
+            node={layoutRoot}
+            focusedPaneId={focusedPaneId}
+            allTabs={tabs}
+            isOnlyPane={isOnlyPane}
+            onFocus={handleFocusPane}
+            onSplit={handleSplitPane}
+            onClosePane={handleClosePane}
+            onRatioChange={handleRatioChange}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onNewTerminal={handleNewTerminal}
+            onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
+            onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
+            onDuplicate={id => { void handleDuplicateTab(id) }}
+            onDropTab={handleDropTab}
+            renderContent={renderContent}
+          />
         </div>
       </div>
 

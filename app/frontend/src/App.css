@@ -119,6 +119,14 @@
   z-index: 5;
 }
 
+/* ── Pane tab bar strip scrollbar ────────────────────────────────────────────── */
+.pane-tabbar__strip {
+  scrollbar-width: none;
+}
+.pane-tabbar__strip::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── xterm.js internals (target xterm's own DOM — cannot use Tailwind utilities) */
 .xterm { height: 100%; }
 .xterm-viewport {

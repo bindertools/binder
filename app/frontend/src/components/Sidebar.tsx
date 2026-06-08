@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
+import type { PageId } from '../paneModel'
 
-export type PageId = 'terminal' | 'editor' | 'database' | 'debug' | 'settings' | 'plugins'
+export type { PageId }
 
 interface Props {
   activePage:   PageId
