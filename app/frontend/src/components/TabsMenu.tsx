@@ -132,7 +132,7 @@ export default function TabsMenu({
       <div className="fixed inset-0 z-[9996]" onClick={onDismiss} />
 
       {/* drawer panel */}
-      <div className="fixed top-[42px] left-0 z-[9997] w-[290px] flex flex-col bg-[var(--info-bar-bg)] border-r border-b border-[var(--border-color)] rounded-br-xl shadow-[var(--shadow-overlay)] max-h-[calc(100vh-52px)]">
+      <div className="fixed top-[36px] left-0 z-[9997] w-[290px] flex flex-col bg-[var(--info-bar-bg)] border-r border-b border-[var(--border-color)] rounded-br-xl shadow-[var(--shadow-overlay)] max-h-[calc(100vh-46px)]">
 
         {/* ── search ─────────────────────────────────────────────────────────── */}
         <div className="px-2.5 py-2 border-b border-[var(--border-color)] shrink-0">

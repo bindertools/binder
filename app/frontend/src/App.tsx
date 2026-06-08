@@ -993,7 +993,7 @@ export default function App() {
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui" onContextMenu={e => e.preventDefault()}>
 
       {/* ── App header ──────────────────────────────────────────────────────────── */}
-      <div className="flex h-[42px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none">
+      <div className="flex h-[36px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none">
         {/* Brand/logo placeholder — matches sidebar width, reserved for future branding */}
         <div
           className="w-[48px] shrink-0 border-r border-[var(--border-color)]"

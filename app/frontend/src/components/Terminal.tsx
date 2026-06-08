@@ -1095,7 +1095,7 @@ export default function Terminal({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {commandAlignment === 'top' && inputBar}
-      <div ref={containerRef} className="flex-1 px-2 py-1.5 bg-[var(--app-bg)] overflow-hidden" />
+      <div ref={containerRef} className="flex-1 px-3 py-2 bg-[var(--app-bg)] overflow-hidden" />
       {commandAlignment === 'bottom' && inputBar}
 
       {menu && ReactDOM.createPortal(

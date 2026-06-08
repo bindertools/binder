@@ -11,10 +11,7 @@
   border-right: 1px solid transparent;
 }
 
-/* Separator lines between tabs */
-.tabbar__tab + .tabbar__tab {
-  border-left: 1px solid var(--sep, rgba(255,255,255,0.06));
-}
+/* No separator lines — tabs flow as a single unified strip */
 
 /* Active tab: slightly elevated + bottom border indicator */
 .tabbar__tab--active {
