@@ -32,6 +32,7 @@ import {
   ScanProblems, ScanCWE, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate,
 } from '../wailsjs/go/main/App'
 import { useDragRegions } from './lib/useDragRegions'
+import { useShortcuts, loadKeybindings, saveKeybindings, type ShortcutHandlers } from './lib/useShortcuts'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
 
@@ -375,8 +376,9 @@ export default function App() {
     const saved = parseFloat(localStorage.getItem('cmdide_zoom') ?? '')
     return isFinite(saved) && saved > 0 ? saved : defaultConfig.default_zoom
   })
-  const [liveColors, setLiveColors] = useState<Record<string, string> | null>(null)
-  const [updateTag,  setUpdateTag]  = useState<string>('')
+  const [liveColors,      setLiveColors]      = useState<Record<string, string> | null>(null)
+  const [updateTag,       setUpdateTag]       = useState<string>('')
+  const [customBindings,  setCustomBindings]  = useState<Record<string, string>>(loadKeybindings)
 
   const resolvedTheme = useMemo(() => {
     if (liveColors) return customColorsToTheme(liveColors)
@@ -615,13 +617,35 @@ export default function App() {
   }, [])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (e.key === 'k' || e.key === '`')) { e.preventDefault(); setSearchOpen(v => !v) }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+  const shortcutHandlers: ShortcutHandlers = {
+    'next-tab': () => {
+      if (!focusedPane) return
+      const idx  = focusedPane.tabIds.indexOf(focusedPane.activeTabId)
+      const next = focusedPane.tabIds[(idx + 1) % focusedPane.tabIds.length]
+      if (next) handleSelectTab(focusedPane.id, next)
+    },
+    'prev-tab': () => {
+      if (!focusedPane) return
+      const n    = focusedPane.tabIds.length
+      const idx  = focusedPane.tabIds.indexOf(focusedPane.activeTabId)
+      const prev = focusedPane.tabIds[(idx - 1 + n) % n]
+      if (prev) handleSelectTab(focusedPane.id, prev)
+    },
+    'close-tab':     () => { if (focusedPane) handleCloseTab(focusedPane.activeTabId) },
+    'new-terminal':  () => { if (focusedPane) handleNewTerminal(focusedPane.id) },
+    'open-search':   () => setSearchOpen(v => !v),
+    'go-terminal':   () => handleSidebarNavigate('terminal'),
+    'go-editor':     () => handleSidebarNavigate('editor'),
+    'open-settings': () => handleSidebarNavigate('settings'),
+    ...Object.fromEntries(
+      [1,2,3,4,5,6,7,8,9].map(n => [`tab-${n}`, () => {
+        if (!focusedPane) return
+        const id = focusedPane.tabIds[n - 1]
+        if (id) handleSelectTab(focusedPane.id, id)
+      }]),
+    ),
+  }
+  useShortcuts(shortcutHandlers, customBindings)
 
   // ── Split menu close on outside click ─────────────────────────────────────────
   useEffect(() => {
@@ -750,6 +774,11 @@ export default function App() {
     setAppConfig(cfg)
   }, [])
 
+  const handleSaveKeybindings = useCallback((bindings: Record<string, string>) => {
+    saveKeybindings(bindings)
+    setCustomBindings(bindings)
+  }, [])
+
   // ── Problems helpers ──────────────────────────────────────────────────────────
   const [probSources,  setProbSources]  = useState<string[]>([])
   const [probItems,    setProbItems]    = useState<ProbItem[]>([])
@@ -849,7 +878,8 @@ export default function App() {
         )}
         {pane.activePage === 'settings' && (
           <ConfigEditor appConfig={appConfig} onSaveSettings={handleSaveSettings}
-            onApply={handleApplyColors} onSaveTheme={handleSaveTheme} />
+            onApply={handleApplyColors} onSaveTheme={handleSaveTheme}
+            keybindings={customBindings} onSaveKeybindings={handleSaveKeybindings} />
         )}
         {pane.activePage === 'plugins' && __PLUGINS__ && (
           <PluginStore onPluginChange={reloadPlugins} />
