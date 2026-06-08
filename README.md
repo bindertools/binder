@@ -87,7 +87,7 @@ Download the latest release from the [Releases](https://github.com/Command-IDE/c
 
 | Artifact | Description |
 |---|---|
-| `cmdIDE-installer.exe` | Standard Windows installer |
+| `cmdIDE-setup.exe` | Windows setup |
 | `cmdIDE.exe` | Portable Windows build — unzip and run, no install required |
 | `cmdIDE-macos.zip` | macOS universal binary |
 | `cmdIDE-linux` | Linux binary (amd64) |
