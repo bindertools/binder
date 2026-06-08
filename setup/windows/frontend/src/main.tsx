@@ -24,5 +24,5 @@ async function mountApp() {
 mountApp().catch(err => {
   // Last-resort: render a plain error so the user sees something
   document.body.innerHTML = `<div style="color:white;padding:20px;font-family:sans-serif">
-    <h2>Installer failed to load</h2><pre>${String(err)}</pre></div>`
+    <h2>Setup failed to load</h2><pre>${String(err)}</pre></div>`
 })

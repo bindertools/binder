@@ -148,7 +148,7 @@ static std::string BuildInlineHtml(const std::string& extractDir) {
     html << "<!DOCTYPE html><html lang=\"en\"><head>"
          << "<meta charset=\"UTF-8\"/>"
          << "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>"
-         << "<title>cmdIDE Installer</title>"
+         << "<title>cmdIDE Setup</title>"
          << "<style>" << css << "</style>"
          << "</head><body><div id=\"root\"></div>"
          << "<script type=\"module\">" << js << "</script>"
@@ -178,7 +178,7 @@ static void MakeFrameless(HWND hwnd, int w, int h) {
 
 #else
 static std::string ExtractInstallerAssets() { return ""; }
-static std::string BuildInlineHtml(const std::string&) { return "<html><body>Installer</body></html>"; }
+static std::string BuildInlineHtml(const std::string&) { return "<html><body>Setup</body></html>"; }
 static void MakeFrameless(void*, int, int) {}
 #endif
 
@@ -278,11 +278,11 @@ int main(int, char**) {
 #endif
     std::string root = ExtractInstallerAssets();
     std::string html = root.empty()
-        ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Installer Error: Could not extract assets</h2></body></html>"
+        ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Setup Error: Could not extract assets</h2></body></html>"
         : BuildInlineHtml(root);
 
     webview::webview wv(false, nullptr);  // debug=false for release
-    wv.set_title("cmdIDE Installer");
+    wv.set_title("cmdIDE Setup");
     wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
 
 #ifdef _WIN32
