@@ -61,9 +61,9 @@ jobs:
         run: npm.cmd ci
         working-directory: app/frontend
 
-      - name: Install installer frontend dependencies
+      - name: Install setup frontend dependencies
         run: npm.cmd ci
-        working-directory: installer/windows/frontend
+        working-directory: setup/windows/frontend
 
       - name: Analyze with CodeQL
         uses: github/codeql-action/analyze@v4

@@ -7,7 +7,7 @@ if(WIN32)
 
     # Embed the installer frontend as a zip RC resource
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    set(INSTALLER_DIST "${CMAKE_SOURCE_DIR}/../installer/windows/frontend/dist")
+    set(INSTALLER_DIST "${CMAKE_SOURCE_DIR}/../setup/windows/frontend/dist")
     set(GENERATED_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/generated")
     set(GENERATED_ZIP  "${GENERATED_DIR}/frontend.zip")
 

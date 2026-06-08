@@ -41,17 +41,17 @@ jobs:
         run: npm.cmd ci
         working-directory: app/frontend
 
-      - name: Install installer frontend dependencies
+      - name: Install setup frontend dependencies
         run: npm.cmd ci
-        working-directory: installer/windows/frontend
+        working-directory: setup/windows/frontend
 
       - name: Build app frontend
         run: npm.cmd run build
         working-directory: app/frontend
 
-      - name: Build installer frontend
+      - name: Build setup frontend
         run: npm.cmd run build
-        working-directory: installer/windows/frontend
+        working-directory: setup/windows/frontend
 
       - name: TypeScript type check (app)
         run: npm.cmd run typecheck

@@ -81,13 +81,13 @@ function Cmake-Configure {
 # =============================================================================
 if (-not $AppOnly) {
     Step "Frontend build - installer"
-    Push-Location (Join-Path $root 'installer/windows/frontend')
+    Push-Location (Join-Path $root 'setup/windows/frontend')
     if (-not (Test-Path 'node_modules')) { npm install }
     npm run build
     $code = $LASTEXITCODE
     Pop-Location
     if ($code -ne 0) { Fail "Installer frontend npm build failed" }
-    Ok "Built -> installer/windows/frontend/dist/"
+    Ok "Built -> setup/windows/frontend/dist/"
 }
 
 # =============================================================================

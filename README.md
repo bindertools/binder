@@ -175,7 +175,7 @@ cmd-ide/
 │   ├── powershell/       # PowerShell shell backend (git submodule)
 │   ├── bash/             # Bash shell backend (git submodule)
 │   └── zsh/              # Zsh shell backend (git submodule)
-├── installer/            # Installer application
+├── setup/                # Setup application
 ├── packages/
 │   └── plugin-sdk/       # Plugin SDK for community plugin authors
 ├── docs/                 # Documentation

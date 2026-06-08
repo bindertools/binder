@@ -2,12 +2,12 @@
 app/frontend/dist
 app/frontend/node_modules
 app/frontend/package.json.md5
-installer/windows/frontend/dist
-installer/windows/frontend/node_modules
+setup/windows/frontend/dist
+setup/windows/frontend/node_modules
 
 # Old Wails/Go build artifacts (no longer used)
 app/build/
-installer/build/
+setup/build/
 
 # Stale root-level artifacts
 /build/
