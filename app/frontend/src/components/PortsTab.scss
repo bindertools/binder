@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -82,7 +82,7 @@
 
 .ports__th {
   text-align: left;
-  padding: 8px 14px;
+  padding: 9px 14px;
   background: var(--info-bar-bg);
   border-bottom: 1px solid var(--border-color);
   color: var(--info-bar-color);
@@ -98,7 +98,7 @@
 .ports__th--active       { color: var(--accent); }
 
 .ports__row:hover { background: var(--surface-raised); }
-.ports__row td    { padding: 8px 14px; border-bottom: 1px solid var(--sep); font-family: var(--font-mono); }
+.ports__row td    { padding: 9px 14px; border-bottom: 1px solid var(--sep); font-family: var(--font-mono); }
 
 .ports__port    { color: var(--accent); font-weight: 600; }
 .ports__proto   { color: var(--info-bar-color); font-family: var(--font-ui); }
@@ -137,10 +137,15 @@
 .ports__kill:disabled { opacity: 0.35; cursor: default; }
 
 .ports__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   text-align: center;
   color: var(--info-bar-color);
-  padding: 48px;
+  padding: 64px 32px;
   font-size: 13px;
+  opacity: 0.7;
 }
 
 /* ── Skeleton ────────────────────────────────────────────────────────────────── */
