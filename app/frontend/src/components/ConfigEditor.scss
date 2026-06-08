@@ -529,3 +529,86 @@
   transition: border-color var(--t-fast);
 }
 .sp-ansi-swatch:hover { border-color: var(--sep-strong); }
+
+/* ── Keyboard Shortcuts section ──────────────────────────────────────────────── */
+.sp-sc {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sp-sc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sp-sc-ctrl {
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* kbd binding button */
+.sp-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  background: var(--app-bg);
+  border: 1px solid var(--sep);
+  border-radius: var(--r-sm);
+  color: var(--info-bar-hover-color);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--t-fast), background var(--t-fast);
+  flex-shrink: 0;
+}
+.sp-kbd:hover { border-color: var(--sep-strong); background: var(--surface-raised); }
+
+.sp-kbd--capturing {
+  border-color: var(--accent-border);
+  color: var(--accent-hover);
+  animation: sp-pulse 1s ease-in-out infinite alternate;
+  min-width: 120px;
+  justify-content: center;
+}
+
+@keyframes sp-pulse {
+  from { opacity: 0.6; }
+  to   { opacity: 1;   }
+}
+
+.sp-kbd kbd {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.sp-kbd-plus {
+  opacity: 0.4;
+  margin: 0 1px;
+  font-size: 10px;
+}
+
+.sp-kbd-reset {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--sep);
+  border-radius: var(--r-xs);
+  color: var(--info-bar-color);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--t-fast), color var(--t-fast);
+  padding: 0;
+}
+.sp-kbd-reset:hover { border-color: var(--sep-strong); color: var(--info-bar-hover-color); }

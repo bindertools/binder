@@ -6,19 +6,22 @@ import {
   themeToCustomColors,
 } from '../themes'
 import { AppConfig } from '../types'
+import { SHORTCUT_DEFS, eventToKey, setShortcutsPaused } from '../lib/useShortcuts'
 import { SelectDirectory } from '../../wailsjs/go/main/App'
 import './ConfigEditor.scss'
 
 interface Props {
-  appConfig:      AppConfig
-  onSaveSettings: (cfg: AppConfig) => Promise<void>
-  onApply:        (colors: Record<string, string>) => void
-  onSaveTheme:    (colors: Record<string, string>) => Promise<void>
+  appConfig:           AppConfig
+  onSaveSettings:      (cfg: AppConfig) => Promise<void>
+  onApply:             (colors: Record<string, string>) => void
+  onSaveTheme:         (colors: Record<string, string>) => Promise<void>
+  keybindings?:        Record<string, string>
+  onSaveKeybindings?:  (bindings: Record<string, string>) => void
 }
 
 // ── Section definitions ────────────────────────────────────────────────────────
 
-type SectionId = 'general' | 'appearance' | 'preferences'
+type SectionId = 'general' | 'appearance' | 'preferences' | 'shortcuts'
 
 const SECTIONS: Array<{ id: SectionId; label: string; description: string; icon: React.ReactNode }> = [
   {
@@ -51,6 +54,17 @@ const SECTIONS: Array<{ id: SectionId; label: string; description: string; icon:
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="8" cy="8" r="2"/>
         <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M3.2 12.8l1.1-1.1M11.7 4.3l1.1-1.1"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'shortcuts',
+    label: 'Shortcuts',
+    description: 'Keyboard shortcuts and keybindings',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="14" height="9" rx="1.5"/>
+        <path d="M4 7.5h.01M7 7.5h.01M10 7.5h.01M4 10h8"/>
       </svg>
     ),
   },
@@ -92,7 +106,7 @@ function seedColors(theme: string, saved: Record<string, string>): Record<string
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSaveTheme }: Props) {
+export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSaveTheme, keybindings = {}, onSaveKeybindings }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>('general')
   const [cfg, setCfg]                     = useState<AppConfig>({ ...appConfig })
   const cfgRef                            = useRef(cfg)
@@ -301,6 +315,9 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
           )}
           {activeSection === 'preferences' && (
             <PreferencesSection cfg={cfg} updateCfg={updateCfg} onToggle={handleToggle} />
+          )}
+          {activeSection === 'shortcuts' && onSaveKeybindings && (
+            <ShortcutsSection keybindings={keybindings} onSave={onSaveKeybindings} />
           )}
         </div>
 
@@ -698,6 +715,132 @@ function AnsiGrid({ colors, onChange }: { colors: Record<string, string>; onChan
           <ColorSwatch colorKey={pair.bright}  value={colors[pair.bright]  ?? '#666666'} onChange={onChange} />
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Section: Keyboard Shortcuts ────────────────────────────────────────────────
+
+const SHORTCUT_GROUPS = [...new Set(SHORTCUT_DEFS.map(d => d.group))]
+
+function ShortcutsSection({
+  keybindings,
+  onSave,
+}: {
+  keybindings: Record<string, string>
+  onSave: (bindings: Record<string, string>) => void
+}) {
+  const [bindings,   setBindings]   = useState<Record<string, string>>(keybindings)
+  const [capturing,  setCapturing]  = useState<string | null>(null)
+  const [query,      setQuery]      = useState('')
+  const bindingsRef = useRef(bindings)
+
+  useEffect(() => { setBindings(keybindings) }, [keybindings])
+  useEffect(() => { bindingsRef.current = bindings }, [bindings])
+
+  // Key capture for rebinding
+  useEffect(() => {
+    if (!capturing) return
+    setShortcutsPaused(true)
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
+      if (e.key === 'Escape') { setCapturing(null); setShortcutsPaused(false); return }
+      const key = eventToKey(e)
+      const next = { ...bindingsRef.current, [capturing]: key }
+      setBindings(next)
+      onSave(next)
+      setCapturing(null)
+      setShortcutsPaused(false)
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => { window.removeEventListener('keydown', handler, true); setShortcutsPaused(false) }
+  }, [capturing, onSave])
+
+  const filtered = query
+    ? SHORTCUT_DEFS.filter(d =>
+        d.label.toLowerCase().includes(query.toLowerCase()) ||
+        d.description.toLowerCase().includes(query.toLowerCase()),
+      )
+    : SHORTCUT_DEFS
+
+  const resetAll = () => {
+    setBindings({})
+    onSave({})
+  }
+
+  return (
+    <div className="sp-sc">
+      <div className="sp-sc-toolbar">
+        <input
+          className="sp-text-input"
+          placeholder="Search shortcuts…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+        <button className="sp-btn sp-btn--ghost sp-btn--sm" onClick={resetAll}>Reset all</button>
+      </div>
+
+      {SHORTCUT_GROUPS.map(group => {
+        const defs = filtered.filter(d => d.group === group)
+        if (defs.length === 0) return null
+        return (
+          <SettingGroup key={group} title={group}>
+            {defs.map(def => {
+              const bound     = bindings[def.id] ?? def.defaultKey
+              const isDefault = !(def.id in bindings) || bindings[def.id] === def.defaultKey
+              return (
+                <div key={def.id} className="sp-row">
+                  <div className="sp-row-text">
+                    <div className="sp-row-label">{def.label}</div>
+                    <div className="sp-row-desc">{def.description}</div>
+                  </div>
+                  <div className="sp-row-ctrl sp-sc-ctrl">
+                    {capturing === def.id ? (
+                      <button
+                        className="sp-kbd sp-kbd--capturing"
+                        onClick={() => setCapturing(null)}
+                      >
+                        Press any key…
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="sp-kbd"
+                          onClick={() => setCapturing(def.id)}
+                          title="Click to rebind"
+                        >
+                          {bound.split('+').map((k, i) => (
+                            <React.Fragment key={i}>
+                              {i > 0 && <span className="sp-kbd-plus">+</span>}
+                              <kbd>{k}</kbd>
+                            </React.Fragment>
+                          ))}
+                        </button>
+                        {!isDefault && (
+                          <button
+                            className="sp-kbd-reset"
+                            title="Reset to default"
+                            onClick={() => {
+                              const next = { ...bindingsRef.current }
+                              delete next[def.id]
+                              setBindings(next)
+                              onSave(next)
+                            }}
+                          >
+                            ↺
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </SettingGroup>
+        )
+      })}
     </div>
   )
 }
