@@ -27,7 +27,7 @@ cpp/build-dev/
 
 # C++ auto-generated assets
 cpp/host/generated/
-cpp/installer/generated/
+cpp/setup/generated/
 
 # vcpkg installed packages (manifest mode installs locally)
 cpp/vcpkg_installed/

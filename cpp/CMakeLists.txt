@@ -73,6 +73,6 @@ if(WIN32)
     )
 endif()
 
-# ── WebView host and installer ─────────────────────────────────────────────────
+# ── WebView host and setup ─────────────────────────────────────────────────────
 add_subdirectory(host)
-add_subdirectory(installer)
+add_subdirectory(setup)
