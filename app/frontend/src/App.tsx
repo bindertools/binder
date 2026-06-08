@@ -974,6 +974,7 @@ export default function App() {
       .finally(() => setProbScanning(false))
   }, [activePage, activeCwd])
 
+  useEffect(() => { setProbItems([]); setProbSources([]) }, [activeCwd])
   useEffect(() => { setCweItems([]) }, [activeCwd])
 
   const handleCweScan = useCallback(async (scanCwd: string) => {
@@ -1207,6 +1208,7 @@ export default function App() {
                 )}
                 {activePage === 'database' && (
                   <DatabasePage
+                    key={activeTerminalId ?? 'no-terminal'}
                     terminalId={activeTerminalId}
                     cwd={activeCwd}
                     initialDbPath={forcedDbPath}
@@ -1295,6 +1297,7 @@ export default function App() {
                   )}
                   {panelBPage === 'database' && (
                     <DatabasePage
+                      key={activeTerminalId ?? 'no-terminal'}
                       terminalId={activeTerminalId}
                       cwd={activeCwd}
                       privacyMode={appConfig.database_privacy}
