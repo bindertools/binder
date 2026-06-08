@@ -252,7 +252,55 @@ const defaultConfig: AppConfig = {
   preferred_shell: '', database_privacy: false,
 }
 
-const LAYOUT_STORAGE_KEY = 'cmdide_pane_layout'
+const LAYOUT_STORAGE_KEY = 'cmdide_pane_layout_v2'
+
+// ── Layout persistence helpers ────────────────────────────────────────────────
+// Layouts are stored using tab-array INDICES (not IDs) so they survive
+// session restores that generate fresh tab IDs.
+
+function saveLayoutToStorage(root: PaneNode, tabs: Tab[], focusedId: string) {
+  try {
+    const idxOf = new Map(tabs.map((t, i) => [t.id, i]))
+    function ser(node: PaneNode): unknown {
+      if (node.type === 'leaf') {
+        const ii = node.tabIds.map(id => idxOf.get(id) ?? -1).filter(i => i >= 0)
+        const ai = idxOf.get(node.activeTabId) ?? 0
+        return { t: 'l', id: node.id, ii, ai, pg: node.activePage }
+      }
+      return { t: 's', id: node.id, dir: node.direction, r: node.ratio,
+               a: ser(node.first), b: ser(node.second) }
+    }
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ tree: ser(root), fid: focusedId }))
+  } catch { /* ignore */ }
+}
+
+function restoreLayoutFromStorage(tabs: Tab[]): { root: PaneNode; focusedId: string } | null {
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
+    if (!raw) return null
+    const { tree, fid } = JSON.parse(raw)
+    function des(node: { t: string; id: string; ii?: number[]; ai?: number; pg?: string; dir?: 'h' | 'v'; r?: number; a?: unknown; b?: unknown }): PaneNode | null {
+      if (node.t === 'l') {
+        const tabIds = (node.ii ?? []).filter(i => i >= 0 && i < tabs.length).map(i => tabs[i].id)
+        if (tabIds.length === 0) return null
+        const ai = node.ai ?? 0
+        const activeTabId = ai >= 0 && ai < tabs.length ? tabs[ai].id : tabIds[0]
+        return { type: 'leaf', id: node.id, tabIds, activeTabId, activePage: (node.pg ?? 'terminal') as LeafPane['activePage'] }
+      }
+      if (!node.a || !node.b) return null
+      const first  = des(node.a as typeof node)
+      const second = des(node.b as typeof node)
+      if (!first && !second) return null
+      if (!first)  return second!
+      if (!second) return first
+      return { type: 'split', id: node.id, direction: node.dir!, ratio: node.r ?? 0.5, first, second }
+    }
+    const root = des(tree)
+    if (!root) return null
+    const focusedId = fid && findLeaf(root, fid) ? fid : getFirstLeaf(root).id
+    return { root, focusedId }
+  } catch { return null }
+}
 
 const initialTab  = makeTerminalTab()
 const initialLeaf = createLeaf([initialTab.id], initialTab.id)
@@ -387,6 +435,11 @@ export default function App() {
     }
   }, [layoutRoot, focusedPaneId])
 
+  // ── Persistence: save layout on change ───────────────────────────────────────
+  useEffect(() => {
+    saveLayoutToStorage(layoutRoot, tabs, focusedPaneId)
+  }, [layoutRoot, tabs, focusedPaneId])
+
   // ── Sync: path dwell for debug pages ─────────────────────────────────────────
   useEffect(() => {
     if (activePage === 'debug' || activePage === 'database' || activePage === 'editor') {
@@ -435,7 +488,15 @@ export default function App() {
           } catch { /* gone */ }
         }
       }
-      if (restoredTabs.length > 0) dispatch({ type: 'restore-session', tabs: restoredTabs })
+      if (restoredTabs.length > 0) {
+        dispatch({ type: 'restore-session', tabs: restoredTabs })
+        // Restore pane layout using position indices into the restored tabs array
+        const saved = restoreLayoutFromStorage(restoredTabs)
+        if (saved) {
+          setLayoutRoot(saved.root)
+          setFocusedPaneId(saved.focusedId)
+        }
+      }
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appConfig.soft_close])
