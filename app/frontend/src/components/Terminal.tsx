@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom'
 import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import type { InstalledPluginCommand } from '../plugins'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
@@ -231,6 +233,20 @@ export default function Terminal({
       window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId } }))
     }))
     term.open(container)
+
+    // GPU-accelerated rendering: WebGL primary, Canvas fallback, DOM last resort.
+    // Must be loaded after open() so the canvas element exists.
+    const tryCanvas = () => {
+      try { term.loadAddon(new CanvasAddon()) } catch { /* stay on DOM renderer */ }
+    }
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => { webgl.dispose(); tryCanvas() })
+      term.loadAddon(webgl)
+    } catch {
+      tryCanvas()
+    }
+
     if (container.offsetWidth > 0 && container.offsetHeight > 0) fitAddon.fit()
     termRef.current = term
     fitRef.current = fitAddon
