@@ -2,18 +2,18 @@
 # build.ps1 - Builds all C++ release artifacts.
 #
 # Output artifacts:
-#   cmdIDE-windows-amd64.exe     - main app (plugin manager included as standard)
-#   cmdIDE-installer-windows.exe - stable installer
-#   cmdIDE-installer-dev-windows.exe - dev-channel installer
+#   cmdIDE-windows-amd64.exe - main app (plugin manager included as standard)
+#   cmdIDE-setup-windows.exe - stable setup
+#   cmdIDE-setup-dev-windows.exe - dev-channel setup
 #
 # Flags:
-#   -AppOnly        build app only, skip installer
-#   -InstallerOnly  build installer only
+#   -AppOnly    build app only, skip setup
+#   -SetupOnly  build setup only
 #   -Version        version string (e.g. "v1.2.3")
 
 param(
     [switch]$AppOnly,
-    [switch]$InstallerOnly,
+    [switch]$SetupOnly,
     [string]$Version = ''
 )
 
@@ -37,8 +37,8 @@ Write-Host "`n  Platform : $platform" -ForegroundColor DarkGray
 
 # -- Artifact names ------------------------------------------------------------
 $appName     = "cmdIDE-$platform-amd64$binExt"
-$instName    = "cmdIDE-installer-$platform$binExt"
-$instDevName = "cmdIDE-installer-dev-$platform$binExt"
+$setupName    = "cmdIDE-setup-$platform$binExt"
+$setupDevName = "cmdIDE-setup-dev-$platform$binExt"
 
 # -- Locate vcpkg --------------------------------------------------------------
 $vcpkgRoot = $env:VCPKG_ROOT
@@ -77,23 +77,23 @@ function Cmake-Configure {
 }
 
 # =============================================================================
-# STEP 1 - Installer frontend
+# STEP 1 - Setup frontend
 # =============================================================================
 if (-not $AppOnly) {
-    Step "Frontend build - installer"
+    Step "Frontend build - setup"
     Push-Location (Join-Path $root 'setup/windows/frontend')
     if (-not (Test-Path 'node_modules')) { npm install }
     npm run build
     $code = $LASTEXITCODE
     Pop-Location
-    if ($code -ne 0) { Fail "Installer frontend npm build failed" }
+    if ($code -ne 0) { Fail "Setup frontend npm build failed" }
     Ok "Built -> setup/windows/frontend/dist/"
 }
 
 # =============================================================================
 # STEP 2 - App frontend (plugin manager always included as standard)
 # =============================================================================
-if (-not $InstallerOnly) {
+if (-not $SetupOnly) {
     Step "Frontend build - app (plugins standard)"
     Push-Location (Join-Path $root 'app/frontend')
     if (-not (Test-Path 'node_modules')) { npm install }
@@ -116,7 +116,7 @@ Ok "Configured -> cpp/build"
 # =============================================================================
 # STEP 4 - Build app
 # =============================================================================
-if (-not $InstallerOnly) {
+if (-not $SetupOnly) {
     Step "Build cmdide-host"
     & cmake --build $cppBuild --config Release --target cmdide-host
     if ($LASTEXITCODE -ne 0) { Fail "cmdide-host build failed" }
@@ -127,20 +127,20 @@ if (-not $InstallerOnly) {
 }
 
 # =============================================================================
-# STEP 5 - Build stable installer
+# STEP 5 - Build stable setup
 # =============================================================================
 if (-not $AppOnly) {
     Step "Build stable setup"
     & cmake --build $cppBuild --config Release --target cmdide-setup
     if ($LASTEXITCODE -ne 0) { Fail "Stable setup build failed" }
     $instSrc = Join-Path $releaseDir "cmdide-setup$binExt"
-    $instDst = Join-Path $releaseDir $instName
-    if (Test-Path $instSrc) { Copy-Item -Force $instSrc $instDst }
-    Ok "Built -> $instName"
+    $setupDst = Join-Path $releaseDir $setupName
+    if (Test-Path $instSrc) { Copy-Item -Force $instSrc $setupDst }
+    Ok "Built -> $setupName"
 }
 
 # =============================================================================
-# STEP 6 - Build dev installer
+# STEP 6 - Build dev setup
 # =============================================================================
 if (-not $AppOnly) {
     Step "Build dev setup"
@@ -153,9 +153,9 @@ if (-not $AppOnly) {
     & cmake --build $devBuild --config Release --target cmdide-setup
     if ($LASTEXITCODE -ne 0) { Fail "Dev setup build failed" }
     $devSrc = Join-Path $devBuild "Release\cmdide-setup$binExt"
-    $devDst = Join-Path $releaseDir $instDevName
-    if (Test-Path $devSrc) { Copy-Item -Force $devSrc $devDst }
-    Ok "Built -> $instDevName"
+    $setupDevDst = Join-Path $releaseDir $setupDevName
+    if (Test-Path $devSrc) { Copy-Item -Force $devSrc $setupDevDst }
+    Ok "Built -> $setupDevName"
 }
 
 # =============================================================================
@@ -170,8 +170,8 @@ function Check-Artifact($name) {
     else { Warn "MISSING: $name"; $script:ok = $false }
 }
 
-if (-not $InstallerOnly) { Check-Artifact $appName }
-if (-not $AppOnly)       { Check-Artifact $instName; Check-Artifact $instDevName }
+if (-not $SetupOnly) { Check-Artifact $appName }
+if (-not $AppOnly)   { Check-Artifact $setupName; Check-Artifact $setupDevName }
 
 if (-not $ok) { Fail "One or more artifacts are missing" }
 
@@ -179,9 +179,9 @@ Write-Host ''
 Write-Host '  Build complete.' -ForegroundColor Green
 Write-Host ''
 Write-Host "  Artifacts in cpp/build/Release/:" -ForegroundColor DarkGray
-if (-not $InstallerOnly) { Write-Host "    $appName" -ForegroundColor DarkGray }
+if (-not $SetupOnly) { Write-Host "    $appName" -ForegroundColor DarkGray }
 if (-not $AppOnly) {
-    Write-Host "    $instName" -ForegroundColor DarkGray
-    Write-Host "    $instDevName" -ForegroundColor DarkGray
+    Write-Host "    $setupName" -ForegroundColor DarkGray
+    Write-Host "    $setupDevName" -ForegroundColor DarkGray
 }
 Write-Host ''

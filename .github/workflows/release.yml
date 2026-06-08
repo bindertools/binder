@@ -56,8 +56,8 @@ jobs:
           $rel = "cpp\build\Release"
           @(
             "$rel\cmdIDE-windows-amd64.exe",
-            "$rel\cmdIDE-installer-windows.exe",
-            "$rel\cmdIDE-installer-dev-windows.exe"
+            "$rel\cmdIDE-setup-windows.exe",
+            "$rel\cmdIDE-setup-dev-windows.exe"
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -82,8 +82,8 @@ jobs:
           $rel = "cpp\build\Release"
           $files = @(
             "$rel\cmdIDE-windows-amd64.exe",
-            "$rel\cmdIDE-installer-windows.exe",
-            "$rel\cmdIDE-installer-dev-windows.exe"
+            "$rel\cmdIDE-setup-windows.exe",
+            "$rel\cmdIDE-setup-dev-windows.exe"
           )
           foreach ($f in $files) {
             if (-not (Test-Path $f)) { continue }
@@ -101,9 +101,9 @@ jobs:
           $tag = "${{ github.event.release.tag_name }}"
           $rel = "cpp/build/Release"
           $files = @(
-            @{ path = "$rel/cmdIDE-windows-amd64.exe";         label = "cmdIDE-windows-amd64.exe" },
-            @{ path = "$rel/cmdIDE-installer-windows.exe";     label = "cmdIDE-installer-windows.exe" },
-            @{ path = "$rel/cmdIDE-installer-dev-windows.exe"; label = "cmdIDE-installer-dev-windows.exe" }
+            @{ path = "$rel/cmdIDE-windows-amd64.exe";     label = "cmdIDE-windows-amd64.exe" },
+            @{ path = "$rel/cmdIDE-setup-windows.exe";     label = "cmdIDE-setup-windows.exe" },
+            @{ path = "$rel/cmdIDE-setup-dev-windows.exe"; label = "cmdIDE-setup-dev-windows.exe" }
           )
           foreach ($f in $files) {
             if (Test-Path $f.path) {
