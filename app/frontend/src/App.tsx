@@ -109,6 +109,7 @@ type TabAction =
   | { type: 'close';           id: string }
   | { type: 'select';          id: string }
   | { type: 'restore-session'; tabs: Tab[] }
+  | { type: 'set-tab-page';   id: string; page: PageId }
 
 function tabReducer(state: TabState, action: TabAction): TabState {
   switch (action.type) {
@@ -227,16 +228,26 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, color: action.color ?? undefined } : t) }
 
     case 'close': {
-      if (state.tabs.length <= 1) return state
+      const closingTab = state.tabs.find(t => t.id === action.id)
+      if (!closingTab) return state
+      // Cascade-close all child tabs (pages opened from this terminal)
+      const idsToClose = new Set([action.id])
+      if (closingTab.type === 'terminal') {
+        state.tabs.forEach(t => { if (t.parentId === action.id) idsToClose.add(t.id) })
+      }
+      const newTabs = state.tabs.filter(t => !idsToClose.has(t.id))
+      if (newTabs.length === 0) return state
       const idx = state.tabs.findIndex(t => t.id === action.id)
-      const newTabs = state.tabs.filter(t => t.id !== action.id)
       return {
         tabs: newTabs,
-        activeId: state.activeId === action.id
+        activeId: idsToClose.has(state.activeId)
           ? newTabs[Math.min(idx, newTabs.length - 1)].id
           : state.activeId,
       }
     }
+
+    case 'set-tab-page':
+      return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, activePage: action.page } : t) }
 
     case 'select':
       return { ...state, activeId: action.id }
@@ -488,6 +499,13 @@ export default function App() {
     saveLayoutToStorage(layoutRoot, tabs, focusedPaneId)
   }, [layoutRoot, tabs, focusedPaneId])
 
+  // ── Sync: keep terminal tab's activePage field current so tab-switching can restore it ──
+  useEffect(() => {
+    if (!activeTerminalId || !focusedPane) return
+    dispatch({ type: 'set-tab-page', id: activeTerminalId, page: focusedPane.activePage })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTerminalId, focusedPane?.activePage])
+
   // ── Sync: path dwell for debug pages ─────────────────────────────────────────
   useEffect(() => {
     if (activePage === 'debug' || activePage === 'database' || activePage === 'editor') {
@@ -733,9 +751,12 @@ export default function App() {
   }, [])
 
   const handleSelectTab = useCallback((paneId: string, tabId: string) => {
-    setLayoutRoot(prev => updateLeafInTree(prev, paneId, leaf => ({ ...leaf, activeTabId: tabId, activePage: 'terminal' })))
+    const tab = tabs.find(t => t.id === tabId)
+    // Restore the terminal's last known page; non-terminal tabs always show 'terminal' activePage
+    const newActivePage: PageId = tab?.type === 'terminal' ? (tab.activePage ?? 'terminal') : 'terminal'
+    setLayoutRoot(prev => updateLeafInTree(prev, paneId, leaf => ({ ...leaf, activeTabId: tabId, activePage: newActivePage })))
     setFocusedPaneId(paneId)
-  }, [])
+  }, [tabs])
 
   const handleCloseTab = useCallback((tabId: string) => {
     dispatch({ type: 'close', id: tabId })

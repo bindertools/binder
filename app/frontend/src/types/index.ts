@@ -1,3 +1,7 @@
+import type { PageId } from '../paneModel'
+
+export type { PageId }
+
 export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'debug' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
 
 export interface ProbItem {
@@ -22,6 +26,7 @@ export interface Tab {
   gotoLine?: number   // navigate to this line when the editor mounts / value changes
   // terminal-only
   initialCwd?: string
+  activePage?: PageId   // last sidebar page seen on this terminal tab
   // database-only
   dbPath?: string
   // preview-only
