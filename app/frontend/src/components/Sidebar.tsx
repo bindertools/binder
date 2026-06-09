@@ -100,6 +100,7 @@ interface BtnProps {
 }
 
 function SidebarBtn({ active, label, onClick, onMouseDown, children }: BtnProps) {
+  const cursorCls = onMouseDown ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
   const [tooltipVisible, setTooltipVisible] = useState(false)
   const btnRef  = useRef<HTMLButtonElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -137,7 +138,7 @@ function SidebarBtn({ active, label, onClick, onMouseDown, children }: BtnProps)
       <button
         ref={btnRef}
         className={[
-          'relative flex items-center justify-center w-10 h-10 rounded-md border-0 cursor-pointer transition-[background,color] duration-[100ms] shrink-0',
+          `relative flex items-center justify-center w-10 h-10 rounded-md border-0 ${cursorCls} transition-[background,color] duration-[100ms] shrink-0`,
           active
             ? 'text-[var(--tab-color-hover)] bg-surface-overlay'
             : 'text-[var(--tab-color)] bg-transparent hover:text-[var(--tab-color-hover)] hover:bg-surface-raised',

@@ -1,27 +1,16 @@
 import React, { useRef, useCallback } from 'react'
 import { PaneNode, LeafPane, SplitNode, updateRatioInTree } from '../paneModel'
-import PaneTabBar from './PaneTabBar'
-import { Tab } from '../types'
 
 const DIVIDER_PX = 4
 
 interface Props {
-  node:            PaneNode
-  focusedPaneId:   string
-  allTabs:         Tab[]
-  isOnlyPane:      boolean
-  windowControls?: React.ReactNode
-  onFocus:         (paneId: string) => void
-  onClosePane:     (paneId: string) => void
-  onRatioChange:   (splitId: string, ratio: number) => void
-  onSelectTab:     (paneId: string, tabId: string) => void
-  onCloseTab:      (tabId: string) => void
-  onNewTerminal:   (paneId: string) => void
-  onRename:        (tabId: string, title: string) => void
-  onSetColor:      (tabId: string, color: string | null) => void
-  onDuplicate:     (tabId: string) => void
-  onDropTab:       (tabId: string, toPaneId: string) => void
-  renderContent:   (pane: LeafPane) => React.ReactNode
+  node:          PaneNode
+  focusedPaneId: string
+  isOnlyPane:    boolean
+  onFocus:       (paneId: string) => void
+  onClosePane:   (paneId: string) => void
+  onRatioChange: (splitId: string, ratio: number) => void
+  renderContent: (pane: LeafPane) => React.ReactNode
 }
 
 // ── SplitHandle ───────────────────────────────────────────────────────────────
@@ -76,11 +65,8 @@ function SplitHandle({
 // ── SplitPaneView ─────────────────────────────────────────────────────────────
 
 export default function SplitPaneView({
-  node, focusedPaneId, allTabs, isOnlyPane, windowControls,
-  onFocus, onClosePane, onRatioChange,
-  onSelectTab, onCloseTab, onNewTerminal,
-  onRename, onSetColor, onDuplicate, onDropTab,
-  renderContent,
+  node, focusedPaneId, isOnlyPane,
+  onFocus, onClosePane, onRatioChange, renderContent,
 }: Props) {
 
   if (node.type === 'split') {
@@ -89,22 +75,18 @@ export default function SplitPaneView({
     const secondSize = `calc(${(1 - node.ratio) * 100}% - ${DIVIDER_PX / 2}px)`
 
     const shared = {
-      focusedPaneId, allTabs, isOnlyPane: false,
-      onFocus, onClosePane, onRatioChange,
-      onSelectTab, onCloseTab, onNewTerminal,
-      onRename, onSetColor, onDuplicate, onDropTab,
-      renderContent,
+      focusedPaneId, isOnlyPane: false,
+      onFocus, onClosePane, onRatioChange, renderContent,
     }
 
-    // Window controls always stay at top-right: top child for vertical splits, right child for horizontal
     return (
       <div className={`flex ${isH ? 'flex-row' : 'flex-col'} w-full h-full overflow-hidden`}>
         <div style={{ [isH ? 'width' : 'height']: firstSize }} className="overflow-hidden flex flex-col">
-          <SplitPaneView {...shared} node={node.first} windowControls={isH ? undefined : windowControls} />
+          <SplitPaneView {...shared} node={node.first} />
         </div>
         <SplitHandle node={node} onRatioChange={onRatioChange} />
         <div style={{ [isH ? 'width' : 'height']: secondSize }} className="overflow-hidden flex flex-col">
-          <SplitPaneView {...shared} node={node.second} windowControls={isH ? windowControls : undefined} />
+          <SplitPaneView {...shared} node={node.second} />
         </div>
       </div>
     )
@@ -112,32 +94,28 @@ export default function SplitPaneView({
 
   // ── Leaf pane ──────────────────────────────────────────────────────────────
   const pane = node as LeafPane
-  const paneTabs = pane.tabIds.map(id => allTabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
   const focused = pane.id === focusedPaneId
 
   return (
     <div
-      className={`flex flex-col w-full h-full overflow-hidden${focused && !isOnlyPane ? ' pane--focused' : ''}`}
+      className={`relative flex flex-col w-full h-full overflow-hidden${focused && !isOnlyPane ? ' pane--focused' : ''}`}
       onMouseDown={() => onFocus(pane.id)}
     >
-      <PaneTabBar
-        paneId={pane.id}
-        tabs={paneTabs}
-        activeId={pane.activeTabId}
-        canClosePane={!isOnlyPane}
-        windowControls={windowControls}
-        onSelect={tabId => onSelectTab(pane.id, tabId)}
-        onClose={tabId => onCloseTab(tabId)}
-        onNewTerminal={() => onNewTerminal(pane.id)}
-        onClosePane={() => onClosePane(pane.id)}
-        onRename={onRename}
-        onSetColor={onSetColor}
-        onDuplicate={onDuplicate}
-        onDrop={tabId => onDropTab(tabId, pane.id)}
-      />
       <div className="flex-1 relative overflow-hidden">
         {renderContent(pane)}
       </div>
+
+      {!isOnlyPane && (
+        <button
+          className="absolute bottom-3 right-3 z-[200] flex items-center justify-center w-[22px] h-[22px] rounded-full bg-[var(--app-bg)] border border-[var(--border-color)] text-[var(--tab-color)] opacity-30 hover:opacity-100 hover:bg-surface-overlay hover:text-[var(--tab-color-hover)] hover:border-[var(--tab-color)] transition-[opacity,background,color,border-color] duration-[120ms] cursor-pointer"
+          onClick={e => { e.stopPropagation(); onClosePane(pane.id) }}
+          title="Close panel"
+        >
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

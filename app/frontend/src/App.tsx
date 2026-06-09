@@ -8,6 +8,7 @@ import ConfigEditor from './components/ConfigEditor'
 import ZoomIndicator from './components/ZoomIndicator'
 import SearchPalette from './components/SearchPalette'
 import SplitPaneView from './components/SplitPaneView'
+import PaneTabBar from './components/PaneTabBar'
 import Sidebar from './components/Sidebar'
 import type { PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
@@ -39,7 +40,6 @@ import './App.css'
 
 // ── Pane layout math (mirrors SplitPaneView constants) ───────────────────────
 const PANE_DIVIDER_PX = 4
-const PANE_TAB_BAR_H  = 36
 
 interface PaneContentRect { x: number; y: number; w: number; h: number }
 
@@ -50,7 +50,7 @@ function getPaneContentRect(
 ): PaneContentRect | null {
   if (node.type === 'leaf') {
     if (node.id !== targetPaneId) return null
-    return { x, y: y + PANE_TAB_BAR_H, w, h: h - PANE_TAB_BAR_H }
+    return { x, y, w, h }
   }
   const isH = node.direction === 'h'
   const f = isH ? w * node.ratio - PANE_DIVIDER_PX / 2 : h * node.ratio - PANE_DIVIDER_PX / 2
@@ -440,6 +440,11 @@ export default function App() {
   const activeCwd = useMemo(() => {
     return activeTerminalId ? (terminalCwds[activeTerminalId] ?? '') : ''
   }, [activeTerminalId, terminalCwds])
+
+  const focusedPaneTabs = useMemo(() => {
+    if (!focusedPane) return []
+    return focusedPane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+  }, [focusedPane, tabs])
 
   // ── Sync: remove closed tabs from layout tree ─────────────────────────────────
   useEffect(() => {
@@ -1115,6 +1120,8 @@ export default function App() {
       {/* ── Body: sidebar + pane tree ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden flex">
 
+        {pageDrag && <style>{`* { cursor: grabbing !important; }`}</style>}
+
         <Sidebar
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
@@ -1123,52 +1130,63 @@ export default function App() {
           showPlugins={__PLUGINS__}
         />
 
-        {/* Pane area — ref tracks size for terminal overlay positioning */}
-        <div ref={contentAreaRef} className="flex-1 overflow-hidden relative">
+        {/* Pane column: global tab bar on top, split area below */}
+        <div className="flex-1 overflow-hidden flex flex-col">
 
-          {/* Drag-to-split drop zone overlay */}
-          {pageDrag && (
-            <div
-              className="absolute inset-0 z-[100] pointer-events-none"
-              style={{
-                borderTop:    dropEdge === 'up'    ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
-                borderBottom: dropEdge === 'down'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
-                borderLeft:   dropEdge === 'left'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
-                borderRight:  dropEdge === 'right' ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
-              }}
-            >
-              {dropEdge && (
-                <div
-                  className="absolute bg-[rgba(10,132,255,0.06)]"
-                  style={
-                    dropEdge === 'up'    ? { top: 0, left: 0, right: 0, bottom: '67%' } :
-                    dropEdge === 'down'  ? { top: '67%', left: 0, right: 0, bottom: 0 } :
-                    dropEdge === 'left'  ? { top: 0, left: 0, right: '67%', bottom: 0 } :
-                                          { top: 0, left: '67%', right: 0, bottom: 0 }
-                  }
-                />
-              )}
-            </div>
-          )}
-
-          <SplitPaneView
-            node={layoutRoot}
-            focusedPaneId={focusedPaneId}
-            allTabs={tabs}
-            isOnlyPane={isOnlyPane}
+          {/* Single global tab bar — spans full width regardless of split layout */}
+          <PaneTabBar
+            paneId={focusedPane?.id ?? ''}
+            tabs={focusedPaneTabs}
+            activeId={focusedPane?.activeTabId ?? ''}
+            canClosePane={false}
             windowControls={windowControls}
-            onFocus={handleFocusPane}
-            onClosePane={handleClosePane}
-            onRatioChange={handleRatioChange}
-            onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseTab}
-            onNewTerminal={handleNewTerminal}
+            onSelect={tabId => { if (focusedPane) handleSelectTab(focusedPane.id, tabId) }}
+            onClose={handleCloseTab}
+            onNewTerminal={() => { if (focusedPane) handleNewTerminal(focusedPane.id) }}
+            onClosePane={() => {}}
             onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
             onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
             onDuplicate={id => { void handleDuplicateTab(id) }}
-            onDropTab={handleDropTab}
-            renderContent={renderContent}
+            onDrop={tabId => { if (focusedPane) handleDropTab(tabId, focusedPane.id) }}
           />
+
+          {/* Split area — ref tracks size for terminal overlay positioning */}
+          <div ref={contentAreaRef} className="flex-1 overflow-hidden relative">
+
+            {/* Drag-to-split drop zone overlay */}
+            {pageDrag && (
+              <div
+                className="absolute inset-0 z-[100] pointer-events-none"
+                style={{
+                  borderTop:    dropEdge === 'up'    ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                  borderBottom: dropEdge === 'down'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                  borderLeft:   dropEdge === 'left'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                  borderRight:  dropEdge === 'right' ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                }}
+              >
+                {dropEdge && (
+                  <div
+                    className="absolute bg-[rgba(10,132,255,0.06)]"
+                    style={
+                      dropEdge === 'up'    ? { top: 0, left: 0, right: 0, bottom: '67%' } :
+                      dropEdge === 'down'  ? { top: '67%', left: 0, right: 0, bottom: 0 } :
+                      dropEdge === 'left'  ? { top: 0, left: 0, right: '67%', bottom: 0 } :
+                                            { top: 0, left: '67%', right: 0, bottom: 0 }
+                    }
+                  />
+                )}
+              </div>
+            )}
+
+            <SplitPaneView
+              node={layoutRoot}
+              focusedPaneId={focusedPaneId}
+              isOnlyPane={isOnlyPane}
+              onFocus={handleFocusPane}
+              onClosePane={handleClosePane}
+              onRatioChange={handleRatioChange}
+              renderContent={renderContent}
+            />
 
           {/* Terminal overlay — keyed by tab ID, never unmounts on split/close */}
           {contentAreaSize.w > 0 && tabs.filter(t => t.type === 'terminal').map(tab => {
@@ -1207,7 +1225,8 @@ export default function App() {
               </div>
             )
           })}
-        </div>
+          </div>{/* end split area */}
+        </div>{/* end pane column */}
       </div>
 
       {/* ── Status bar ────────────────────────────────────────────────────────── */}

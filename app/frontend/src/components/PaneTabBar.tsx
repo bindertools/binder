@@ -214,9 +214,9 @@ export default function PaneTabBar({
       </div>
 
       {/* Pane controls */}
-      <div className="flex items-center px-1 gap-0.5 shrink-0 border-l border-[var(--border-color)]"
-        style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-        {canClosePane && (
+      {canClosePane && (
+        <div className="flex items-center px-1 gap-0.5 shrink-0 border-l border-[var(--border-color)]"
+          style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           <button
             className="flex items-center justify-center w-[22px] h-[22px] rounded bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-40 hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-[opacity,background,color] duration-[100ms]"
             onClick={onClosePane}
@@ -226,8 +226,8 @@ export default function PaneTabBar({
               <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {windowControls && (
         <div className="flex items-center shrink-0"
