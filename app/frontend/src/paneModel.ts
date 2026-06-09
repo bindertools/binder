@@ -9,6 +9,7 @@ export interface LeafPane {
   tabIds: string[]
   activeTabId: string
   activePage: PageId
+  linkedTerminalId?: string
 }
 
 export interface SplitNode {
@@ -26,8 +27,9 @@ export function createLeaf(
   tabIds: string[],
   activeTabId: string,
   activePage: PageId = 'terminal',
+  linkedTerminalId?: string,
 ): LeafPane {
-  return { type: 'leaf', id: newPaneId(), tabIds, activeTabId, activePage }
+  return { type: 'leaf', id: newPaneId(), tabIds, activeTabId, activePage, linkedTerminalId }
 }
 
 export function getFirstLeaf(node: PaneNode): LeafPane {
@@ -125,6 +127,17 @@ export function removeTabFromTree(root: PaneNode, tabId: string): PaneNode {
 
 export function moveTabToPane(root: PaneNode, tabId: string, toPaneId: string): PaneNode {
   return addTabToLeaf(removeTabFromTree(root, tabId), toPaneId, tabId)
+}
+
+export function clearLinkedTerminalInTree(root: PaneNode, terminalId: string): PaneNode {
+  if (root.type === 'leaf') {
+    return root.linkedTerminalId === terminalId ? { ...root, linkedTerminalId: undefined } : root
+  }
+  return {
+    ...root,
+    first: clearLinkedTerminalInTree(root.first, terminalId),
+    second: clearLinkedTerminalInTree(root.second, terminalId),
+  }
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────────

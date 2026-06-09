@@ -25,7 +25,7 @@ import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload
 import {
   createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
   updateLeafInTree, updateRatioInTree, moveTabToPane, findLeaf, getAllLeaves, getFirstLeaf,
-  serializeLayout, deserializeLayout,
+  clearLinkedTerminalInTree, serializeLayout, deserializeLayout,
   type PaneNode, type LeafPane, type SerializedNode,
 } from './paneModel'
 import { EventsOn, EventsOff, Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
@@ -456,6 +456,9 @@ export default function App() {
         for (const id of leaf.tabIds) {
           if (!validIds.has(id)) { root = removeTabFromTree(root, id); changed = true }
         }
+        if (leaf.linkedTerminalId && !validIds.has(leaf.linkedTerminalId)) {
+          root = clearLinkedTerminalInTree(root, leaf.linkedTerminalId); changed = true
+        }
       }
       return changed ? root : prev
     })
@@ -784,10 +787,15 @@ export default function App() {
   const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
     const direction = (dir === 'left' || dir === 'right') ? 'h' : 'v'
     const newLeafFirst = dir === 'left' || dir === 'up'
-    const newLeaf = createLeaf([], '', page)
+    const sourcePane = findLeaf(layoutRoot, focusedPaneId)
+    const linkedTerminalId = sourcePane
+      ? (sourcePane.tabIds.map(id => tabs.find(t => t.id === id)).find(t => t?.type === 'terminal')?.id
+          ?? sourcePane.linkedTerminalId)
+      : undefined
+    const newLeaf = createLeaf([], '', page, linkedTerminalId)
     setLayoutRoot(prev => splitPaneInTree(prev, focusedPaneId, direction, newLeaf, newLeafFirst))
     setFocusedPaneId(newLeaf.id)
-  }, [focusedPaneId])
+  }, [focusedPaneId, layoutRoot, tabs])
 
   const handleStartPageDrag = useCallback((page: PageId, startX: number, startY: number) => {
     const state = { dragging: false, edge: null as 'up' | 'down' | 'left' | 'right' | null }
@@ -1024,7 +1032,9 @@ export default function App() {
     const activeTab = paneTabs.find(t => t.id === pane.activeTabId)
 
     const paneTerminalId = (activeTab?.type === 'terminal' ? activeTab.id : null)
-      ?? paneTabs.find(t => t.type === 'terminal')?.id ?? null
+      ?? paneTabs.find(t => t.type === 'terminal')?.id
+      ?? pane.linkedTerminalId
+      ?? null
     const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
 
     // Non-terminal sidebar pages
