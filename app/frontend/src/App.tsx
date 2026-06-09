@@ -345,8 +345,6 @@ export default function App() {
   // ── Pane tree state ──────────────────────────────────────────────────────────
   const [layoutRoot,    setLayoutRoot]    = useState<PaneNode>(initialLeaf)
   const [focusedPaneId, setFocusedPaneId] = useState<string>(initialLeaf.id)
-  const [splitMenuOpen, setSplitMenuOpen] = useState(false)
-  const splitMenuRef = useRef<HTMLDivElement>(null)
 
   // ── General state ────────────────────────────────────────────────────────────
   const [searchOpen,     setSearchOpen]     = useState(false)
@@ -647,16 +645,6 @@ export default function App() {
   }
   useShortcuts(shortcutHandlers, customBindings)
 
-  // ── Split menu close on outside click ─────────────────────────────────────────
-  useEffect(() => {
-    if (!splitMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (splitMenuRef.current && !splitMenuRef.current.contains(e.target as Node)) setSplitMenuOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [splitMenuOpen])
-
   // ── Quit ─────────────────────────────────────────────────────────────────────
   const handleQuit = useCallback(async () => {
     try {
@@ -940,11 +928,11 @@ export default function App() {
       ?? paneTabs.find(t => t.type === 'terminal')?.id ?? null
     const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
 
-    if (pane.activePage !== 'terminal') {
-      return renderSidebarPage(pane, paneTerminalId, paneCwd)
-    }
+    const termTabs = paneTabs.filter(t => t.type === 'terminal')
+    const nonTermActive = activeTab && activeTab.type !== 'terminal'
+    const onTerminalPage = pane.activePage === 'terminal'
 
-    if (paneTabs.length === 0) {
+    if (paneTabs.length === 0 && onTerminalPage) {
       return (
         <div className="absolute inset-0 flex items-center justify-center">
           <button
@@ -957,20 +945,17 @@ export default function App() {
       )
     }
 
-    const termTabs = paneTabs.filter(t => t.type === 'terminal')
-    const nonTermActive = activeTab && activeTab.type !== 'terminal'
-
     return (
       <>
         {termTabs.map(tab => (
           <div
             key={tab.id}
             className="absolute inset-0 flex flex-col"
-            style={{ display: (!nonTermActive && tab.id === pane.activeTabId) ? 'flex' : 'none' }}
+            style={{ display: (onTerminalPage && !nonTermActive && tab.id === pane.activeTabId) ? 'flex' : 'none' }}
           >
             <Terminal
               tabId={tab.id}
-              active={tab.id === pane.activeTabId && pane.id === focusedPaneId && !nonTermActive}
+              active={tab.id === pane.activeTabId && pane.id === focusedPaneId && !nonTermActive && onTerminalPage}
               xtermTheme={resolvedTheme.xtermTheme}
               initialCwd={tab.initialCwd}
               defaultZoom={currentZoom}
@@ -989,11 +974,12 @@ export default function App() {
             />
           </div>
         ))}
-        {nonTermActive && (
+        {onTerminalPage && nonTermActive && (
           <div className="absolute inset-0">
             {renderNonTerminalContent(activeTab!)}
           </div>
         )}
+        {!onTerminalPage && renderSidebarPage(pane, paneTerminalId, paneCwd)}
       </>
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1005,89 +991,37 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
-  const splitMenuItemCls = "flex items-center gap-2 w-full px-3 py-[7px] bg-transparent border-0 cursor-pointer text-[var(--info-bar-hover-color)] text-left font-ui text-[12px] whitespace-nowrap hover:bg-surface-raised transition-[background] duration-[100ms]"
+
+  const windowControls = useMemo(() => (
+    <div className="flex items-center gap-0.5 px-1">
+      {updateTag && (
+        <button
+          className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
+          title={`Update available: ${updateTag} — click to install`}
+          onClick={() => PerformUpdate(updateTag).catch(() => {})}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
+      <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
+        <svg width="10" height="2" viewBox="0 0 10 2"><path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
+      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise" onDoubleClick={WindowToggleMaximise}>
+        <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+      </button>
+      <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
+    </div>
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [updateTag, handleQuit])
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-[var(--app-bg)] font-ui" onContextMenu={e => e.preventDefault()}>
-
-      {/* ── App header ──────────────────────────────────────────────────────────── */}
-      <div className="flex h-[36px] shrink-0 bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none">
-        <div className="w-[48px] shrink-0 border-r border-[var(--border-color)]"
-          style={{ ['--wails-draggable' as any]: 'no-drag' }} />
-
-        <div className="flex-1 flex items-center overflow-hidden"
-          style={{ ['--wails-draggable' as any]: 'drag' }}
-          onDoubleClick={WindowToggleMaximise}>
-
-          {/* Draggable space */}
-          <div className="flex-1 h-full" />
-
-          {/* Controls */}
-          <div className="flex items-center gap-0.5 px-1.5 shrink-0" style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-
-            {/* Split menu */}
-            <div className="relative" ref={splitMenuRef}>
-              <button
-                className={`flex items-center justify-center w-[26px] h-[26px] rounded-md bg-transparent border-0 cursor-pointer transition-[background,color] duration-[100ms] p-0 hover:bg-surface-raised ${!isOnlyPane ? 'text-accent' : 'text-[var(--tab-color)]'} hover:text-[var(--tab-color-hover)]`}
-                onClick={() => setSplitMenuOpen(v => !v)}
-                title="Split pane"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="1" y="1" width="6" height="6" rx="1.2"/>
-                  <rect x="9" y="1" width="6" height="6" rx="1.2"/>
-                  <rect x="1" y="9" width="6" height="6" rx="1.2"/>
-                  <rect x="9" y="9" width="6" height="6" rx="1.2"/>
-                </svg>
-              </button>
-              {splitMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 z-[9999] min-w-[200px] shadow-overlay">
-                  <button className={splitMenuItemCls} onClick={() => { handleSplitPane(focusedPaneId, 'h'); setSplitMenuOpen(false) }}>
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                      <rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="7" y1="1" x2="7" y2="13"/>
-                    </svg>
-                    Split Pane Horizontally
-                  </button>
-                  <button className={splitMenuItemCls} onClick={() => { handleSplitPane(focusedPaneId, 'v'); setSplitMenuOpen(false) }}>
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                      <rect x="1" y="1" width="12" height="12" rx="1.5"/><line x1="1" y1="7" x2="13" y2="7"/>
-                    </svg>
-                    Split Pane Vertically
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Update badge */}
-            {updateTag && (
-              <button
-                className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
-                title={`Update available: ${updateTag} — click to install`}
-                onClick={() => PerformUpdate(updateTag).catch(() => {})}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-
-            <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
-
-            {/* Window controls */}
-            <div className="flex items-center gap-0.5">
-              <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
-                <svg width="10" height="2" viewBox="0 0 10 2"><path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-              <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise">
-                <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
-              </button>
-              <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
-                <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Overlays ─────────────────────────────────────────────────────────────── */}
       {searchOpen && (
@@ -1126,6 +1060,7 @@ export default function App() {
             focusedPaneId={focusedPaneId}
             allTabs={tabs}
             isOnlyPane={isOnlyPane}
+            windowControls={windowControls}
             onFocus={handleFocusPane}
             onSplit={handleSplitPane}
             onClosePane={handleClosePane}

@@ -6,22 +6,23 @@ import { Tab } from '../types'
 const DIVIDER_PX = 4
 
 interface Props {
-  node:          PaneNode
-  focusedPaneId: string
-  allTabs:       Tab[]
-  isOnlyPane:    boolean
-  onFocus:       (paneId: string) => void
-  onSplit:       (paneId: string, dir: 'h' | 'v') => void
-  onClosePane:   (paneId: string) => void
-  onRatioChange: (splitId: string, ratio: number) => void
-  onSelectTab:   (paneId: string, tabId: string) => void
-  onCloseTab:    (tabId: string) => void
-  onNewTerminal: (paneId: string) => void
-  onRename:      (tabId: string, title: string) => void
-  onSetColor:    (tabId: string, color: string | null) => void
-  onDuplicate:   (tabId: string) => void
-  onDropTab:     (tabId: string, toPaneId: string) => void
-  renderContent: (pane: LeafPane) => React.ReactNode
+  node:            PaneNode
+  focusedPaneId:   string
+  allTabs:         Tab[]
+  isOnlyPane:      boolean
+  windowControls?: React.ReactNode
+  onFocus:         (paneId: string) => void
+  onSplit:         (paneId: string, dir: 'h' | 'v') => void
+  onClosePane:     (paneId: string) => void
+  onRatioChange:   (splitId: string, ratio: number) => void
+  onSelectTab:     (paneId: string, tabId: string) => void
+  onCloseTab:      (tabId: string) => void
+  onNewTerminal:   (paneId: string) => void
+  onRename:        (tabId: string, title: string) => void
+  onSetColor:      (tabId: string, color: string | null) => void
+  onDuplicate:     (tabId: string) => void
+  onDropTab:       (tabId: string, toPaneId: string) => void
+  renderContent:   (pane: LeafPane) => React.ReactNode
 }
 
 // ── SplitHandle ───────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ function SplitHandle({
 // ── SplitPaneView ─────────────────────────────────────────────────────────────
 
 export default function SplitPaneView({
-  node, focusedPaneId, allTabs, isOnlyPane,
+  node, focusedPaneId, allTabs, isOnlyPane, windowControls,
   onFocus, onSplit, onClosePane, onRatioChange,
   onSelectTab, onCloseTab, onNewTerminal,
   onRename, onSetColor, onDuplicate, onDropTab,
@@ -89,7 +90,7 @@ export default function SplitPaneView({
     const secondSize = `calc(${(1 - node.ratio) * 100}% - ${DIVIDER_PX / 2}px)`
 
     const shared = {
-      focusedPaneId, allTabs, isOnlyPane: false,
+      focusedPaneId, allTabs, isOnlyPane: false, windowControls,
       onFocus, onSplit, onClosePane, onRatioChange,
       onSelectTab, onCloseTab, onNewTerminal,
       onRename, onSetColor, onDuplicate, onDropTab,
@@ -124,6 +125,7 @@ export default function SplitPaneView({
         tabs={paneTabs}
         activeId={pane.activeTabId}
         canClosePane={!isOnlyPane}
+        windowControls={pane.id === focusedPaneId ? windowControls : undefined}
         onSelect={tabId => onSelectTab(pane.id, tabId)}
         onClose={tabId => onCloseTab(tabId)}
         onNewTerminal={() => onNewTerminal(pane.id)}

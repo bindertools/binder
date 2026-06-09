@@ -77,25 +77,26 @@ const TAB_COLORS = [
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  paneId:       string
-  tabs:         Tab[]
-  activeId:     string
-  canClosePane: boolean
-  onSelect:     (tabId: string) => void
-  onClose:      (tabId: string) => void
-  onNewTerminal: () => void
-  onSplit:      (dir: 'h' | 'v') => void
-  onClosePane:  () => void
-  onRename:     (id: string, title: string) => void
-  onSetColor:   (id: string, color: string | null) => void
-  onDuplicate:  (id: string) => void
-  onDrop:       (tabId: string) => void
+  paneId:         string
+  tabs:           Tab[]
+  activeId:       string
+  canClosePane:   boolean
+  windowControls?: React.ReactNode
+  onSelect:       (tabId: string) => void
+  onClose:        (tabId: string) => void
+  onNewTerminal:  () => void
+  onSplit:        (dir: 'h' | 'v') => void
+  onClosePane:    () => void
+  onRename:       (id: string, title: string) => void
+  onSetColor:     (id: string, color: string | null) => void
+  onDuplicate:    (id: string) => void
+  onDrop:         (tabId: string) => void
 }
 
 interface CtxState { tabId: string; x: number; y: number }
 
 export default function PaneTabBar({
-  paneId: _paneId, tabs, activeId, canClosePane,
+  paneId: _paneId, tabs, activeId, canClosePane, windowControls,
   onSelect, onClose, onNewTerminal, onSplit, onClosePane,
   onRename, onSetColor, onDuplicate, onDrop,
 }: Props) {
@@ -137,6 +138,7 @@ export default function PaneTabBar({
   return (
     <div
       className={`flex items-stretch h-[30px] bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden shrink-0${dragOver ? ' bg-[rgba(10,132,255,0.05)]' : ''}`}
+      style={{ ['--wails-draggable' as any]: 'drag' }}
       onDragEnter={e => { e.preventDefault(); dragCtr.current++; setDragOver(true) }}
       onDragLeave={() => { dragCtr.current--; if (dragCtr.current <= 0) { dragCtr.current = 0; setDragOver(false) } }}
       onDragOver={e => e.preventDefault()}
@@ -147,7 +149,8 @@ export default function PaneTabBar({
       }}
     >
       {/* Tab strip */}
-      <div className="flex items-stretch overflow-x-auto overflow-y-hidden flex-1 min-w-0 pane-tabbar__strip">
+      <div className="flex items-stretch overflow-x-auto overflow-y-hidden flex-1 min-w-0 pane-tabbar__strip"
+        style={{ ['--wails-draggable' as any]: 'no-drag' }}>
         {tabs.map(tab => {
           const isActive = tab.id === activeId
           return (
@@ -212,7 +215,8 @@ export default function PaneTabBar({
       </div>
 
       {/* Pane controls */}
-      <div className="flex items-center px-1 gap-0.5 shrink-0 border-l border-[var(--border-color)]">
+      <div className="flex items-center px-1 gap-0.5 shrink-0 border-l border-[var(--border-color)]"
+        style={{ ['--wails-draggable' as any]: 'no-drag' }}>
         <button
           className="flex items-center justify-center w-[22px] h-[22px] rounded bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-40 hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-[opacity,background,color] duration-[100ms]"
           onClick={() => onSplit('h')}
@@ -245,6 +249,13 @@ export default function PaneTabBar({
           </button>
         )}
       </div>
+
+      {windowControls && (
+        <div className="flex items-center shrink-0 border-l border-[var(--border-color)]"
+          style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+          {windowControls}
+        </div>
+      )}
 
       {/* Context menu */}
       {ctx && ReactDOM.createPortal(
