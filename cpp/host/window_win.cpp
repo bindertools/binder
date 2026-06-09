@@ -80,6 +80,18 @@ static LRESULT CALLBACK FramelessWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
         // fall through
     }
 
+    // ── Clean shutdown ───────────────────────────────────────────────────────────
+    // webview with m_owns_window=false does not post WM_QUIT on destroy, so we
+    // must do it ourselves — otherwise wv.run() never returns after close.
+    if (msg == WM_CLOSE) {
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    if (msg == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+
     // ── Keyboard focus ───────────────────────────────────────────────────────────
     if (msg == WM_ACTIVATE) {
         if (LOWORD(wp) != WA_INACTIVE) {
