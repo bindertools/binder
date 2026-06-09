@@ -106,6 +106,26 @@ export interface GitRecognitionConfig {
   show_git_branch: boolean
 }
 
+export interface GitFileEntry {
+  file: string
+  status: string  // M=modified, A=added, D=deleted, R=renamed, C=copied
+}
+
+export interface GitStatus {
+  branch: string
+  remote: string
+  ahead: number
+  behind: number
+  staged: GitFileEntry[]
+  unstaged: GitFileEntry[]
+  untracked: string[]
+}
+
+export interface GitStash {
+  ref: string
+  message: string
+}
+
 export interface AppConfig {
   default_directory: string
   indent_guides: boolean
