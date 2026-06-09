@@ -67,9 +67,10 @@ const SettingsIcon = () => (
 
 const PortsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M9 2v5M15 2v5"/>
-    <rect x="6" y="7" width="12" height="6" rx="2"/>
-    <path d="M12 13v4M9 21h6"/>
+    <path d="M17 2l4 4-4 4"/>
+    <path d="M3 10V8a4 4 0 014-4h14"/>
+    <path d="M7 22l-4-4 4-4"/>
+    <path d="M21 14v2a4 4 0 01-4 4H3"/>
   </svg>
 )
 
@@ -210,11 +211,14 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
   return (
     <>
       <div
-        className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] py-1.5 select-none"
+        className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
         style={{ ['--wails-draggable' as any]: 'no-drag' }}
       >
+        {/* Branding placeholder — aligns with the pane tab bar height */}
+        <div className="h-9 w-full shrink-0 border-b border-[var(--border-color)]" />
+
         {/* Features */}
-        <div className="flex flex-col items-center gap-0.5 flex-1">
+        <div className="flex flex-col items-center gap-0.5 flex-1 pt-1.5">
           <SidebarBtn active={activePage === 'terminal'} label="Terminal"    onClick={() => onNavigate('terminal')} onContextMenu={e => openCtx(e, 'terminal')}>
             <TerminalIcon />
           </SidebarBtn>
@@ -224,8 +228,11 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
           <SidebarBtn active={activePage === 'database'} label="Database"    onClick={() => onNavigate('database')} onContextMenu={e => openCtx(e, 'database')}>
             <DatabaseIcon />
           </SidebarBtn>
-          <SidebarBtn active={activePage === 'debug'} label="Debug"    onClick={() => onNavigate('debug')} onContextMenu={e => openCtx(e, 'debug')}>
+          <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onContextMenu={e => openCtx(e, 'debug')}>
             <DebugIcon />
+          </SidebarBtn>
+          <SidebarBtn active={false} label="Ports" onClick={onOpenPorts}>
+            <PortsIcon />
           </SidebarBtn>
           <SidebarBtn active={false} label="Search  (Ctrl+K)" onClick={onSearch}>
             <SearchIcon />
@@ -235,9 +242,6 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
         {/* Utilities */}
         <div className="flex flex-col items-center gap-0.5">
           <div className="w-6 h-px bg-sep mb-1" />
-          <SidebarBtn active={false} label="Ports" onClick={onOpenPorts}>
-            <PortsIcon />
-          </SidebarBtn>
           {showPlugins && (
             <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')}>
               <PluginsIcon />
