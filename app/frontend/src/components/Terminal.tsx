@@ -241,7 +241,10 @@ export default function Terminal({
     }
     try {
       const webgl = new WebglAddon()
-      webgl.onContextLoss(() => { webgl.dispose(); tryCanvas() })
+      webgl.onContextLoss(() => {
+        try { webgl.dispose() } catch { /* already disposed */ }
+        tryCanvas()
+      })
       term.loadAddon(webgl)
     } catch {
       tryCanvas()
@@ -938,7 +941,7 @@ export default function Terminal({
       EventsOff(ptyEndEvent)
       ptyModeRef.current = false
       void CloseTerminal(tabId)
-      term.dispose()
+      try { term.dispose() } catch { /* GPU context may already be gone */ }
       termRef.current = null
       fitRef.current = null
       applyMatchRef.current = null

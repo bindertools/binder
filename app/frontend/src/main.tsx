@@ -8,6 +8,7 @@ import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import App from './App'
+import AppErrorBoundary from './components/AppErrorBoundary'
 import './App.css'
 import '../../themes/index.scss'
 import { isWebViewHost, invoke } from './lib/ipc'
@@ -39,7 +40,9 @@ loader.config({ monaco })
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
 root.render(
   <React.StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </React.StrictMode>
 )
 
