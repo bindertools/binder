@@ -234,6 +234,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
           <SidebarBtn active={activePage === 'editor'}   label="Code Editor" onClick={() => onNavigate('editor')}   onContextMenu={e => openCtx(e, 'editor')}>
             <EditorIcon />
           </SidebarBtn>
+          <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onContextMenu={e => openCtx(e, 'versioncontrol')}>
+            <VersionControlIcon />
+          </SidebarBtn>
           <SidebarBtn active={activePage === 'database'} label="Database"    onClick={() => onNavigate('database')} onContextMenu={e => openCtx(e, 'database')}>
             <DatabaseIcon />
           </SidebarBtn>
@@ -242,9 +245,6 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
           </SidebarBtn>
           <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')}>
             <PortsIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onContextMenu={e => openCtx(e, 'versioncontrol')}>
-            <VersionControlIcon />
           </SidebarBtn>
           <SidebarBtn active={false} label="Search  (Ctrl+K)" onClick={onSearch}>
             <SearchIcon />
