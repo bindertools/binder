@@ -1103,43 +1103,42 @@ export default function App() {
             renderContent={renderContent}
           />
 
-          {/* Terminal overlay — flat list, never restructures on split */}
-          {contentAreaSize.w > 0 && getAllLeaves(layoutRoot).flatMap(leaf => {
-            const rect = getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h)
-            if (!rect) return []
-            const leafTabs = leaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
-            const leafTermTabs = leafTabs.filter(t => t.type === 'terminal')
-            if (leafTermTabs.length === 0) return []
-            const activeTab = leafTabs.find(t => t.id === leaf.activeTabId)
-            const showTerminalPage = leaf.activePage === 'terminal' && (!activeTab || activeTab.type === 'terminal')
-            return leafTermTabs.map(tab => {
-              const visible = showTerminalPage && tab.id === leaf.activeTabId
-              return (
-                <div
-                  key={tab.id}
-                  style={{
-                    position: 'absolute',
-                    left: rect.x, top: rect.y,
-                    width: rect.w, height: rect.h,
-                    display: visible ? 'flex' : 'none',
-                    flexDirection: 'column',
-                    pointerEvents: visible ? 'auto' : 'none',
-                  }}
-                >
-                  <Terminal
-                    tabId={tab.id}
-                    active={visible && leaf.id === focusedPaneId}
-                    xtermTheme={resolvedTheme.xtermTheme}
-                    initialCwd={tab.initialCwd}
-                    defaultZoom={currentZoom}
-                    commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
-                    pluginCommands={pluginCommands}
-                    quickPaths={loadRecentPaths()}
-                    onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
-                  />
-                </div>
-              )
-            })
+          {/* Terminal overlay — keyed by tab ID, never unmounts on split/close */}
+          {contentAreaSize.w > 0 && tabs.filter(t => t.type === 'terminal').map(tab => {
+            const leaf = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(tab.id))
+            const rect = leaf ? getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+            let visible = false
+            if (leaf && rect) {
+              const leafTabs = leaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+              const activeTab = leafTabs.find(t => t.id === leaf.activeTabId)
+              const showTerminalPage = leaf.activePage === 'terminal' && (!activeTab || activeTab.type === 'terminal')
+              visible = showTerminalPage && tab.id === leaf.activeTabId
+            }
+            return (
+              <div
+                key={tab.id}
+                style={{
+                  position: 'absolute',
+                  left: rect?.x ?? 0, top: rect?.y ?? 0,
+                  width: rect?.w ?? 0, height: rect?.h ?? 0,
+                  display: visible ? 'flex' : 'none',
+                  flexDirection: 'column',
+                  pointerEvents: visible ? 'auto' : 'none',
+                }}
+              >
+                <Terminal
+                  tabId={tab.id}
+                  active={visible && !!leaf && leaf.id === focusedPaneId}
+                  xtermTheme={resolvedTheme.xtermTheme}
+                  initialCwd={tab.initialCwd}
+                  defaultZoom={currentZoom}
+                  commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
+                  pluginCommands={pluginCommands}
+                  quickPaths={loadRecentPaths()}
+                  onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
+                />
+              </div>
+            )
           })}
         </div>
       </div>
