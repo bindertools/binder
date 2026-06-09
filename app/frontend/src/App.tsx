@@ -12,6 +12,7 @@ import Sidebar from './components/Sidebar'
 import type { PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
+import VersionControlPanel from './components/VersionControlPanel'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
@@ -921,6 +922,9 @@ export default function App() {
         )}
         {pane.activePage === 'ports' && (
           <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} />
+        )}
+        {pane.activePage === 'versioncontrol' && (
+          <VersionControlPanel cwd={paneCwd} active={true} />
         )}
       </div>
     )

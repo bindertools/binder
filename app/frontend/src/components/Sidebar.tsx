@@ -73,6 +73,16 @@ const PortsIcon = () => (
   </svg>
 )
 
+const VersionControlIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="6" cy="4" r="2"/>
+    <circle cx="6" cy="20" r="2"/>
+    <circle cx="18" cy="8" r="2"/>
+    <path d="M6 6v12"/>
+    <path d="M6 6c0 4 12 4 12 2"/>
+  </svg>
+)
+
 const PluginsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 7h3a1 1 0 0 0 1-1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4h-1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/>
@@ -232,6 +242,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
           </SidebarBtn>
           <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')}>
             <PortsIcon />
+          </SidebarBtn>
+          <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onContextMenu={e => openCtx(e, 'versioncontrol')}>
+            <VersionControlIcon />
           </SidebarBtn>
           <SidebarBtn active={false} label="Search  (Ctrl+K)" onClick={onSearch}>
             <SearchIcon />
