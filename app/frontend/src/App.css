@@ -98,6 +98,14 @@
   --t-base: 180ms ease;
 }
 
+/* ── Global element resets ───────────────────────────────────────────────────── */
+@layer base {
+  button {
+    appearance: none;
+    outline: none;
+  }
+}
+
 /* ── Utility: hide scrollbar cross-browser ──────────────────────────────────── */
 @layer utilities {
   .no-scrollbar {
