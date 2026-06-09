@@ -137,7 +137,7 @@ export default function PaneTabBar({
 
   return (
     <div
-      className={`flex items-stretch h-[30px] bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden shrink-0${dragOver ? ' bg-[rgba(10,132,255,0.05)]' : ''}`}
+      className={`flex items-stretch h-[36px] bg-[var(--app-bg)] border-b border-[var(--border-color)] select-none overflow-hidden shrink-0${dragOver ? ' bg-[rgba(10,132,255,0.05)]' : ''}`}
       style={{ ['--wails-draggable' as any]: 'drag' }}
       onDragEnter={e => { e.preventDefault(); dragCtr.current++; setDragOver(true) }}
       onDragLeave={() => { dragCtr.current--; if (dragCtr.current <= 0) { dragCtr.current = 0; setDragOver(false) } }}
@@ -251,7 +251,7 @@ export default function PaneTabBar({
       </div>
 
       {windowControls && (
-        <div className="flex items-center shrink-0 border-l border-[var(--border-color)]"
+        <div className="flex items-center shrink-0"
           style={{ ['--wails-draggable' as any]: 'no-drag' }}>
           {windowControls}
         </div>
