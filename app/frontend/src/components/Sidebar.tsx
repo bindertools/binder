@@ -199,11 +199,11 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
       <div className="flex flex-col items-center gap-0.5">
         <div className="w-6 h-px bg-sep mb-1" />
         {showPlugins && (
-          <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')} onMouseDown={e => onStartPageDrag('plugins', e.clientX, e.clientY)}>
+          <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')}>
             <PluginsIcon />
           </SidebarBtn>
         )}
-        <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')} onMouseDown={e => onStartPageDrag('settings', e.clientX, e.clientY)}>
+        <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')}>
           <SettingsIcon />
         </SidebarBtn>
       </div>
