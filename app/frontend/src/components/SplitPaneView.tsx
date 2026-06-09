@@ -90,21 +90,22 @@ export default function SplitPaneView({
     const secondSize = `calc(${(1 - node.ratio) * 100}% - ${DIVIDER_PX / 2}px)`
 
     const shared = {
-      focusedPaneId, allTabs, isOnlyPane: false, windowControls,
+      focusedPaneId, allTabs, isOnlyPane: false,
       onFocus, onSplit, onClosePane, onRatioChange,
       onSelectTab, onCloseTab, onNewTerminal,
       onRename, onSetColor, onDuplicate, onDropTab,
       renderContent,
     }
 
+    // Window controls always stay at top-right: top child for vertical splits, right child for horizontal
     return (
       <div className={`flex ${isH ? 'flex-row' : 'flex-col'} w-full h-full overflow-hidden`}>
         <div style={{ [isH ? 'width' : 'height']: firstSize }} className="overflow-hidden flex flex-col">
-          <SplitPaneView {...shared} node={node.first} />
+          <SplitPaneView {...shared} node={node.first} windowControls={isH ? undefined : windowControls} />
         </div>
         <SplitHandle node={node} onRatioChange={onRatioChange} />
         <div style={{ [isH ? 'width' : 'height']: secondSize }} className="overflow-hidden flex flex-col">
-          <SplitPaneView {...shared} node={node.second} />
+          <SplitPaneView {...shared} node={node.second} windowControls={isH ? windowControls : undefined} />
         </div>
       </div>
     )
@@ -125,7 +126,7 @@ export default function SplitPaneView({
         tabs={paneTabs}
         activeId={pane.activeTabId}
         canClosePane={!isOnlyPane}
-        windowControls={pane.id === focusedPaneId ? windowControls : undefined}
+        windowControls={windowControls}
         onSelect={tabId => onSelectTab(pane.id, tabId)}
         onClose={tabId => onCloseTab(tabId)}
         onNewTerminal={() => onNewTerminal(pane.id)}
