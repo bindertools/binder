@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import React, { useReducer, useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
@@ -35,6 +35,29 @@ import { useDragRegions } from './lib/useDragRegions'
 import { useShortcuts, loadKeybindings, saveKeybindings, type ShortcutHandlers } from './lib/useShortcuts'
 import { getTheme, customColorsToTheme } from './themes'
 import './App.css'
+
+// ── Pane layout math (mirrors SplitPaneView constants) ───────────────────────
+const PANE_DIVIDER_PX = 4
+const PANE_TAB_BAR_H  = 36
+
+interface PaneContentRect { x: number; y: number; w: number; h: number }
+
+function getPaneContentRect(
+  node: PaneNode,
+  targetPaneId: string,
+  x: number, y: number, w: number, h: number,
+): PaneContentRect | null {
+  if (node.type === 'leaf') {
+    if (node.id !== targetPaneId) return null
+    return { x, y: y + PANE_TAB_BAR_H, w, h: h - PANE_TAB_BAR_H }
+  }
+  const isH = node.direction === 'h'
+  const f = isH ? w * node.ratio - PANE_DIVIDER_PX / 2 : h * node.ratio - PANE_DIVIDER_PX / 2
+  const s = isH ? w * (1 - node.ratio) - PANE_DIVIDER_PX / 2 : h * (1 - node.ratio) - PANE_DIVIDER_PX / 2
+  return isH
+    ? (getPaneContentRect(node.first, targetPaneId, x, y, f, h) ?? getPaneContentRect(node.second, targetPaneId, x + f + PANE_DIVIDER_PX, y, s, h))
+    : (getPaneContentRect(node.first, targetPaneId, x, y, w, f) ?? getPaneContentRect(node.second, targetPaneId, x, y + f + PANE_DIVIDER_PX, w, s))
+}
 
 let tabCounter = 0
 const SESSION_TS = Date.now()
@@ -345,6 +368,19 @@ export default function App() {
   // ── Pane tree state ──────────────────────────────────────────────────────────
   const [layoutRoot,    setLayoutRoot]    = useState<PaneNode>(initialLeaf)
   const [focusedPaneId, setFocusedPaneId] = useState<string>(initialLeaf.id)
+
+  // ── Pane content area for terminal overlay ───────────────────────────────────
+  const contentAreaRef                    = useRef<HTMLDivElement>(null)
+  const [contentAreaSize, setContentAreaSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+
+  useLayoutEffect(() => {
+    const el = contentAreaRef.current
+    if (!el) return
+    setContentAreaSize({ w: el.offsetWidth, h: el.offsetHeight })
+    const ro = new ResizeObserver(() => setContentAreaSize({ w: el.offsetWidth, h: el.offsetHeight }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // ── General state ────────────────────────────────────────────────────────────
   const [searchOpen,     setSearchOpen]     = useState(false)
@@ -832,6 +868,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
 
+  // ── Terminal cwd change (used by overlay terminals) ───────────────────────────
+  const handleTerminalCwdChange = useCallback((tabId: string, cwd: string) => {
+    setTerminalCwds(prev => ({ ...prev, [tabId]: cwd }))
+    const prev = pathDwellRef.current.get(tabId)
+    if (prev && prev.path !== cwd) {
+      const dwell = Date.now() - prev.enteredAt
+      if (dwell >= 60000 || prev.relatedPageVisited) saveRecentPath(prev.path)
+    }
+    pathDwellRef.current.set(tabId, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
+  }, [])
+
   // ── Render: pane sidebar page ─────────────────────────────────────────────────
   function renderSidebarPage(pane: LeafPane, paneTerminalId: string | null, paneCwd: string): React.ReactNode {
     return (
@@ -871,6 +918,9 @@ export default function App() {
         )}
         {pane.activePage === 'plugins' && __PLUGINS__ && (
           <PluginStore onPluginChange={reloadPlugins} />
+        )}
+        {pane.activePage === 'ports' && (
+          <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} />
         )}
       </div>
     )
@@ -920,6 +970,8 @@ export default function App() {
   }
 
   // ── Render: leaf pane content callback ───────────────────────────────────────
+  // Terminals are NOT rendered here — they live in the overlay layer below SplitPaneView
+  // so they are never unmounted when the pane tree restructures during splits.
   const renderContent = useCallback((pane: LeafPane): React.ReactNode => {
     const paneTabs = pane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
     const activeTab = paneTabs.find(t => t.id === pane.activeTabId)
@@ -928,11 +980,13 @@ export default function App() {
       ?? paneTabs.find(t => t.type === 'terminal')?.id ?? null
     const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
 
-    const termTabs = paneTabs.filter(t => t.type === 'terminal')
-    const nonTermActive = activeTab && activeTab.type !== 'terminal'
-    const onTerminalPage = pane.activePage === 'terminal'
+    // Non-terminal sidebar pages
+    if (pane.activePage !== 'terminal') {
+      return renderSidebarPage(pane, paneTerminalId, paneCwd)
+    }
 
-    if (paneTabs.length === 0 && onTerminalPage) {
+    // Terminal page with no tabs
+    if (paneTabs.length === 0) {
       return (
         <div className="absolute inset-0 flex items-center justify-center">
           <button
@@ -945,45 +999,19 @@ export default function App() {
       )
     }
 
-    return (
-      <>
-        {termTabs.map(tab => (
-          <div
-            key={tab.id}
-            className="absolute inset-0 flex flex-col"
-            style={{ display: (onTerminalPage && !nonTermActive && tab.id === pane.activeTabId) ? 'flex' : 'none' }}
-          >
-            <Terminal
-              tabId={tab.id}
-              active={tab.id === pane.activeTabId && pane.id === focusedPaneId && !nonTermActive && onTerminalPage}
-              xtermTheme={resolvedTheme.xtermTheme}
-              initialCwd={tab.initialCwd}
-              defaultZoom={currentZoom}
-              commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
-              pluginCommands={pluginCommands}
-              quickPaths={loadRecentPaths()}
-              onCwdChange={cwd => {
-                setTerminalCwds(prev => ({ ...prev, [tab.id]: cwd }))
-                const prev = pathDwellRef.current.get(tab.id)
-                if (prev && prev.path !== cwd) {
-                  const dwell = Date.now() - prev.enteredAt
-                  if (dwell >= 60000 || prev.relatedPageVisited) saveRecentPath(prev.path)
-                }
-                pathDwellRef.current.set(tab.id, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
-              }}
-            />
-          </div>
-        ))}
-        {onTerminalPage && nonTermActive && (
-          <div className="absolute inset-0">
-            {renderNonTerminalContent(activeTab!)}
-          </div>
-        )}
-        {!onTerminalPage && renderSidebarPage(pane, paneTerminalId, paneCwd)}
-      </>
-    )
+    // Terminal page with non-terminal active tab
+    if (activeTab && activeTab.type !== 'terminal') {
+      return (
+        <div className="absolute inset-0">
+          {renderNonTerminalContent(activeTab)}
+        </div>
+      )
+    }
+
+    // Terminal page with terminal active — rendered in overlay layer, nothing here
+    return null
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs, terminalCwds, focusedPaneId, appConfig, currentZoom, resolvedTheme, pluginCommands, plugins,
+  }, [tabs, terminalCwds, appConfig, currentZoom, resolvedTheme, pluginCommands, plugins,
       forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal])
 
   // ── Determine if tree has only one pane ───────────────────────────────────────
@@ -1050,13 +1078,11 @@ export default function App() {
           onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
           onPanelMove={handlePanelMove}
-          onOpenPorts={() => {
-            dispatch({ type: 'open-tab', tabType: 'ports', title: 'ports', terminalId: activeTerminalId ?? undefined })
-          }}
           showPlugins={__PLUGINS__}
         />
 
-        <div className="flex-1 overflow-hidden">
+        {/* Pane area — ref tracks size for terminal overlay positioning */}
+        <div ref={contentAreaRef} className="flex-1 overflow-hidden relative">
           <SplitPaneView
             node={layoutRoot}
             focusedPaneId={focusedPaneId}
@@ -1076,6 +1102,45 @@ export default function App() {
             onDropTab={handleDropTab}
             renderContent={renderContent}
           />
+
+          {/* Terminal overlay — flat list, never restructures on split */}
+          {contentAreaSize.w > 0 && getAllLeaves(layoutRoot).flatMap(leaf => {
+            const rect = getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h)
+            if (!rect) return []
+            const leafTabs = leaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+            const leafTermTabs = leafTabs.filter(t => t.type === 'terminal')
+            if (leafTermTabs.length === 0) return []
+            const activeTab = leafTabs.find(t => t.id === leaf.activeTabId)
+            const showTerminalPage = leaf.activePage === 'terminal' && (!activeTab || activeTab.type === 'terminal')
+            return leafTermTabs.map(tab => {
+              const visible = showTerminalPage && tab.id === leaf.activeTabId
+              return (
+                <div
+                  key={tab.id}
+                  style={{
+                    position: 'absolute',
+                    left: rect.x, top: rect.y,
+                    width: rect.w, height: rect.h,
+                    display: visible ? 'flex' : 'none',
+                    flexDirection: 'column',
+                    pointerEvents: visible ? 'auto' : 'none',
+                  }}
+                >
+                  <Terminal
+                    tabId={tab.id}
+                    active={visible && leaf.id === focusedPaneId}
+                    xtermTheme={resolvedTheme.xtermTheme}
+                    initialCwd={tab.initialCwd}
+                    defaultZoom={currentZoom}
+                    commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
+                    pluginCommands={pluginCommands}
+                    quickPaths={loadRecentPaths()}
+                    onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
+                  />
+                </div>
+              )
+            })
+          })}
         </div>
       </div>
 

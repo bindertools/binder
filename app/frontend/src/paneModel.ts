@@ -1,7 +1,7 @@
 let _paneCounter = 0
 function newPaneId() { return `pane-${Date.now()}-${++_paneCounter}` }
 
-export type PageId = 'terminal' | 'editor' | 'database' | 'debug' | 'settings' | 'plugins'
+export type PageId = 'terminal' | 'editor' | 'database' | 'debug' | 'settings' | 'plugins' | 'ports'
 
 export interface LeafPane {
   type: 'leaf'

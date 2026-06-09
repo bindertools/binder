@@ -9,7 +9,6 @@ interface Props {
   onNavigate:   (page: PageId) => void
   onSearch:     () => void
   onPanelMove:  (page: PageId, dir: 'left' | 'right' | 'up' | 'down') => void
-  onOpenPorts:  () => void
   showPlugins:  boolean
 }
 
@@ -121,7 +120,7 @@ const TERMINAL_ONLY_PRIMARY: Set<PageId> = new Set(['terminal'])
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove, onOpenPorts, showPlugins }: Props) {
+export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove, showPlugins }: Props) {
   const [ctx, setCtx]   = useState<CtxState | null>(null)
   const ctxRef          = useRef<HTMLDivElement>(null)
 
@@ -231,7 +230,7 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove,
           <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onContextMenu={e => openCtx(e, 'debug')}>
             <DebugIcon />
           </SidebarBtn>
-          <SidebarBtn active={false} label="Ports" onClick={onOpenPorts}>
+          <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')}>
             <PortsIcon />
           </SidebarBtn>
           <SidebarBtn active={false} label="Search  (Ctrl+K)" onClick={onSearch}>
