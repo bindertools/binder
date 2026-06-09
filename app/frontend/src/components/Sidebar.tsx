@@ -66,10 +66,10 @@ const SettingsIcon = () => (
 
 const PortsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 2l4 4-4 4"/>
-    <path d="M3 10V8a4 4 0 014-4h14"/>
-    <path d="M7 22l-4-4 4-4"/>
-    <path d="M21 14v2a4 4 0 01-4 4H3"/>
+    <path d="M12 22v-5"/>
+    <path d="M9 7V2"/>
+    <path d="M15 7V2"/>
+    <path d="M6 7h12l-1 8a5 5 0 01-10 0L6 7z"/>
   </svg>
 )
 
