@@ -990,31 +990,33 @@ export default function App() {
   const isOnlyPane = useMemo(() => getAllLeaves(layoutRoot).length <= 1, [layoutRoot])
 
   // ── Render ────────────────────────────────────────────────────────────────────
-  const wcBtnBase = "flex items-center justify-center w-8 h-[26px] rounded-sm bg-transparent border-0 cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
+  const wcBtnBase = "flex items-center justify-center w-9 h-[30px] rounded-sm bg-transparent border-0 outline-none cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
 
   const windowControls = useMemo(() => (
-    <div className="flex items-center gap-0.5 px-1">
+    <div className="flex items-center gap-0.5 px-1.5">
       {updateTag && (
-        <button
-          className="flex items-center justify-center w-[26px] h-[26px] border-0 rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
-          title={`Update available: ${updateTag} — click to install`}
-          onClick={() => PerformUpdate(updateTag).catch(() => {})}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
-        </button>
+        <>
+          <button
+            className="flex items-center justify-center w-[28px] h-[28px] border-0 outline-none rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
+            title={`Update available: ${updateTag} — click to install`}
+            onClick={() => PerformUpdate(updateTag).catch(() => {})}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
+        </>
       )}
-      <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
       <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
-        <svg width="10" height="2" viewBox="0 0 10 2"><path d="M0 1h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        <svg width="12" height="2" viewBox="0 0 12 2"><path d="M0 1h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
       </button>
       <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise" onDoubleClick={WindowToggleMaximise}>
-        <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.75" y="0.75" width="8.5" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="0.75" y="0.75" width="10.5" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
       </button>
       <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">
-        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
       </button>
     </div>
   // eslint-disable-next-line react-hooks/exhaustive-deps
