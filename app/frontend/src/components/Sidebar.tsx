@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import ReactDOM from 'react-dom'
 import type { PageId } from '../paneModel'
 
 export type { PageId }
 
 interface Props {
-  activePage:   PageId
-  onNavigate:   (page: PageId) => void
-  onSearch:     () => void
-  onPanelMove:  (page: PageId, dir: 'left' | 'right' | 'up' | 'down') => void
-  showPlugins:  boolean
+  activePage:      PageId
+  onNavigate:      (page: PageId) => void
+  onSearch:        () => void
+  onStartPageDrag: (page: PageId, startX: number, startY: number) => void
+  showPlugins:     boolean
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -92,180 +92,120 @@ const PluginsIcon = () => (
 // ── SidebarBtn ────────────────────────────────────────────────────────────────
 
 interface BtnProps {
-  active:          boolean
-  label:           string
-  onClick:         () => void
-  onContextMenu?:  (e: React.MouseEvent) => void
-  children:        React.ReactNode
+  active:       boolean
+  label:        string
+  onClick:      () => void
+  onMouseDown?: (e: React.MouseEvent) => void
+  children:     React.ReactNode
 }
 
-function SidebarBtn({ active, label, onClick, onContextMenu, children }: BtnProps) {
-  return (
-    <button
-      className={[
-        'relative flex items-center justify-center w-10 h-10 rounded-md border-0 cursor-pointer transition-[background,color] duration-[100ms] shrink-0',
-        active
-          ? 'text-[var(--tab-color-hover)] bg-surface-overlay'
-          : 'text-[var(--tab-color)] bg-transparent hover:text-[var(--tab-color-hover)] hover:bg-surface-raised',
-      ].join(' ')}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      title={label}
-      aria-label={label}
-    >
-      {active && (
-        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
-      )}
-      {children}
-    </button>
-  )
-}
+function SidebarBtn({ active, label, onClick, onMouseDown, children }: BtnProps) {
+  const [tooltipVisible, setTooltipVisible] = useState(false)
+  const btnRef  = useRef<HTMLButtonElement>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-// ── Context menu types ────────────────────────────────────────────────────────
-
-interface CtxState { page: PageId; x: number; y: number }
-
-// Terminal can only be the primary (left/top) panel — it can't move to a secondary slot
-const TERMINAL_ONLY_PRIMARY: Set<PageId> = new Set(['terminal'])
-
-// ── Main component ────────────────────────────────────────────────────────────
-
-export default function Sidebar({ activePage, onNavigate, onSearch, onPanelMove, showPlugins }: Props) {
-  const [ctx, setCtx]   = useState<CtxState | null>(null)
-  const ctxRef          = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!ctx) return
-    const onDown = (e: MouseEvent) => {
-      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setCtx(null)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtx(null) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [ctx])
-
-  function openCtx(e: React.MouseEvent, page: PageId) {
-    e.preventDefault()
-    e.stopPropagation()
-    const x = Math.min(e.clientX + 4, window.innerWidth  - 200)
-    const y = Math.min(e.clientY,     window.innerHeight - 200)
-    setCtx({ page, x, y })
+  const showTooltip = () => {
+    timerRef.current = setTimeout(() => setTooltipVisible(true), 350)
   }
 
-  function act(dir: 'left' | 'right' | 'up' | 'down') {
-    if (!ctx) return
-    onPanelMove(ctx.page, dir)
-    setCtx(null)
+  const hideTooltip = () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    setTooltipVisible(false)
   }
 
-  // ── Context menu ───────────────────────────────────────────────────────────
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
-  let ctxMenu: React.ReactNode = null
-  if (ctx) {
-    const isTerminal = TERMINAL_ONLY_PRIMARY.has(ctx.page)
-
-    const menuItem = (
-      icon:     React.ReactNode,
-      label:    string,
-      dir:      'left' | 'right' | 'up' | 'down',
-      disabled: boolean,
-      hint?:    string,
-    ) => (
-      <button
-        key={dir}
-        className={[
-          'flex items-center gap-[9px] w-full px-[14px] py-[7px] bg-transparent border-0 text-left font-ui text-[12.5px] whitespace-nowrap transition-[background] duration-[100ms]',
-          disabled
-            ? 'opacity-30 cursor-not-allowed text-[var(--info-bar-color)]'
-            : 'cursor-pointer text-[var(--info-bar-hover-color)] hover:bg-surface-raised',
-        ].join(' ')}
-        onClick={disabled ? undefined : () => act(dir)}
-        title={hint}
-        disabled={disabled}
-      >
-        <span className="opacity-60 flex items-center">{icon}</span>
-        {label}
-      </button>
-    )
-
-    const ArrowSvg = ({ d }: { d: string }) => (
-      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-        <path d={d}/>
-      </svg>
-    )
-
-    ctxMenu = ReactDOM.createPortal(
-      <div
-        ref={ctxRef}
-        className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 min-w-[190px] shadow-overlay font-ui backdrop-blur-[16px]"
-        style={{ left: ctx.x, top: ctx.y }}
-        onContextMenu={e => e.preventDefault()}
-      >
-        <div className="px-[14px] py-[5px] text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--info-bar-color)] opacity-50 select-none border-b border-[var(--sep)] mb-1">
-          Open alongside…
-        </div>
-        {menuItem(<ArrowSvg d="M7 1v12M3 5L7 1l4 4"/>,  'Move Up (top panel)',    'up',    false)}
-        {menuItem(<ArrowSvg d="M7 13V1M3 9l4 4 4-4"/>,  'Move Down (bottom panel)', 'down', isTerminal, isTerminal ? 'Terminal stays in the primary panel' : undefined)}
-        {menuItem(<ArrowSvg d="M1 7h12M5 3L1 7l4 4"/>,  'Move Left (left panel)', 'left',  false)}
-        {menuItem(<ArrowSvg d="M13 7H1M9 3l4 4-4 4"/>,  'Move Right (right panel)', 'right', isTerminal, isTerminal ? 'Terminal stays in the primary panel' : undefined)}
-      </div>,
-      document.body,
-    )
-  }
+  const tooltipEl = tooltipVisible && btnRef.current
+    ? ReactDOM.createPortal(
+        (() => {
+          const rect = btnRef.current!.getBoundingClientRect()
+          return (
+            <div
+              className="fixed z-[9999] px-2.5 py-1 rounded-md bg-[var(--info-bar-bg)] border border-sep text-[11.5px] font-ui text-[var(--info-bar-hover-color)] shadow-overlay select-none pointer-events-none whitespace-nowrap"
+              style={{ left: rect.right + 8, top: Math.round(rect.top + rect.height / 2), transform: 'translateY(-50%)' }}
+            >
+              {label}
+            </div>
+          )
+        })(),
+        document.body,
+      )
+    : null
 
   return (
     <>
-      <div
-        className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
-        style={{ ['--wails-draggable' as any]: 'no-drag' }}
+      <button
+        ref={btnRef}
+        className={[
+          'relative flex items-center justify-center w-10 h-10 rounded-md border-0 cursor-pointer transition-[background,color] duration-[100ms] shrink-0',
+          active
+            ? 'text-[var(--tab-color-hover)] bg-surface-overlay'
+            : 'text-[var(--tab-color)] bg-transparent hover:text-[var(--tab-color-hover)] hover:bg-surface-raised',
+        ].join(' ')}
+        onClick={onClick}
+        onMouseDown={onMouseDown}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        aria-label={label}
       >
-        {/* Branding placeholder — aligns with the pane tab bar height */}
-        <div className="h-9 w-full shrink-0 border-b border-[var(--border-color)]" />
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
+        )}
+        {children}
+      </button>
+      {tooltipEl}
+    </>
+  )
+}
 
-        {/* Features */}
-        <div className="flex flex-col items-center gap-0.5 flex-1 pt-1.5">
-          <SidebarBtn active={activePage === 'terminal'} label="Terminal"    onClick={() => onNavigate('terminal')} onContextMenu={e => openCtx(e, 'terminal')}>
-            <TerminalIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'editor'}   label="Code Editor" onClick={() => onNavigate('editor')}   onContextMenu={e => openCtx(e, 'editor')}>
-            <EditorIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onContextMenu={e => openCtx(e, 'versioncontrol')}>
-            <VersionControlIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'database'} label="Database"    onClick={() => onNavigate('database')} onContextMenu={e => openCtx(e, 'database')}>
-            <DatabaseIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onContextMenu={e => openCtx(e, 'debug')}>
-            <DebugIcon />
-          </SidebarBtn>
-          <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')}>
-            <PortsIcon />
-          </SidebarBtn>
-          <SidebarBtn active={false} label="Search  (Ctrl+K)" onClick={onSearch}>
-            <SearchIcon />
-          </SidebarBtn>
-        </div>
+// ── Main component ────────────────────────────────────────────────────────────
 
-        {/* Utilities */}
-        <div className="flex flex-col items-center gap-0.5">
-          <div className="w-6 h-px bg-sep mb-1" />
-          {showPlugins && (
-            <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')}>
-              <PluginsIcon />
-            </SidebarBtn>
-          )}
-          <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')}>
-            <SettingsIcon />
-          </SidebarBtn>
-        </div>
+export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, showPlugins }: Props) {
+  return (
+    <div
+      className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
+      style={{ ['--wails-draggable' as any]: 'no-drag' }}
+    >
+      {/* Branding placeholder — aligns with the pane tab bar height */}
+      <div className="h-9 w-full shrink-0 border-b border-[var(--border-color)]" />
+
+      {/* Features */}
+      <div className="flex flex-col items-center gap-0.5 flex-1 pt-1.5">
+        <SidebarBtn active={activePage === 'terminal'} label="Terminal" onClick={() => onNavigate('terminal')} onMouseDown={e => onStartPageDrag('terminal', e.clientX, e.clientY)}>
+          <TerminalIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'editor'} label="Code Editor" onClick={() => onNavigate('editor')} onMouseDown={e => onStartPageDrag('editor', e.clientX, e.clientY)}>
+          <EditorIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onMouseDown={e => onStartPageDrag('versioncontrol', e.clientX, e.clientY)}>
+          <VersionControlIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'database'} label="Database" onClick={() => onNavigate('database')} onMouseDown={e => onStartPageDrag('database', e.clientX, e.clientY)}>
+          <DatabaseIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
+          <DebugIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
+          <PortsIcon />
+        </SidebarBtn>
+        <SidebarBtn active={false} label="Search (Ctrl+K)" onClick={onSearch}>
+          <SearchIcon />
+        </SidebarBtn>
       </div>
 
-      {ctxMenu}
-    </>
+      {/* Utilities */}
+      <div className="flex flex-col items-center gap-0.5">
+        <div className="w-6 h-px bg-sep mb-1" />
+        {showPlugins && (
+          <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')} onMouseDown={e => onStartPageDrag('plugins', e.clientX, e.clientY)}>
+            <PluginsIcon />
+          </SidebarBtn>
+        )}
+        <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')} onMouseDown={e => onStartPageDrag('settings', e.clientX, e.clientY)}>
+          <SettingsIcon />
+        </SidebarBtn>
+      </div>
+    </div>
   )
 }

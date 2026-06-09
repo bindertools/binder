@@ -384,6 +384,9 @@ export default function App() {
   }, [])
 
   // ── General state ────────────────────────────────────────────────────────────
+  const [pageDrag,  setPageDrag]  = useState<{ page: PageId } | null>(null)
+  const [dropEdge,  setDropEdge]  = useState<'up' | 'down' | 'left' | 'right' | null>(null)
+
   const [searchOpen,     setSearchOpen]     = useState(false)
   const [terminalCwds,   setTerminalCwds]   = useState<Record<string, string>>({})
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
@@ -708,14 +711,6 @@ export default function App() {
     setFocusedPaneId(paneId)
   }, [])
 
-  const handleSplitPane = useCallback((paneId: string, dir: 'h' | 'v') => {
-    const newId = nextId()
-    dispatch({ type: 'add-terminal', id: newId, keepActive: true })
-    const newLeaf = createLeaf([newId], newId)
-    setLayoutRoot(prev => splitPaneInTree(prev, paneId, dir, newLeaf))
-    setFocusedPaneId(newLeaf.id)
-  }, [])
-
   const handleClosePane = useCallback((paneId: string) => {
     setLayoutRoot(prev => {
       const result = closePaneInTree(prev, paneId)
@@ -790,6 +785,51 @@ export default function App() {
     setLayoutRoot(prev => splitPaneInTree(prev, focusedPaneId, direction, newLeaf, newLeafFirst))
     setFocusedPaneId(newLeaf.id)
   }, [focusedPaneId])
+
+  const handleStartPageDrag = useCallback((page: PageId, startX: number, startY: number) => {
+    const state = { dragging: false, edge: null as 'up' | 'down' | 'left' | 'right' | null }
+
+    const onMove = (e: MouseEvent) => {
+      if (!state.dragging) {
+        const dx = e.clientX - startX
+        const dy = e.clientY - startY
+        if (Math.hypot(dx, dy) < 6) return
+        state.dragging = true
+        document.body.style.cursor = 'grabbing'
+        setPageDrag({ page })
+      }
+
+      const el = contentAreaRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+
+      let edge: typeof state.edge = null
+      if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) {
+        const ndx = x / rect.width - 0.5
+        const ndy = y / rect.height - 0.5
+        edge = Math.abs(ndx) > Math.abs(ndy) ? (ndx < 0 ? 'left' : 'right') : (ndy < 0 ? 'up' : 'down')
+      }
+
+      if (edge !== state.edge) {
+        state.edge = edge
+        setDropEdge(edge)
+      }
+    }
+
+    const onUp = () => {
+      if (state.dragging && state.edge) handlePanelMove(page, state.edge)
+      setPageDrag(null)
+      setDropEdge(null)
+      document.body.style.cursor = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [handlePanelMove])
 
   // ── Theme helpers ─────────────────────────────────────────────────────────────
   const handleApplyColors  = useCallback((colors: Record<string, string>) => setLiveColors(colors), [])
@@ -1081,12 +1121,38 @@ export default function App() {
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
-          onPanelMove={handlePanelMove}
+          onStartPageDrag={handleStartPageDrag}
           showPlugins={__PLUGINS__}
         />
 
         {/* Pane area — ref tracks size for terminal overlay positioning */}
         <div ref={contentAreaRef} className="flex-1 overflow-hidden relative">
+
+          {/* Drag-to-split drop zone overlay */}
+          {pageDrag && (
+            <div
+              className="absolute inset-0 z-[100] pointer-events-none"
+              style={{
+                borderTop:    dropEdge === 'up'    ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                borderBottom: dropEdge === 'down'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                borderLeft:   dropEdge === 'left'  ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+                borderRight:  dropEdge === 'right' ? '2px solid rgba(10,132,255,0.85)' : '2px solid transparent',
+              }}
+            >
+              {dropEdge && (
+                <div
+                  className="absolute bg-[rgba(10,132,255,0.06)]"
+                  style={
+                    dropEdge === 'up'    ? { top: 0, left: 0, right: 0, bottom: '67%' } :
+                    dropEdge === 'down'  ? { top: '67%', left: 0, right: 0, bottom: 0 } :
+                    dropEdge === 'left'  ? { top: 0, left: 0, right: '67%', bottom: 0 } :
+                                          { top: 0, left: '67%', right: 0, bottom: 0 }
+                  }
+                />
+              )}
+            </div>
+          )}
+
           <SplitPaneView
             node={layoutRoot}
             focusedPaneId={focusedPaneId}
@@ -1094,7 +1160,6 @@ export default function App() {
             isOnlyPane={isOnlyPane}
             windowControls={windowControls}
             onFocus={handleFocusPane}
-            onSplit={handleSplitPane}
             onClosePane={handleClosePane}
             onRatioChange={handleRatioChange}
             onSelectTab={handleSelectTab}

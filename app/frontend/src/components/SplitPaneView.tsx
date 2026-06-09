@@ -12,7 +12,6 @@ interface Props {
   isOnlyPane:      boolean
   windowControls?: React.ReactNode
   onFocus:         (paneId: string) => void
-  onSplit:         (paneId: string, dir: 'h' | 'v') => void
   onClosePane:     (paneId: string) => void
   onRatioChange:   (splitId: string, ratio: number) => void
   onSelectTab:     (paneId: string, tabId: string) => void
@@ -78,7 +77,7 @@ function SplitHandle({
 
 export default function SplitPaneView({
   node, focusedPaneId, allTabs, isOnlyPane, windowControls,
-  onFocus, onSplit, onClosePane, onRatioChange,
+  onFocus, onClosePane, onRatioChange,
   onSelectTab, onCloseTab, onNewTerminal,
   onRename, onSetColor, onDuplicate, onDropTab,
   renderContent,
@@ -91,7 +90,7 @@ export default function SplitPaneView({
 
     const shared = {
       focusedPaneId, allTabs, isOnlyPane: false,
-      onFocus, onSplit, onClosePane, onRatioChange,
+      onFocus, onClosePane, onRatioChange,
       onSelectTab, onCloseTab, onNewTerminal,
       onRename, onSetColor, onDuplicate, onDropTab,
       renderContent,
@@ -130,7 +129,6 @@ export default function SplitPaneView({
         onSelect={tabId => onSelectTab(pane.id, tabId)}
         onClose={tabId => onCloseTab(tabId)}
         onNewTerminal={() => onNewTerminal(pane.id)}
-        onSplit={dir => onSplit(pane.id, dir)}
         onClosePane={() => onClosePane(pane.id)}
         onRename={onRename}
         onSetColor={onSetColor}

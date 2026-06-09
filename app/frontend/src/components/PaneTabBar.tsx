@@ -85,7 +85,6 @@ interface Props {
   onSelect:       (tabId: string) => void
   onClose:        (tabId: string) => void
   onNewTerminal:  () => void
-  onSplit:        (dir: 'h' | 'v') => void
   onClosePane:    () => void
   onRename:       (id: string, title: string) => void
   onSetColor:     (id: string, color: string | null) => void
@@ -97,7 +96,7 @@ interface CtxState { tabId: string; x: number; y: number }
 
 export default function PaneTabBar({
   paneId: _paneId, tabs, activeId, canClosePane, windowControls,
-  onSelect, onClose, onNewTerminal, onSplit, onClosePane,
+  onSelect, onClose, onNewTerminal, onClosePane,
   onRename, onSetColor, onDuplicate, onDrop,
 }: Props) {
   const [ctx, setCtx]             = useState<CtxState | null>(null)
@@ -217,26 +216,6 @@ export default function PaneTabBar({
       {/* Pane controls */}
       <div className="flex items-center px-1 gap-0.5 shrink-0 border-l border-[var(--border-color)]"
         style={{ ['--wails-draggable' as any]: 'no-drag' }}>
-        <button
-          className="flex items-center justify-center w-[22px] h-[22px] rounded bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-40 hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-[opacity,background,color] duration-[100ms]"
-          onClick={() => onSplit('h')}
-          title="Split pane horizontally"
-        >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-            <rect x="1" y="1" width="12" height="12" rx="1.5"/>
-            <line x1="7" y1="1" x2="7" y2="13"/>
-          </svg>
-        </button>
-        <button
-          className="flex items-center justify-center w-[22px] h-[22px] rounded bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-40 hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-[opacity,background,color] duration-[100ms]"
-          onClick={() => onSplit('v')}
-          title="Split pane vertically"
-        >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-            <rect x="1" y="1" width="12" height="12" rx="1.5"/>
-            <line x1="1" y1="7" x2="13" y2="7"/>
-          </svg>
-        </button>
         {canClosePane && (
           <button
             className="flex items-center justify-center w-[22px] h-[22px] rounded bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-40 hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-[opacity,background,color] duration-[100ms]"
