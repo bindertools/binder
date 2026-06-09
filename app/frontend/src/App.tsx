@@ -452,10 +452,25 @@ export default function App() {
     return activeTerminalId ? (terminalCwds[activeTerminalId] ?? '') : ''
   }, [activeTerminalId, terminalCwds])
 
-  const focusedPaneTabs = useMemo(() => {
-    if (!focusedPane) return []
-    return focusedPane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
-  }, [focusedPane, tabs])
+  // ── Derived: tab-bar owner pane ──────────────────────────────────────────────
+  // Page-only panes (created by dragging a sidebar page to split) have empty
+  // tabIds and just show a page linked to another pane's terminal. The global
+  // tab bar follows that link so it keeps showing the owning pane's tabs
+  // instead of going empty when a page-only pane gets focus.
+  const tabBarPane = useMemo(() => {
+    if (!focusedPane) return null
+    if (focusedPane.tabIds.length > 0) return focusedPane
+    if (focusedPane.linkedTerminalId) {
+      const owner = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(focusedPane.linkedTerminalId!))
+      if (owner) return owner
+    }
+    return getAllLeaves(layoutRoot).find(l => l.tabIds.length > 0) ?? focusedPane
+  }, [focusedPane, layoutRoot])
+
+  const tabBarPaneTabs = useMemo(() => {
+    if (!tabBarPane) return []
+    return tabBarPane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+  }, [tabBarPane, tabs])
 
   // ── Sync: remove closed tabs from layout tree ─────────────────────────────────
   useEffect(() => {
@@ -683,29 +698,29 @@ export default function App() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   const shortcutHandlers: ShortcutHandlers = {
     'next-tab': () => {
-      if (!focusedPane) return
-      const idx  = focusedPane.tabIds.indexOf(focusedPane.activeTabId)
-      const next = focusedPane.tabIds[(idx + 1) % focusedPane.tabIds.length]
-      if (next) handleSelectTab(focusedPane.id, next)
+      if (!tabBarPane) return
+      const idx  = tabBarPane.tabIds.indexOf(tabBarPane.activeTabId)
+      const next = tabBarPane.tabIds[(idx + 1) % tabBarPane.tabIds.length]
+      if (next) handleSelectTab(tabBarPane.id, next)
     },
     'prev-tab': () => {
-      if (!focusedPane) return
-      const n    = focusedPane.tabIds.length
-      const idx  = focusedPane.tabIds.indexOf(focusedPane.activeTabId)
-      const prev = focusedPane.tabIds[(idx - 1 + n) % n]
-      if (prev) handleSelectTab(focusedPane.id, prev)
+      if (!tabBarPane) return
+      const n    = tabBarPane.tabIds.length
+      const idx  = tabBarPane.tabIds.indexOf(tabBarPane.activeTabId)
+      const prev = tabBarPane.tabIds[(idx - 1 + n) % n]
+      if (prev) handleSelectTab(tabBarPane.id, prev)
     },
-    'close-tab':     () => { if (focusedPane) handleCloseTab(focusedPane.activeTabId) },
-    'new-terminal':  () => { if (focusedPane) handleNewTerminal(focusedPane.id) },
+    'close-tab':     () => { if (tabBarPane) handleCloseTab(tabBarPane.activeTabId) },
+    'new-terminal':  () => { if (tabBarPane) handleNewTerminal(tabBarPane.id) },
     'open-search':   () => setSearchOpen(v => !v),
     'go-terminal':   () => handleSidebarNavigate('terminal'),
     'go-editor':     () => handleSidebarNavigate('editor'),
     'open-settings': () => handleSidebarNavigate('settings'),
     ...Object.fromEntries(
       [1,2,3,4,5,6,7,8,9].map(n => [`tab-${n}`, () => {
-        if (!focusedPane) return
-        const id = focusedPane.tabIds[n - 1]
-        if (id) handleSelectTab(focusedPane.id, id)
+        if (!tabBarPane) return
+        const id = tabBarPane.tabIds[n - 1]
+        if (id) handleSelectTab(tabBarPane.id, id)
       }]),
     ),
   }
@@ -1166,19 +1181,19 @@ export default function App() {
 
           {/* Single global tab bar — spans full width regardless of split layout */}
           <PaneTabBar
-            paneId={focusedPane?.id ?? ''}
-            tabs={focusedPaneTabs}
-            activeId={focusedPane?.activeTabId ?? ''}
+            paneId={tabBarPane?.id ?? ''}
+            tabs={tabBarPaneTabs}
+            activeId={tabBarPane?.activeTabId ?? ''}
             canClosePane={false}
             windowControls={windowControls}
-            onSelect={tabId => { if (focusedPane) handleSelectTab(focusedPane.id, tabId) }}
+            onSelect={tabId => { if (tabBarPane) handleSelectTab(tabBarPane.id, tabId) }}
             onClose={handleCloseTab}
-            onNewTerminal={() => { if (focusedPane) handleNewTerminal(focusedPane.id) }}
+            onNewTerminal={() => { if (tabBarPane) handleNewTerminal(tabBarPane.id) }}
             onClosePane={() => {}}
             onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
             onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
             onDuplicate={id => { void handleDuplicateTab(id) }}
-            onDrop={tabId => { if (focusedPane) handleDropTab(tabId, focusedPane.id) }}
+            onDrop={tabId => { if (tabBarPane) handleDropTab(tabId, tabBarPane.id) }}
           />
 
           {/* Split area — ref tracks size for terminal overlay positioning */}
