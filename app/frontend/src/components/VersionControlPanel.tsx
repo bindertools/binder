@@ -67,7 +67,7 @@ function IconBtn({
     <button
       title={title}
       disabled={disabled}
-      onClick={onClick}
+      onClick={e => { e.stopPropagation(); onClick() }}
       className="flex items-center justify-center w-5 h-5 rounded text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised border-0 bg-transparent cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-[background,color] duration-[100ms]"
     >
       {children}
@@ -135,11 +135,11 @@ function FileRow({
       </span>
       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
         {actionIcon2 && onAction2 && (
-          <IconBtn title={actionTitle2!} onClick={e => { (e as unknown as React.MouseEvent).stopPropagation(); onAction2() }} disabled={disabled}>
+          <IconBtn title={actionTitle2!} onClick={onAction2} disabled={disabled}>
             {actionIcon2}
           </IconBtn>
         )}
-        <IconBtn title={actionTitle} onClick={e => { (e as unknown as React.MouseEvent).stopPropagation(); onAction() }} disabled={disabled}>
+        <IconBtn title={actionTitle} onClick={onAction} disabled={disabled}>
           {actionIcon}
         </IconBtn>
       </div>
