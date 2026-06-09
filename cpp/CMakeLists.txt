@@ -35,6 +35,7 @@ add_library(cmdide-backend-lib STATIC
     src/session.cpp
     src/pack.cpp
     src/updater.cpp
+    src/git.cpp
 )
 
 target_include_directories(cmdide-backend-lib PUBLIC

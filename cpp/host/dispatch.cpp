@@ -10,6 +10,7 @@
 #include "../src/session.hpp"
 #include "../src/pack.hpp"
 #include "../src/updater.hpp"
+#include "../src/git.hpp"
 #include "../src/base64.hpp"
 
 #include <nlohmann/json.hpp>
@@ -106,7 +107,8 @@ json Dispatcher::old_to_new(const std::string& type,
         preview_ops::dispatch(type, msg, req_id, resp)||
         session_ops::dispatch(type, msg, req_id, resp)||
         pack_ops::dispatch(type, msg, req_id, resp)  ||
-        updater_ops::dispatch(type, msg, req_id, resp);
+        updater_ops::dispatch(type, msg, req_id, resp)||
+        git_ops::dispatch(type, msg, req_id, resp);
 
     if (!handled) {
         return {{"ok", false}, {"error", "not yet implemented: " + type}};
