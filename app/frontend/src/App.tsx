@@ -445,7 +445,8 @@ export default function App() {
     if (!focusedPane) return null
     const activeTab = tabs.find(t => t.id === focusedPane.activeTabId)
     if (activeTab?.type === 'terminal') return activeTab.id
-    return focusedPane.tabIds.find(id => tabs.find(t => t.id === id)?.type === 'terminal') ?? null
+    return focusedPane.tabIds.find(id => tabs.find(t => t.id === id)?.type === 'terminal')
+      ?? focusedPane.linkedTerminalId ?? null
   }, [focusedPane, tabs])
 
   const activeCwd = useMemo(() => {
@@ -1080,6 +1081,8 @@ export default function App() {
 
     // Terminal page with no tabs
     if (paneTabs.length === 0) {
+      // Page-only pane linked to another pane's terminal — rendered in overlay layer below
+      if (pane.linkedTerminalId) return null
       return (
         <div className="absolute inset-0 flex items-center justify-center">
           <button
@@ -1236,15 +1239,23 @@ export default function App() {
 
           {/* Terminal overlay — keyed by tab ID, never unmounts on split/close */}
           {contentAreaSize.w > 0 && tabs.filter(t => t.type === 'terminal').map(tab => {
-            const leaf = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(tab.id))
-            const rect = leaf ? getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+            const owningLeaf = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(tab.id))
+            let leaf: LeafPane | undefined
             let visible = false
-            if (leaf && rect) {
-              const leafTabs = leaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
-              const activeTab = leafTabs.find(t => t.id === leaf.activeTabId)
-              const showTerminalPage = leaf.activePage === 'terminal' && (!activeTab || activeTab.type === 'terminal')
-              visible = showTerminalPage && tab.id === leaf.activeTabId
+            if (owningLeaf && owningLeaf.activePage === 'terminal') {
+              const leafTabs = owningLeaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+              const activeTab = leafTabs.find(t => t.id === owningLeaf.activeTabId)
+              const showTerminalPage = !activeTab || activeTab.type === 'terminal'
+              if (showTerminalPage && tab.id === owningLeaf.activeTabId) { leaf = owningLeaf; visible = true }
             }
+            if (!visible) {
+              // Page-only pane (created by dragging the "terminal" page to split)
+              // shows the linked tab's terminal even though it doesn't own the tab
+              const linkedLeaf = getAllLeaves(layoutRoot).find(l =>
+                l.tabIds.length === 0 && l.linkedTerminalId === tab.id && l.activePage === 'terminal')
+              if (linkedLeaf) { leaf = linkedLeaf; visible = true }
+            }
+            const rect = leaf ? getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
             return (
               <div
                 key={tab.id}
