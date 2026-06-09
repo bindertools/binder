@@ -117,7 +117,7 @@ export default function SplitPaneView({
 
   return (
     <div
-      className={`flex flex-col w-full h-full overflow-hidden${focused ? ' pane--focused' : ''}`}
+      className={`flex flex-col w-full h-full overflow-hidden${focused && !isOnlyPane ? ' pane--focused' : ''}`}
       onMouseDown={() => onFocus(pane.id)}
     >
       <PaneTabBar
