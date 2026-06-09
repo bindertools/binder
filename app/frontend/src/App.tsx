@@ -777,11 +777,9 @@ export default function App() {
   }, [focusedPaneId])
 
   const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
-    const newId = nextId()
-    dispatch({ type: 'add-terminal', id: newId, keepActive: true })
-    const newLeaf = createLeaf([newId], newId, page)
     const direction = (dir === 'left' || dir === 'right') ? 'h' : 'v'
     const newLeafFirst = dir === 'left' || dir === 'up'
+    const newLeaf = createLeaf([], '', page)
     setLayoutRoot(prev => splitPaneInTree(prev, focusedPaneId, direction, newLeaf, newLeafFirst))
     setFocusedPaneId(newLeaf.id)
   }, [focusedPaneId])
