@@ -4,8 +4,10 @@ import type * as Monaco from 'monaco-editor'
 import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
+  type WorkflowRunRecord,
 } from '../lib/workflowRunsStore'
 import { Skeleton } from './Skeleton'
+import WorkflowEventsMap from './WorkflowEventsMap'
 import './WorkflowsPanel.scss'
 
 interface Props {
@@ -45,12 +47,6 @@ const PlayIcon = () => (
   </svg>
 )
 
-const StopIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" stroke="none">
-    <rect x="2.5" y="2.5" width="7" height="7" rx="1"/>
-  </svg>
-)
-
 const CheckIcon = () => (
   <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M2.5 6.5l2.5 2.5 4.5-5.5"/>
@@ -73,6 +69,19 @@ const DownloadIcon = () => (
   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <path d="M7 1.5v7.5M3.5 6l3.5 3.5L10.5 6"/>
     <path d="M2 11.5h10"/>
+  </svg>
+)
+
+const CodeIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4"/>
+  </svg>
+)
+
+const ClockIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="8" r="6.25"/>
+    <path d="M8 4.5V8.3l2.4 1.4"/>
   </svg>
 )
 
@@ -240,115 +249,167 @@ function OutputCard({ output, running, preparing }: { output: string; running: b
         <pre ref={outRef} className="wf-output-card__body">{output}</pre>
       ) : (
         <div className="wf-output-card__placeholder">
-          Click &ldquo;Run Locally&rdquo; to execute this workflow in a local sandbox.
+          Click &ldquo;Run&rdquo; to execute this workflow in a local sandbox.
         </div>
       )}
     </div>
   )
 }
 
-// ── Run panel ─────────────────────────────────────────────────────────────────
+// ── Run controls (header) ─────────────────────────────────────────────────────
 
-interface RunPanelProps {
-  cwd:          string
-  workflow:     WorkflowFile
-  runnerStatus: RunnerStatus | null
-}
-
-function RunPanel({ cwd, workflow, runnerStatus }: RunPanelProps) {
-  const allRuns = useWorkflowRuns()
-  const run = useMemo(() => {
-    let latest: typeof allRuns[number] | undefined
+function useLatestRun(allRuns: WorkflowRunRecord[], cwd: string, file: string | undefined) {
+  return useMemo(() => {
+    if (!file) return undefined
+    let latest: WorkflowRunRecord | undefined
     for (const r of allRuns) {
-      if (r.cwd === cwd && r.file === workflow.file) {
+      if (r.cwd === cwd && r.file === file) {
         if (!latest || r.startedAt > latest.startedAt) latest = r
       }
     }
     return latest
-  }, [allRuns, cwd, workflow.file])
+  }, [allRuns, cwd, file])
+}
 
-  const handleRun = useCallback(() => {
-    startWorkflowRun(cwd, workflow.file, workflow.name)
-  }, [cwd, workflow.file, workflow.name])
+interface RunControlsProps {
+  cwd:      string
+  workflow: WorkflowFile
+  run?:     WorkflowRunRecord
+}
 
-  const handleStop = useCallback(() => {
-    if (run) stopWorkflowRun(run.runId)
-  }, [run])
+function RunControls({ cwd, workflow, run }: RunControlsProps) {
+  const running = run?.status === 'running'
 
-  const handleDownload = useCallback(() => {
-    if (run) void downloadWorkflowRunLog(run.runId)
-  }, [run])
-
-  const running    = run?.status === 'running'
-  const output     = run?.output ?? ''
-  const exitCode   = run?.exitCode ?? null
-  const stepEvents = run?.stepEvents ?? []
-  const downloadState = run?.downloadState ?? 'idle'
-
-  const preparing = running && output === ''
-  const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
+  const handleClick = useCallback(() => {
+    if (running) {
+      if (run) stopWorkflowRun(run.runId)
+    } else {
+      startWorkflowRun(cwd, workflow.file, workflow.name)
+    }
+  }, [running, run, cwd, workflow.file, workflow.name])
 
   return (
-    <div className="wf-run">
-      <div className="wf-run__toolbar">
-        {!running ? (
-          <button onClick={handleRun} className="wf-btn wf-btn--primary">
-            <PlayIcon /> Run Locally
-          </button>
-        ) : (
-          <button onClick={handleStop} className="wf-btn wf-btn--ghost">
-            <StopIcon /> Stop
-          </button>
-        )}
-        {running && (
-          <span className="wf-pill wf-pill--running"><Spinner size={12} /> Running…</span>
-        )}
-        {!running && exitCode !== null && (
-          <span className={`wf-pill ${exitCode === 0 ? 'wf-pill--success' : 'wf-pill--failure'}`}>
-            exit {exitCode}
-          </span>
-        )}
-        {!running && run && output !== '' && (
-          <button
-            onClick={handleDownload}
-            disabled={downloadState !== 'idle'}
-            className="wf-btn wf-btn--ghost ml-auto"
-          >
-            {downloadState === 'downloading' ? (
-              <><Spinner size={12} /> Downloading…</>
-            ) : downloadState === 'downloaded' ? (
-              <><CheckIcon /> Downloaded</>
-            ) : (
-              <><DownloadIcon /> Download Log</>
-            )}
-          </button>
-        )}
-      </div>
-
-      {bashUnavailable && (
-        <div className="wf-run__warning">
-          Git Bash was not found — steps that default to <span style={{ fontFamily: 'var(--font-mono)' }}>bash</span> may fail to run.
-        </div>
+    <div className="wf-run-controls">
+      {!running && run && (
+        <span className={`wf-pill ${run.status === 'success' ? 'wf-pill--success' : 'wf-pill--failure'}`}>
+          {run.status === 'success' ? <CheckIcon /> : <CrossIcon />}
+          {run.status === 'success' ? 'Passed' : 'Failed'}
+        </span>
       )}
+      <button
+        onClick={handleClick}
+        className={`wf-run-btn${running ? ' wf-run-btn--running' : ''}`}
+        title={running ? 'Click to stop' : 'Run workflow locally'}
+      >
+        <span className="wf-run-btn__label">
+          {running ? <><Spinner size={13} /> Running…</> : <><PlayIcon /> Run</>}
+        </span>
+      </button>
+    </div>
+  )
+}
 
-      <StepTimeline events={stepEvents} />
+// ── History ────────────────────────────────────────────────────────────────────
 
-      <OutputCard output={output} running={running} preparing={preparing} />
+function formatRunTime(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function RunHistory({ cwd, file }: { cwd: string; file: string }) {
+  const allRuns = useWorkflowRuns()
+  const runs = useMemo(
+    () => allRuns.filter(r => r.cwd === cwd && r.file === file).sort((a, b) => b.startedAt - a.startedAt),
+    [allRuns, cwd, file],
+  )
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  if (runs.length === 0) {
+    return (
+      <div className="wf-history">
+        <div className="wf-output-card__placeholder">
+          No runs yet. Use the Run button above to execute this workflow.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="wf-history">
+      {runs.map(r => {
+        const isOpen = expanded === r.runId
+        const label = r.status === 'running' ? 'Running' : r.status === 'success' ? 'Passed' : 'Failed'
+        return (
+          <div key={r.runId} className="wf-history__item">
+            <button className="wf-history__row" onClick={() => setExpanded(isOpen ? null : r.runId)}>
+              <span className={`wf-history__status wf-history__status--${r.status}`}>
+                {r.status === 'running' ? <Spinner size={13} /> : r.status === 'success' ? <CheckIcon /> : <CrossIcon />}
+              </span>
+              <span className="wf-history__label">{label}</span>
+              <span className="wf-history__time">{formatRunTime(r.startedAt)}</span>
+              <span className="wf-badge">Local</span>
+              <span className={`wf-history__chevron${isOpen ? ' wf-history__chevron--open' : ''}`}><ChevronRightIcon /></span>
+            </button>
+            {isOpen && (
+              <div className="wf-history__detail">
+                {r.output !== '' && (
+                  <div className="wf-history__toolbar">
+                    {r.exitCode !== null && (
+                      <span className={`wf-pill ${r.exitCode === 0 ? 'wf-pill--success' : 'wf-pill--failure'}`}>
+                        exit {r.exitCode}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => void downloadWorkflowRunLog(r.runId)}
+                      disabled={r.downloadState !== 'idle'}
+                      className="wf-btn wf-btn--ghost ml-auto"
+                    >
+                      {r.downloadState === 'downloading' ? (
+                        <><Spinner size={12} /> Downloading…</>
+                      ) : r.downloadState === 'downloaded' ? (
+                        <><CheckIcon /> Downloaded</>
+                      ) : (
+                        <><DownloadIcon /> Download Log</>
+                      )}
+                    </button>
+                  </div>
+                )}
+                <StepTimeline events={r.stepEvents} />
+                <OutputCard output={r.output} running={r.status === 'running'} preparing={r.status === 'running' && r.output === ''} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+type Section = 'code' | 'events' | 'history'
+
+interface SelectionState {
+  file:    string
+  section: Section
+}
+
+// Persists which workflow/section was last open per cwd, so navigating away
+// from and back to the Workflows page restores the previous view (and the
+// Run button keeps showing "Running" the whole time, since its status comes
+// from the global workflow-runs store rather than this panel's own state).
+const lastSelection = new Map<string, SelectionState>()
+
 export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDef }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
-  const [selected, setSelected] = useState<WorkflowFile | null>(null)
+  const [selectedFile, setSelectedFile] = useState<string | null>(() => lastSelection.get(cwd)?.file ?? null)
+  const [section,  setSection]  = useState<Section>(() => lastSelection.get(cwd)?.section ?? 'code')
   const [content,  setContent]  = useState('')
   const [contentLoading, setContentLoading] = useState(false)
-  const [detailTab, setDetailTab] = useState<'code' | 'run'>('code')
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus | null>(null)
+
+  const allRuns = useWorkflowRuns()
 
   useEffect(() => {
     workflows.checkRunner().then(setRunnerStatus).catch(() => setRunnerStatus(null))
@@ -381,20 +442,35 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
     api.editor.defineTheme(monacoTheme, monacoThemeDef)
   }, [monacoTheme, monacoThemeDef])
 
-  const openWorkflow = useCallback(async (wf: WorkflowFile) => {
-    setSelected(wf)
-    setDetailTab('code')
-    setContent('')
+  const selected = useMemo(
+    () => (selectedFile ? list.find(w => w.file === selectedFile) ?? null : null),
+    [list, selectedFile],
+  )
+
+  useEffect(() => {
+    if (!selectedFile) { setContent(''); return }
+    let cancelled = false
     setContentLoading(true)
-    try {
-      const r = await workflows.read(cwd, wf.file)
-      setContent(r.content)
-    } catch (e: any) {
-      setContent(`# failed to read workflow\n# ${e?.message ?? 'error'}`)
-    } finally {
-      setContentLoading(false)
-    }
+    workflows.read(cwd, selectedFile)
+      .then(r => { if (!cancelled) setContent(r.content) })
+      .catch((e: any) => { if (!cancelled) setContent(`# failed to read workflow\n# ${e?.message ?? 'error'}`) })
+      .finally(() => { if (!cancelled) setContentLoading(false) })
+    return () => { cancelled = true }
+  }, [cwd, selectedFile])
+
+  const selectWorkflow = useCallback((wf: WorkflowFile) => {
+    setSelectedFile(wf.file)
+    setSection('code')
+    lastSelection.set(cwd, { file: wf.file, section: 'code' })
   }, [cwd])
+
+  const selectSection = useCallback((s: Section) => {
+    setSection(s)
+    if (selectedFile) lastSelection.set(cwd, { file: selectedFile, section: s })
+  }, [cwd, selectedFile])
+
+  const latestRun = useLatestRun(allRuns, cwd, selected?.file)
+  const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
 
   if (!cwd) return (
     <div className="wf-page">
@@ -435,8 +511,8 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
             <WorkflowCard
               key={wf.file}
               wf={wf}
-              selected={selected?.file === wf.file}
-              onSelect={() => void openWorkflow(wf)}
+              selected={selectedFile === wf.file}
+              onSelect={() => selectWorkflow(wf)}
             />
           ))}
         </div>
@@ -451,68 +527,75 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
           </div>
         ) : (
           <>
-            <div className="wf-hero">
-              <div className="wf-hero__title-row">
-                <span className="wf-hero__icon"><WorkflowIcon size={20} /></span>
-                <div className="min-w-0 flex-1">
-                  <div className="wf-hero__title">{selected.name}</div>
-                  <div className="wf-hero__path">{selected.path}</div>
-                </div>
+            {bashUnavailable && (
+              <div className="wf-run__warning">
+                Git Bash was not found — steps that default to <span style={{ fontFamily: 'var(--font-mono)' }}>bash</span> may fail to run.
               </div>
-              {selected.triggers.length > 0 && (
-                <div className="wf-hero__badges">
-                  {selected.triggers.map(t => <TriggerBadge key={t} label={t} />)}
-                </div>
-              )}
-              {selected.lastCommit && (
-                <div className="wf-hero__commit">
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{selected.lastCommit.hash}</span>
-                  {' · '}{selected.lastCommit.message}
-                  {' · '}{selected.lastCommit.date}
-                </div>
-              )}
-            </div>
-
-            <div className="wf-segmented">
-              {(['code', 'run'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setDetailTab(tab)}
-                  className={`wf-segmented__btn${detailTab === tab ? ' wf-segmented__btn--active' : ''}`}
-                >
-                  {tab === 'code' ? 'Code' : 'Run'}
-                </button>
-              ))}
-            </div>
-
-            {detailTab === 'code' ? (
-              <div className="wf-code-card">
-                <div className="wf-code-card__header">{selected.path}</div>
-                <div className="wf-code-card__body">
-                  {contentLoading ? (
-                    <CodeSkeleton />
-                  ) : (
-                    <MonacoEditor
-                      height="100%"
-                      language="yaml"
-                      value={content}
-                      theme={monacoTheme}
-                      options={{
-                        readOnly: true,
-                        minimap: { enabled: false },
-                        fontSize: 13,
-                        lineHeight: 22,
-                        scrollBeyondLastLine: false,
-                        wordWrap: 'on',
-                        padding: { top: 12, bottom: 12 },
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <RunPanel cwd={cwd} workflow={selected} runnerStatus={runnerStatus} />
             )}
+
+            <div className="wf-detail-header">
+              <div className="wf-detail-header__info">
+                <div className="wf-detail-header__title">{selected.name}</div>
+                <div className="wf-detail-header__path">{selected.path}</div>
+              </div>
+              <RunControls cwd={cwd} workflow={selected} run={latestRun} />
+            </div>
+
+            <div className="wf-detail-body">
+              <nav className="wf-detail-nav">
+                <button
+                  onClick={() => selectSection('code')}
+                  className={`wf-detail-nav__btn${section === 'code' ? ' wf-detail-nav__btn--active' : ''}`}
+                >
+                  <CodeIcon /> Code
+                </button>
+                <button
+                  onClick={() => selectSection('events')}
+                  className={`wf-detail-nav__btn${section === 'events' ? ' wf-detail-nav__btn--active' : ''}`}
+                >
+                  <WorkflowIcon /> Events Map
+                </button>
+                <button
+                  onClick={() => selectSection('history')}
+                  className={`wf-detail-nav__btn${section === 'history' ? ' wf-detail-nav__btn--active' : ''}`}
+                >
+                  <ClockIcon /> History
+                </button>
+              </nav>
+
+              <div className="wf-detail-content">
+                {section === 'code' && (
+                  <div className="wf-code-card">
+                    <div className="wf-code-card__header">{selected.path}</div>
+                    <div className="wf-code-card__body">
+                      {contentLoading ? (
+                        <CodeSkeleton />
+                      ) : (
+                        <MonacoEditor
+                          height="100%"
+                          language="yaml"
+                          value={content}
+                          theme={monacoTheme}
+                          options={{
+                            readOnly: true,
+                            minimap: { enabled: false },
+                            fontSize: 13,
+                            lineHeight: 22,
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on',
+                            padding: { top: 12, bottom: 12 },
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {section === 'events' && <WorkflowEventsMap content={content} loading={contentLoading} />}
+
+                {section === 'history' && <RunHistory cwd={cwd} file={selected.file} />}
+              </div>
+            </div>
           </>
         )}
       </main>

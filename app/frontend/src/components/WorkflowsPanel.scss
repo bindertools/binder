@@ -11,8 +11,36 @@
   color: var(--tab-color-hover);
 }
 
+// Custom scrollbar — applied to every scrollable area in this page so nothing
+// falls back to the default browser scrollbar.
+%wf-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--sep-strong);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent);
+    background-clip: padding-box;
+  }
+}
+
 .wf-sidebar {
-  width: 300px;
+  width: 420px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -44,6 +72,7 @@
 }
 
 .wf-sidebar__list {
+  @extend %wf-scroll;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -51,6 +80,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 2px;
+  padding-right: 10px;
   margin: -2px;
 }
 
@@ -156,97 +186,176 @@
   border: 1px solid var(--sep);
 }
 
-// ── Hero header card ───────────────────────────────────────────────────────
-.wf-hero {
+// ── Detail header: name + path + run controls only ────────────────────────
+.wf-detail-header {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 22px 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
   border-radius: var(--r-lg);
   border: 1px solid var(--sep);
   background: var(--surface-raised);
   flex-shrink: 0;
 }
 
-.wf-hero__title-row {
+.wf-detail-header__info {
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.wf-hero__icon {
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--r-md);
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.wf-hero__title {
-  font-size: 18px;
+.wf-detail-header__title {
+  font-size: 17px;
   font-weight: 700;
   color: var(--tab-color-hover);
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.wf-hero__path {
+.wf-detail-header__path {
   font-family: var(--font-mono);
   font-size: 12px;
   opacity: 0.5;
   color: var(--tab-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.wf-hero__badges {
+// ── Run controls (visually separated from name/path) ──────────────────────
+.wf-run-controls {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.wf-hero__commit {
-  font-size: 11.5px;
-  color: var(--tab-color);
-  opacity: 0.5;
-  line-height: 1.6;
-}
-
-// ── Segmented control ──────────────────────────────────────────────────────
-.wf-segmented {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border-radius: var(--r-md);
-  background: var(--surface-raised);
-  border: 1px solid var(--sep);
-  width: fit-content;
+  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
+  padding-left: 18px;
+  border-left: 1px solid var(--sep);
 }
 
-.wf-segmented__btn {
+.wf-run-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
   border: 0;
-  background: transparent;
+  border-radius: var(--r-md);
+  padding: 10px 20px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
   cursor: pointer;
-  padding: 7px 20px;
-  border-radius: calc(var(--r-md) - 2px);
+  background: var(--accent);
+  transition: background .12s, opacity .12s;
+}
+
+.wf-run-btn:hover {
+  background: var(--accent-hover);
+}
+
+.wf-run-btn__label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// "Sun-fade" — the button's base color slowly pulses through a warm glow.
+.wf-run-btn--running {
+  background: linear-gradient(135deg, var(--accent), #ff9f0a 50%, var(--accent));
+  background-size: 220% 220%;
+  animation: wf-run-sunfade 3.2s ease-in-out infinite;
+}
+
+// Warping glare — a diagonal sheen sweeps across the button.
+.wf-run-btn--running::after {
+  content: '';
+  position: absolute;
+  inset: -50% -100%;
+  background: linear-gradient(
+    100deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 60%
+  );
+  background-size: 60% 100%;
+  background-repeat: no-repeat;
+  animation: wf-run-glare 1.8s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes wf-run-sunfade {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes wf-run-glare {
+  0%   { background-position: -120% 0; }
+  100% { background-position: 220% 0; }
+}
+
+// ── Detail body: vertical sub-section nav + content ────────────────────────
+.wf-detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.wf-detail-nav {
+  width: 178px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  height: fit-content;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+}
+
+.wf-detail-nav__btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--tab-color);
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--tab-color);
-  transition: background .12s, color .12s;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
 }
 
-.wf-segmented__btn:hover {
+.wf-detail-nav__btn:hover {
   color: var(--tab-color-hover);
+  background: var(--app-bg);
 }
 
-.wf-segmented__btn--active {
-  background: var(--accent);
-  color: #fff;
+.wf-detail-nav__btn--active {
+  color: var(--tab-color-hover);
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+}
+
+.wf-detail-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 // ── Buttons ────────────────────────────────────────────────────────────────
@@ -349,13 +458,14 @@
 
 // ── Run view ───────────────────────────────────────────────────────────────
 .wf-run {
+  @extend %wf-scroll;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 8px;
 }
 
 .wf-run__toolbar {
@@ -510,6 +620,7 @@
 }
 
 .wf-output-card__body {
+  @extend %wf-scroll;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -600,4 +711,165 @@
   border: 1px solid var(--sep);
   background: var(--surface-raised);
   flex-shrink: 0;
+}
+
+// ── Events map ─────────────────────────────────────────────────────────────
+.wf-events-map {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  padding: 4px;
+}
+
+.wf-events-map__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.wf-events-map__edge {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.5;
+}
+
+.wf-events-map__node rect {
+  fill: var(--surface-raised);
+  stroke: var(--sep);
+  stroke-width: 1.5;
+}
+
+.wf-events-map__node--trigger rect {
+  fill: var(--accent-dim);
+  stroke: var(--accent-border);
+}
+
+.wf-events-map__node--success rect {
+  fill: rgba(74, 222, 128, 0.1);
+  stroke: rgba(74, 222, 128, 0.35);
+}
+
+.wf-events-map__node--failure rect {
+  fill: rgba(248, 113, 113, 0.1);
+  stroke: rgba(248, 113, 113, 0.35);
+}
+
+.wf-events-map__label {
+  fill: var(--tab-color-hover);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wf-events-map__node--trigger .wf-events-map__label {
+  fill: var(--accent);
+}
+
+.wf-events-map__node--success .wf-events-map__label {
+  fill: #4ade80;
+}
+
+.wf-events-map__node--failure .wf-events-map__label {
+  fill: #f87171;
+}
+
+.wf-events-map__sublabel {
+  fill: var(--tab-color);
+  opacity: 0.55;
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+.wf-history {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.wf-history__item {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.wf-history__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s;
+}
+
+.wf-history__row:hover {
+  background: var(--app-bg);
+}
+
+.wf-history__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wf-history__status--success {
+  color: #4ade80;
+}
+
+.wf-history__status--failure {
+  color: #f87171;
+}
+
+.wf-history__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+}
+
+.wf-history__time {
+  flex: 1;
+  font-size: 12px;
+  color: var(--tab-color);
+  opacity: 0.6;
+}
+
+.wf-history__chevron {
+  display: flex;
+  transition: transform .15s;
+}
+
+.wf-history__chevron--open {
+  transform: rotate(90deg);
+}
+
+.wf-history__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.wf-history__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
