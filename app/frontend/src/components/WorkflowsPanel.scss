@@ -1,0 +1,603 @@
+// ── Page layout ────────────────────────────────────────────────────────────
+.wf-page {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  gap: 20px;
+  padding: 20px;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  background: var(--app-bg);
+  color: var(--tab-color-hover);
+}
+
+.wf-sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.wf-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.wf-sidebar__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tab-color);
+  opacity: 0.7;
+}
+
+.wf-sidebar__count {
+  opacity: 0.6;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.wf-sidebar__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+  margin: -2px;
+}
+
+.wf-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+// ── Workflow list cards ───────────────────────────────────────────────────
+.wf-workflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .12s, background .12s;
+  flex-shrink: 0;
+}
+
+.wf-workflow-card:hover {
+  border-color: var(--sep-strong);
+}
+
+.wf-workflow-card--selected {
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+}
+
+.wf-workflow-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wf-workflow-card__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.wf-workflow-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-workflow-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wf-workflow-card__path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-workflow-card__commit {
+  font-size: 11px;
+  color: var(--tab-color);
+  opacity: 0.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ── Trigger badge ──────────────────────────────────────────────────────────
+.wf-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--app-bg);
+  color: var(--tab-color);
+  border: 1px solid var(--sep);
+}
+
+// ── Hero header card ───────────────────────────────────────────────────────
+.wf-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 24px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.wf-hero__title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.wf-hero__icon {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.wf-hero__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tab-color-hover);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-hero__path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: 0.5;
+  color: var(--tab-color);
+}
+
+.wf-hero__badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wf-hero__commit {
+  font-size: 11.5px;
+  color: var(--tab-color);
+  opacity: 0.5;
+  line-height: 1.6;
+}
+
+// ── Segmented control ──────────────────────────────────────────────────────
+.wf-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--sep);
+  width: fit-content;
+  flex-shrink: 0;
+}
+
+.wf-segmented__btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 20px;
+  border-radius: calc(var(--r-md) - 2px);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--tab-color);
+  transition: background .12s, color .12s;
+}
+
+.wf-segmented__btn:hover {
+  color: var(--tab-color-hover);
+}
+
+.wf-segmented__btn--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+// ── Buttons ────────────────────────────────────────────────────────────────
+.wf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s, opacity .12s;
+}
+
+.wf-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.wf-btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+.wf-btn--ghost {
+  background: transparent;
+  border-color: var(--sep);
+  color: var(--tab-color-hover);
+}
+
+.wf-btn--ghost:hover {
+  background: var(--app-bg);
+  border-color: var(--sep-strong);
+}
+
+.wf-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+// ── Status pill ────────────────────────────────────────────────────────────
+.wf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.wf-pill--running {
+  background: var(--app-bg);
+  color: var(--tab-color);
+  border: 1px solid var(--sep);
+}
+
+.wf-pill--success {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+.wf-pill--failure {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+
+// ── Code card ──────────────────────────────────────────────────────────────
+.wf-code-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  overflow: hidden;
+}
+
+.wf-code-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sep);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--tab-color);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.wf-code-card__body {
+  flex: 1;
+  min-height: 0;
+}
+
+// ── Run view ───────────────────────────────────────────────────────────────
+.wf-run {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wf-run__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.wf-run__warning {
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(250, 204, 21, 0.06);
+  color: #facc15;
+  font-size: 12px;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+// ── Step timeline ──────────────────────────────────────────────────────────
+.wf-timeline-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.wf-timeline-job__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tab-color);
+  opacity: 0.5;
+  margin-bottom: 6px;
+}
+
+.wf-timeline__row {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.wf-timeline__rail {
+  width: 22px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wf-timeline__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wf-timeline__dot--running {
+  background: var(--app-bg);
+  border: 1px solid var(--sep-strong);
+}
+
+.wf-timeline__dot--success {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+
+.wf-timeline__dot--failure {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.wf-timeline__dot--skipped {
+  background: var(--app-bg);
+  color: var(--tab-color);
+  opacity: 0.5;
+  border: 1px solid var(--sep);
+}
+
+.wf-timeline__line {
+  width: 2px;
+  flex: 1;
+  min-height: 10px;
+  background: var(--sep-strong);
+  margin: 2px 0;
+}
+
+.wf-timeline__row:last-child .wf-timeline__line {
+  visibility: hidden;
+}
+
+.wf-timeline__content {
+  display: flex;
+  align-items: center;
+  padding-bottom: 16px;
+  font-size: 12.5px;
+  color: var(--tab-color-hover);
+  min-width: 0;
+}
+
+.wf-timeline__content--failure {
+  color: #f87171;
+}
+
+.wf-timeline__content--skipped {
+  opacity: 0.5;
+}
+
+.wf-timeline__row:last-child .wf-timeline__content {
+  padding-bottom: 0;
+}
+
+// ── Output card ────────────────────────────────────────────────────────────
+.wf-output-card {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  overflow: hidden;
+}
+
+.wf-output-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tab-color);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.wf-output-card__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--tab-color-hover);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wf-output-card__placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  font-size: 12.5px;
+  color: var(--tab-color);
+  opacity: 0.5;
+  line-height: 1.6;
+}
+
+// ── Empty / loading states ─────────────────────────────────────────────────
+.wf-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.wf-empty__icon {
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+.wf-sidebar__empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--tab-color);
+  opacity: 0.5;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wf-sidebar__refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  border: 0;
+  background: transparent;
+  color: var(--tab-color);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+
+.wf-sidebar__refresh:hover {
+  background: var(--surface-raised);
+  color: var(--tab-color-hover);
+}
+
+.wf-sidebar__refresh:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+// ── Skeletons ──────────────────────────────────────────────────────────────
+.wf-workflow-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
