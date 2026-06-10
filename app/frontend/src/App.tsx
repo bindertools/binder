@@ -15,6 +15,7 @@ import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
 import WorkflowsPanel from './components/WorkflowsPanel'
+import WorkflowRunToasts from './components/WorkflowRunToasts'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
@@ -1170,6 +1171,7 @@ export default function App() {
       )}
 
       <ZoomIndicator enabled={appConfig.zoom_insights} defaultZoom={appConfig.default_zoom} onZoomChange={setCurrentZoom} />
+      <WorkflowRunToasts />
 
       {/* ── Body: sidebar + pane tree ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden flex">
