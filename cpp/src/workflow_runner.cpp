@@ -399,12 +399,11 @@ std::vector<MatrixCombo> expand_matrix(const YamlNode& jobNode, const Context& c
     const YamlNode& matrix = strategy.get("matrix");
 
     if (!matrix.isMap()) {
+        // Non-matrix jobs always run locally (e.g. via Git Bash for
+        // ubuntu-latest/macos-latest) — only matrix-expanded OS variants are
+        // skipped below.
         MatrixCombo c;
         c.runsOn = substitute(runsOnRaw, ctx);
-        if (!runs_on_supported(c.runsOn)) {
-            c.skip = true;
-            c.skipReason = "runs-on: " + c.runsOn + " is not supported by the local runner (host is Windows)";
-        }
         result.push_back(c);
         return result;
     }
