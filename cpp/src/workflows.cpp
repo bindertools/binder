@@ -2,8 +2,6 @@
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <fstream>
-#include <map>
-#include <mutex>
 #include <sstream>
 #include <filesystem>
 
@@ -300,146 +298,37 @@ bool dispatch(const std::string& type, const json& msg,
         return true;
     }
 
-    if (type == "workflows.checkAct") {
-        auto r = run_capture("", {"act", "--version"});
-        if (r.code != 0) { reply({{"installed", false}, {"version", ""}}); return true; }
-        reply({{"installed", true}, {"version", rtrim_nl(r.out)}});
+    if (type == "workflows.checkRunner") {
+        json result = {
+            {"bash", {{"available", false}, {"path", ""}}},
+            {"git",  {{"available", false}, {"version", ""}}},
+            {"pwsh", {{"available", false}}},
+        };
+
+        std::error_code fec;
+        const char* bashCandidates[] = {
+            "C:\\Program Files\\Git\\bin\\bash.exe",
+            "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+            "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+        };
+        for (auto candidate : bashCandidates) {
+            if (fs::exists(candidate, fec)) {
+                result["bash"] = {{"available", true}, {"path", candidate}};
+                break;
+            }
+        }
+
+        auto gitR = run_capture("", {"git", "--version"});
+        if (gitR.code == 0) result["git"] = {{"available", true}, {"version", rtrim_nl(gitR.out)}};
+
+        auto pwshR = run_capture("", {"pwsh", "-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.Major"});
+        result["pwsh"] = {{"available", pwshR.code == 0}};
+
+        reply(result);
         return true;
     }
 
     return false;
 }
-
-// ── Local act run (streaming) ─────────────────────────────────────────────────
-
-#ifdef _WIN32
-namespace {
-std::mutex g_proc_mu;
-std::map<std::string, HANDLE> g_running; // runId -> process handle
-}
-
-void run_act(const std::string& path, const std::string& file,
-              const std::string& runId, const EmitFn& emit) {
-    if (file.find("..") != std::string::npos ||
-        file.find('/')  != std::string::npos ||
-        file.find('\\') != std::string::npos) {
-        emit("workflows:output:" + runId, json(std::string("\r\n\x1b[31mInvalid workflow file\x1b[0m\r\n")));
-        emit("workflows:done:" + runId, json({{"code", -1}}));
-        return;
-    }
-
-    std::string relfile = ".github/workflows/" + file;
-    std::string cmd = win_quote("act") + " -W " + win_quote(relfile);
-    std::wstring wcmd = to_wide(cmd);
-    std::wstring wcwd = to_wide(path);
-
-    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
-    HANDLE rd = INVALID_HANDLE_VALUE, wr = INVALID_HANDLE_VALUE;
-    if (!CreatePipe(&rd, &wr, &sa, 0)) {
-        emit("workflows:output:" + runId, json(std::string("\r\n\x1b[31merror: pipe failed\x1b[0m\r\n")));
-        emit("workflows:done:" + runId, json({{"code", -1}}));
-        return;
-    }
-    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOW si{};
-    si.cb          = sizeof(si);
-    si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    si.hStdOutput  = wr;
-    si.hStdError   = wr;
-    si.hStdInput   = INVALID_HANDLE_VALUE;
-
-    PROCESS_INFORMATION pi{};
-    BOOL ok = CreateProcessW(nullptr, wcmd.data(), nullptr, nullptr, TRUE,
-                             CREATE_NO_WINDOW, nullptr,
-                             path.empty() ? nullptr : wcwd.data(), &si, &pi);
-    CloseHandle(wr);
-    if (!ok) {
-        CloseHandle(rd);
-        emit("workflows:output:" + runId, json(std::string(
-            "\r\n\x1b[31m'act' is not installed or not on PATH\x1b[0m\r\n")));
-        emit("workflows:done:" + runId, json({{"code", -1}}));
-        return;
-    }
-    CloseHandle(pi.hThread);
-
-    {
-        std::lock_guard<std::mutex> lk(g_proc_mu);
-        g_running[runId] = pi.hProcess;
-    }
-
-    char buf[4096];
-    DWORD n;
-    while (ReadFile(rd, buf, sizeof(buf), &n, nullptr) && n > 0) {
-        std::string chunk(buf, n);
-        std::string out; out.reserve(chunk.size() + 32);
-        bool prev_cr = false;
-        for (char c : chunk) {
-            if (c == '\n' && !prev_cr) out += '\r';
-            out += c;
-            prev_cr = (c == '\r');
-        }
-        emit("workflows:output:" + runId, json(out));
-    }
-    CloseHandle(rd);
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD ec = 0;
-    GetExitCodeProcess(pi.hProcess, &ec);
-    CloseHandle(pi.hProcess);
-
-    {
-        std::lock_guard<std::mutex> lk(g_proc_mu);
-        g_running.erase(runId);
-    }
-
-    emit("workflows:done:" + runId, json({{"code", (int)ec}}));
-}
-
-void stop_act(const std::string& runId) {
-    std::lock_guard<std::mutex> lk(g_proc_mu);
-    auto it = g_running.find(runId);
-    if (it != g_running.end()) {
-        TerminateProcess(it->second, 1);
-    }
-}
-
-#else
-
-void run_act(const std::string& path, const std::string& file,
-              const std::string& runId, const EmitFn& emit) {
-    if (file.find("..") != std::string::npos ||
-        file.find('/')  != std::string::npos ||
-        file.find('\\') != std::string::npos) {
-        emit("workflows:output:" + runId, json(std::string("\r\nInvalid workflow file\r\n")));
-        emit("workflows:done:" + runId, json({{"code", -1}}));
-        return;
-    }
-
-    std::string relfile = ".github/workflows/" + file;
-    std::string cmd = "cd " + posix_quote(path) + " && act -W " + posix_quote(relfile) + " 2>&1";
-
-    FILE* f = popen(cmd.c_str(), "r");
-    if (!f) {
-        emit("workflows:output:" + runId, json(std::string(
-            "\r\n'act' is not installed or not on PATH\r\n")));
-        emit("workflows:done:" + runId, json({{"code", -1}}));
-        return;
-    }
-    char buf[4096]; size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        emit("workflows:output:" + runId, json(std::string(buf, n)));
-    }
-    int rc = pclose(f);
-    int code = WIFEXITED(rc) ? WEXITSTATUS(rc) : -1;
-    emit("workflows:done:" + runId, json({{"code", code}}));
-}
-
-void stop_act(const std::string& /*runId*/) {
-    // POSIX: not yet supported (popen doesn't expose the child pid here).
-}
-
-#endif
 
 } // namespace workflows_ops

@@ -12,6 +12,7 @@
 #include "../src/updater.hpp"
 #include "../src/git.hpp"
 #include "../src/workflows.hpp"
+#include "../src/workflow_runner.hpp"
 #include "../src/base64.hpp"
 
 #include <nlohmann/json.hpp>
@@ -828,12 +829,12 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         return;
     }
 
-    // ── Workflows: run/stop `act` locally, streaming output ──────────────────
+    // ── Workflows: run/stop a workflow locally via the native runner ─────────────
     if (type == "workflows.run") {
         std::string path  = args.value("path",  std::string{});
         std::string file  = args.value("file",  std::string{});
         std::string runId = args.value("runId", std::string{});
-        workflows_ops::run_act(path, file, runId,
+        workflow_runner::run_workflow(path, file, runId,
             [this](const std::string& event, const json& data) { emit(event, data); });
         resolve_ok(seq, true);
         return;
@@ -841,7 +842,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
 
     if (type == "workflows.stop") {
         std::string runId = args.value("runId", std::string{});
-        workflows_ops::stop_act(runId);
+        workflow_runner::stop_workflow(runId);
         resolve_ok(seq, true);
         return;
     }
