@@ -14,6 +14,7 @@ import type { PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
+import WorkflowsPanel from './components/WorkflowsPanel'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
@@ -1013,6 +1014,10 @@ export default function App() {
         )}
         {pane.activePage === 'versioncontrol' && (
           <VersionControlPanel cwd={paneCwd} active={true} />
+        )}
+        {pane.activePage === 'workflows' && (
+          <WorkflowsPanel cwd={paneCwd} active={true}
+            monacoTheme={resolvedTheme.monacoThemeId} monacoThemeDef={resolvedTheme.monacoThemeDef} />
         )}
       </div>
     )

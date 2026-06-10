@@ -83,6 +83,15 @@ const VersionControlIcon = () => (
   </svg>
 )
 
+const WorkflowsIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="5" cy="6" r="2.5"/>
+    <circle cx="19" cy="6" r="2.5"/>
+    <circle cx="12" cy="18" r="2.5"/>
+    <path d="M7.2 7.3L10 16M16.8 7.3L14 16M7.5 6h9"/>
+  </svg>
+)
+
 const PluginsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 7h3a1 1 0 0 0 1-1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4h-1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/>
@@ -189,6 +198,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         </SidebarBtn>
         <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
           <PortsIcon />
+        </SidebarBtn>
+        <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
+          <WorkflowsIcon />
         </SidebarBtn>
         <SidebarBtn active={false} label="Search (Ctrl+K)" onClick={onSearch}>
           <SearchIcon />
