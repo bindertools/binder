@@ -26,7 +26,7 @@ import {
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import {
   createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
-  updateLeafInTree, updateRatioInTree, moveTabToPane, findLeaf, getAllLeaves, getFirstLeaf,
+  updateLeafInTree, updateRatioInTree, findLeaf, getAllLeaves, getFirstLeaf,
   clearLinkedTerminalInTree, serializeLayout, deserializeLayout,
   type PaneNode, type LeafPane, type SerializedNode,
 } from './paneModel'
@@ -92,6 +92,25 @@ function makeTerminalTab(id?: string, initialCwd?: string, parentId?: string): T
     ...(initialCwd ? { initialCwd } : {}),
     ...(parentId   ? { parentId }   : {}),
   }
+}
+
+// ── Per-tab pane layouts ──────────────────────────────────────────────────────
+// Every top-level tab (no parentId) owns its own independent pane-layout tree.
+// Pages/secondary terminals (parentId set) live inside their owning top-level
+// tab's tree. This keeps tabs from ever sharing or leaking into each other's panes.
+
+interface Layout { root: PaneNode; focusedPaneId: string }
+
+function workspaceIdOf(tabId: string, tabs: Tab[]): string {
+  let cur = tabs.find(t => t.id === tabId)
+  const seen = new Set<string>()
+  while (cur?.parentId && !seen.has(cur.id)) {
+    seen.add(cur.id)
+    const parent = tabs.find(t => t.id === cur!.parentId)
+    if (!parent) break
+    cur = parent
+  }
+  return cur?.id ?? tabId
 }
 
 // ── Tab reducer ───────────────────────────────────────────────────────────────
@@ -296,7 +315,7 @@ const LAYOUT_STORAGE_KEY = 'cmdide_pane_layout_v2'
 // Layouts are stored using tab-array INDICES (not IDs) so they survive
 // session restores that generate fresh tab IDs.
 
-function saveLayoutToStorage(root: PaneNode, tabs: Tab[], focusedId: string) {
+function saveLayoutToStorage(layouts: Record<string, Layout>, tabs: Tab[], activeWorkspaceId: string) {
   try {
     const idxOf = new Map(tabs.map((t, i) => [t.id, i]))
     function ser(node: PaneNode): unknown {
@@ -308,15 +327,26 @@ function saveLayoutToStorage(root: PaneNode, tabs: Tab[], focusedId: string) {
       return { t: 's', id: node.id, dir: node.direction, r: node.ratio,
                a: ser(node.first), b: ser(node.second) }
     }
-    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ tree: ser(root), fid: focusedId }))
+    const workspaces = Object.entries(layouts)
+      .map(([workspaceId, layout]) => {
+        const ti = idxOf.get(workspaceId)
+        if (ti === undefined) return null
+        return { ti, tree: ser(layout.root), fid: layout.focusedPaneId }
+      })
+      .filter((w): w is { ti: number; tree: unknown; fid: string } => w !== null)
+    const activeTi = idxOf.get(activeWorkspaceId) ?? 0
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ workspaces, activeTi }))
   } catch { /* ignore */ }
 }
 
-function restoreLayoutFromStorage(tabs: Tab[]): { root: PaneNode; focusedId: string } | null {
+function restoreLayoutFromStorage(tabs: Tab[]): { layouts: Record<string, Layout>; activeWorkspaceId: string } | null {
   try {
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
     if (!raw) return null
-    const { tree, fid } = JSON.parse(raw)
+    const { workspaces, activeTi } = JSON.parse(raw) as {
+      workspaces?: { ti: number; tree: unknown; fid: string }[]
+      activeTi?: number
+    }
     function des(node: { t: string; id: string; ii?: number[]; ai?: number; pg?: string; dir?: 'h' | 'v'; r?: number; a?: unknown; b?: unknown }): PaneNode | null {
       if (node.t === 'l') {
         const tabIds = (node.ii ?? []).filter(i => i >= 0 && i < tabs.length).map(i => tabs[i].id)
@@ -333,10 +363,19 @@ function restoreLayoutFromStorage(tabs: Tab[]): { root: PaneNode; focusedId: str
       if (!second) return first
       return { type: 'split', id: node.id, direction: node.dir!, ratio: node.r ?? 0.5, first, second }
     }
-    const root = des(tree)
-    if (!root) return null
-    const focusedId = fid && findLeaf(root, fid) ? fid : getFirstLeaf(root).id
-    return { root, focusedId }
+    const layouts: Record<string, Layout> = {}
+    for (const w of workspaces ?? []) {
+      const workspaceTab = tabs[w.ti]
+      if (!workspaceTab || workspaceTab.parentId) continue
+      const root = des(w.tree as Parameters<typeof des>[0])
+      if (!root) continue
+      const focusedPaneId = w.fid && findLeaf(root, w.fid) ? w.fid : getFirstLeaf(root).id
+      layouts[workspaceTab.id] = { root, focusedPaneId }
+    }
+    if (Object.keys(layouts).length === 0) return null
+    const activeTab = activeTi !== undefined ? tabs[activeTi] : undefined
+    const activeWorkspaceId = (activeTab && layouts[activeTab.id]) ? activeTab.id : Object.keys(layouts)[0]
+    return { layouts, activeWorkspaceId }
   } catch { return null }
 }
 
@@ -379,9 +418,23 @@ export default function App() {
 
   useDragRegions()
 
-  // ── Pane tree state ──────────────────────────────────────────────────────────
-  const [layoutRoot,    setLayoutRoot]    = useState<PaneNode>(initialLeaf)
-  const [focusedPaneId, setFocusedPaneId] = useState<string>(initialLeaf.id)
+  // ── Per-tab pane layouts ──────────────────────────────────────────────────────
+  const [layouts, setLayouts] = useState<Record<string, Layout>>({
+    [initialTab.id]: { root: initialLeaf, focusedPaneId: initialLeaf.id },
+  })
+
+  const activeWorkspaceId = useMemo(() => workspaceIdOf(state.activeId, tabs), [state.activeId, tabs])
+  const activeLayout: Layout = useMemo(
+    () => layouts[activeWorkspaceId] ?? Object.values(layouts)[0] ?? { root: initialLeaf, focusedPaneId: initialLeaf.id },
+    [layouts, activeWorkspaceId],
+  )
+
+  const updateLayout = useCallback((workspaceId: string, fn: (l: Layout) => Layout) => {
+    setLayouts(prev => {
+      const cur = prev[workspaceId]
+      return cur ? { ...prev, [workspaceId]: fn(cur) } : prev
+    })
+  }, [])
 
   // ── Pane content area for terminal overlay ───────────────────────────────────
   const contentAreaRef                    = useRef<HTMLDivElement>(null)
@@ -440,7 +493,7 @@ export default function App() {
   }, [liveColors, appConfig.theme, appConfig.custom_theme])
 
   // ── Derived: focused pane ────────────────────────────────────────────────────
-  const focusedPane = useMemo(() => findLeaf(layoutRoot, focusedPaneId), [layoutRoot, focusedPaneId])
+  const focusedPane = useMemo(() => findLeaf(activeLayout.root, activeLayout.focusedPaneId), [activeLayout])
   const activePage  = focusedPane?.activePage ?? 'terminal'
 
   const activeTerminalId = useMemo(() => {
@@ -455,67 +508,74 @@ export default function App() {
     return activeTerminalId ? (terminalCwds[activeTerminalId] ?? '') : ''
   }, [activeTerminalId, terminalCwds])
 
-  // ── Derived: tab-bar owner pane ──────────────────────────────────────────────
-  // Page-only panes (created by dragging a sidebar page to split) have empty
-  // tabIds and just show a page linked to another pane's terminal. The global
-  // tab bar follows that link so it keeps showing the owning pane's tabs
-  // instead of going empty when a page-only pane gets focus.
-  const tabBarPane = useMemo(() => {
-    if (!focusedPane) return null
-    if (focusedPane.tabIds.length > 0) return focusedPane
-    if (focusedPane.linkedTerminalId) {
-      const owner = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(focusedPane.linkedTerminalId!))
-      if (owner) return owner
-    }
-    return getAllLeaves(layoutRoot).find(l => l.tabIds.length > 0) ?? focusedPane
-  }, [focusedPane, layoutRoot])
+  // ── Derived: top-level tabs (one per workspace, shown in the global tab bar) ──
+  const topLevelTabs = useMemo(() => tabs.filter(t => !t.parentId), [tabs])
 
-  const tabBarPaneTabs = useMemo(() => {
-    if (!tabBarPane) return []
-    return tabBarPane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
-  }, [tabBarPane, tabs])
-
-  // ── Sync: remove closed tabs from layout tree ─────────────────────────────────
+  // ── Sync: remove closed tabs from layout trees; drop orphaned workspaces ─────
   useEffect(() => {
     const validIds = new Set(tabs.map(t => t.id))
-    setLayoutRoot(prev => {
-      let root = prev
+    setLayouts(prev => {
       let changed = false
-      for (const leaf of getAllLeaves(prev)) {
-        for (const id of leaf.tabIds) {
-          if (!validIds.has(id)) { root = removeTabFromTree(root, id); changed = true }
+      const next: Record<string, Layout> = {}
+      for (const [workspaceId, layout] of Object.entries(prev)) {
+        if (!validIds.has(workspaceId)) { changed = true; continue }
+        let root = layout.root
+        for (const leaf of getAllLeaves(layout.root)) {
+          for (const id of leaf.tabIds) {
+            if (!validIds.has(id)) { root = removeTabFromTree(root, id); changed = true }
+          }
+          if (leaf.linkedTerminalId && !validIds.has(leaf.linkedTerminalId)) {
+            root = clearLinkedTerminalInTree(root, leaf.linkedTerminalId); changed = true
+          }
         }
-        if (leaf.linkedTerminalId && !validIds.has(leaf.linkedTerminalId)) {
-          root = clearLinkedTerminalInTree(root, leaf.linkedTerminalId); changed = true
-        }
+        next[workspaceId] = root === layout.root ? layout : { ...layout, root }
       }
-      return changed ? root : prev
+      return changed ? next : prev
     })
   }, [tabs])
 
-  // ── Sync: assign new tabs (unassigned) to focused pane ───────────────────────
+  // ── Sync: assign new tabs (unassigned) to their owning workspace's focused pane ──
   useEffect(() => {
-    const paneTabIds = new Set(getAllLeaves(layoutRoot).flatMap(l => l.tabIds))
-    const unassigned = tabs.filter(t => !paneTabIds.has(t.id))
+    const assignedIds = new Set(Object.values(layouts).flatMap(l => getAllLeaves(l.root).flatMap(leaf => leaf.tabIds)))
+    const unassigned = tabs.filter(t => !assignedIds.has(t.id))
     if (unassigned.length === 0) return
-    setLayoutRoot(prev => {
-      let root = prev
-      for (const tab of unassigned) root = addTabToLeaf(root, focusedPaneId, tab.id)
-      return root
+    setLayouts(prev => {
+      const next = { ...prev }
+      for (const tab of unassigned) {
+        const workspaceId = workspaceIdOf(tab.id, tabs)
+        const layout = next[workspaceId]
+        if (layout) {
+          next[workspaceId] = { ...layout, root: addTabToLeaf(layout.root, layout.focusedPaneId, tab.id) }
+        } else {
+          const leaf = createLeaf([tab.id], tab.id)
+          next[workspaceId] = { root: leaf, focusedPaneId: leaf.id }
+        }
+      }
+      return next
     })
-  }, [tabs, layoutRoot, focusedPaneId])
+  }, [tabs, layouts])
 
-  // ── Sync: keep focusedPaneId valid ────────────────────────────────────────────
+  // ── Sync: keep each workspace's focusedPaneId valid ──────────────────────────
   useEffect(() => {
-    if (!findLeaf(layoutRoot, focusedPaneId)) {
-      setFocusedPaneId(getFirstLeaf(layoutRoot).id)
-    }
-  }, [layoutRoot, focusedPaneId])
+    setLayouts(prev => {
+      let changed = false
+      const next: Record<string, Layout> = {}
+      for (const [workspaceId, layout] of Object.entries(prev)) {
+        if (!findLeaf(layout.root, layout.focusedPaneId)) {
+          next[workspaceId] = { ...layout, focusedPaneId: getFirstLeaf(layout.root).id }
+          changed = true
+        } else {
+          next[workspaceId] = layout
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [layouts])
 
-  // ── Persistence: save layout on change ───────────────────────────────────────
+  // ── Persistence: save layouts on change ──────────────────────────────────────
   useEffect(() => {
-    saveLayoutToStorage(layoutRoot, tabs, focusedPaneId)
-  }, [layoutRoot, tabs, focusedPaneId])
+    saveLayoutToStorage(layouts, tabs, activeWorkspaceId)
+  }, [layouts, tabs, activeWorkspaceId])
 
   // ── Sync: keep terminal tab's activePage field current so tab-switching can restore it ──
   useEffect(() => {
@@ -574,12 +634,21 @@ export default function App() {
       }
       if (restoredTabs.length > 0) {
         dispatch({ type: 'restore-session', tabs: restoredTabs })
-        // Restore pane layout using position indices into the restored tabs array
+        // Restore per-workspace pane layouts using position indices into the restored tabs array
         const saved = restoreLayoutFromStorage(restoredTabs)
-        if (saved) {
-          setLayoutRoot(saved.root)
-          setFocusedPaneId(saved.focusedId)
+        const newLayouts: Record<string, Layout> = {}
+        for (const tab of restoredTabs) {
+          if (tab.parentId) continue
+          const layout = saved?.layouts[tab.id]
+          if (layout) { newLayouts[tab.id] = layout; continue }
+          const leaf = createLeaf([tab.id], tab.id)
+          newLayouts[tab.id] = { root: leaf, focusedPaneId: leaf.id }
         }
+        setLayouts(newLayouts)
+        const restoredActiveId = saved && newLayouts[saved.activeWorkspaceId]
+          ? saved.activeWorkspaceId
+          : restoredTabs.find(t => !t.parentId)?.id
+        if (restoredActiveId) dispatch({ type: 'select', id: restoredActiveId })
       }
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -626,11 +695,11 @@ export default function App() {
       const payload = args[0] as OpenDatabasePayload
       if (!payload?.path) return
       setForcedDbPath(payload.path)
-      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'database' })))
+      updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'database' })) }))
     })
     return () => EventsOff('app:open-database')
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedPaneId])
+  }, [activeWorkspaceId])
 
   useEffect(() => {
     EventsOn('app:open-preview', (...args: any[]) => {
@@ -653,19 +722,19 @@ export default function App() {
 
   useEffect(() => {
     EventsOn('app:open-problems', () => {
-      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'debug' })))
+      updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'debug' })) }))
     })
     return () => EventsOff('app:open-problems')
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedPaneId])
+  }, [activeWorkspaceId])
 
   useEffect(() => {
     EventsOn('app:open-config', () => {
-      setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'settings' })))
+      updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'settings' })) }))
     })
     return () => EventsOff('app:open-config')
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedPaneId])
+  }, [activeWorkspaceId])
 
   useEffect(() => {
     EventsOn('app:open-tab', (...args: any[]) => {
@@ -673,18 +742,18 @@ export default function App() {
       if (!p?.type) return
       if (p.type === 'plugins') {
         if (!__PLUGINS__) return
-        setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'plugins' })))
+        updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'plugins' })) }))
         return
       }
       if (p.type === 'fullscreen') {
-        setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: 'editor' })))
+        updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'editor' })) }))
         return
       }
       dispatch({ type: 'open-tab', tabType: p.type, title: p.title, terminalId: p.terminalId, cwd: p.cwd })
     })
     return () => EventsOff('app:open-tab')
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedPaneId])
+  }, [activeWorkspaceId])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -701,29 +770,26 @@ export default function App() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
   const shortcutHandlers: ShortcutHandlers = {
     'next-tab': () => {
-      if (!tabBarPane) return
-      const idx  = tabBarPane.tabIds.indexOf(tabBarPane.activeTabId)
-      const next = tabBarPane.tabIds[(idx + 1) % tabBarPane.tabIds.length]
-      if (next) handleSelectTab(tabBarPane.id, next)
+      const idx  = topLevelTabs.findIndex(t => t.id === activeWorkspaceId)
+      const next = topLevelTabs[(idx + 1) % topLevelTabs.length]
+      if (next) dispatch({ type: 'select', id: next.id })
     },
     'prev-tab': () => {
-      if (!tabBarPane) return
-      const n    = tabBarPane.tabIds.length
-      const idx  = tabBarPane.tabIds.indexOf(tabBarPane.activeTabId)
-      const prev = tabBarPane.tabIds[(idx - 1 + n) % n]
-      if (prev) handleSelectTab(tabBarPane.id, prev)
+      const n    = topLevelTabs.length
+      const idx  = topLevelTabs.findIndex(t => t.id === activeWorkspaceId)
+      const prev = topLevelTabs[(idx - 1 + n) % n]
+      if (prev) dispatch({ type: 'select', id: prev.id })
     },
-    'close-tab':     () => { if (tabBarPane) handleCloseTab(tabBarPane.activeTabId) },
-    'new-terminal':  () => { if (tabBarPane) handleNewTerminal(tabBarPane.id) },
+    'close-tab':     () => handleCloseTab(activeWorkspaceId),
+    'new-terminal':  () => handleNewWorkspaceTab(),
     'open-search':   () => setSearchOpen(v => !v),
     'go-terminal':   () => handleSidebarNavigate('terminal'),
     'go-editor':     () => handleSidebarNavigate('editor'),
     'open-settings': () => handleSidebarNavigate('settings'),
     ...Object.fromEntries(
       [1,2,3,4,5,6,7,8,9].map(n => [`tab-${n}`, () => {
-        if (!tabBarPane) return
-        const id = tabBarPane.tabIds[n - 1]
-        if (id) handleSelectTab(tabBarPane.id, id)
+        const tab = topLevelTabs[n - 1]
+        if (tab) dispatch({ type: 'select', id: tab.id })
       }]),
     ),
   }
@@ -752,89 +818,98 @@ export default function App() {
   // ── Pane operations ───────────────────────────────────────────────────────────
 
   const handleFocusPane = useCallback((paneId: string) => {
-    setFocusedPaneId(paneId)
-  }, [])
+    updateLayout(activeWorkspaceId, l => ({ ...l, focusedPaneId: paneId }))
+  }, [activeWorkspaceId, updateLayout])
 
   const handleClosePane = useCallback((paneId: string) => {
-    setLayoutRoot(prev => {
-      const result = closePaneInTree(prev, paneId)
-      if (result === null) return prev
-      setFocusedPaneId(fid => fid === paneId ? getFirstLeaf(result).id : fid)
-      return result
+    updateLayout(activeWorkspaceId, l => {
+      const result = closePaneInTree(l.root, paneId)
+      if (result === null) return l
+      const focusedPaneId = l.focusedPaneId === paneId ? getFirstLeaf(result).id : l.focusedPaneId
+      return { root: result, focusedPaneId }
     })
-  }, [])
+  }, [activeWorkspaceId, updateLayout])
 
   const handleRatioChange = useCallback((splitId: string, ratio: number) => {
-    setLayoutRoot(prev => updateRatioInTree(prev, splitId, ratio))
-  }, [])
+    updateLayout(activeWorkspaceId, l => ({ ...l, root: updateRatioInTree(l.root, splitId, ratio) }))
+  }, [activeWorkspaceId, updateLayout])
 
-  const handleSelectTab = useCallback((paneId: string, tabId: string) => {
+  const handleSelectTab = useCallback((paneId: string, tabId: string, workspaceId: string = activeWorkspaceId) => {
     const tab = tabs.find(t => t.id === tabId)
     // Restore the terminal's last known page; non-terminal tabs always show 'terminal' activePage
     const newActivePage: PageId = tab?.type === 'terminal' ? (tab.activePage ?? 'terminal') : 'terminal'
-    setLayoutRoot(prev => updateLeafInTree(prev, paneId, leaf => ({ ...leaf, activeTabId: tabId, activePage: newActivePage })))
-    setFocusedPaneId(paneId)
-  }, [tabs])
+    updateLayout(workspaceId, l => ({
+      root: updateLeafInTree(l.root, paneId, leaf => ({ ...leaf, activeTabId: tabId, activePage: newActivePage })),
+      focusedPaneId: paneId,
+    }))
+  }, [tabs, activeWorkspaceId, updateLayout])
 
   const handleCloseTab = useCallback((tabId: string) => {
     dispatch({ type: 'close', id: tabId })
   }, [])
 
-  const handleNewTerminal = useCallback((paneId: string) => {
+  const handleNewWorkspaceTab = useCallback(() => {
     const newId = nextId()
-    dispatch({ type: 'add-terminal', id: newId, keepActive: true })
-    setLayoutRoot(prev => {
-      const withTab = addTabToLeaf(prev, paneId, newId)
-      return updateLeafInTree(withTab, paneId, leaf => ({ ...leaf, activePage: 'terminal' }))
-    })
-    setFocusedPaneId(paneId)
+    dispatch({ type: 'add-terminal', id: newId })
+    const leaf = createLeaf([newId], newId)
+    setLayouts(prev => ({ ...prev, [newId]: { root: leaf, focusedPaneId: leaf.id } }))
   }, [])
 
-  const handleDropTab = useCallback((tabId: string, toPaneId: string) => {
-    setLayoutRoot(prev => moveTabToPane(prev, tabId, toPaneId))
-    setFocusedPaneId(toPaneId)
-  }, [])
+  const handleNewTerminal = useCallback((paneId: string) => {
+    const newId = nextId()
+    dispatch({ type: 'add-terminal', id: newId, parentId: activeWorkspaceId, keepActive: true })
+    updateLayout(activeWorkspaceId, l => ({
+      root: updateLeafInTree(addTabToLeaf(l.root, paneId, newId), paneId, leaf => ({ ...leaf, activePage: 'terminal' })),
+      focusedPaneId: paneId,
+    }))
+  }, [activeWorkspaceId, updateLayout])
 
   const handleDuplicateTab = useCallback(async (tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
     if (!tab || tab.type !== 'terminal') return
     const cwd = await GetTerminalCwd(tabId).catch(() => '')
     const newId = nextId()
-    const pane = findLeaf(layoutRoot, focusedPaneId)
+    const workspaceId = workspaceIdOf(tabId, tabs)
+    const layout = layouts[workspaceId]
+    const pane = layout ? findLeaf(layout.root, layout.focusedPaneId) : null
     dispatch({ type: 'add-terminal', id: newId, parentId: tabId, initialCwd: cwd || undefined, keepActive: true })
     if (pane) {
-      setLayoutRoot(prev => addTabToLeaf(prev, pane.id, newId))
+      updateLayout(workspaceId, l => ({ ...l, root: addTabToLeaf(l.root, pane.id, newId) }))
     }
-  }, [tabs, layoutRoot, focusedPaneId])
+  }, [tabs, layouts, updateLayout])
 
   const handleAddSiblingTerminal = useCallback(async (parentTabId: string) => {
     const cwd = await GetTerminalCwd(parentTabId).catch(() => '')
     const newId = nextId()
-    const pane = findLeaf(layoutRoot, focusedPaneId)
+    const workspaceId = workspaceIdOf(parentTabId, tabs)
+    const layout = layouts[workspaceId]
+    const pane = layout ? findLeaf(layout.root, layout.focusedPaneId) : null
     dispatch({ type: 'add-terminal', id: newId, parentId: parentTabId, initialCwd: cwd || undefined, keepActive: true })
     if (pane) {
-      setLayoutRoot(prev => addTabToLeaf(prev, pane.id, newId))
+      updateLayout(workspaceId, l => ({ ...l, root: addTabToLeaf(l.root, pane.id, newId) }))
     }
-  }, [layoutRoot, focusedPaneId])
+  }, [tabs, layouts, updateLayout])
 
   // ── Sidebar navigation ────────────────────────────────────────────────────────
 
   const handleSidebarNavigate = useCallback((page: PageId) => {
-    setLayoutRoot(prev => updateLeafInTree(prev, focusedPaneId, leaf => ({ ...leaf, activePage: page })))
-  }, [focusedPaneId])
+    updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: page })) }))
+  }, [activeWorkspaceId, updateLayout])
 
   const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
     const direction = (dir === 'left' || dir === 'right') ? 'h' : 'v'
     const newLeafFirst = dir === 'left' || dir === 'up'
-    const sourcePane = findLeaf(layoutRoot, focusedPaneId)
+    const sourcePane = findLeaf(activeLayout.root, activeLayout.focusedPaneId)
     const linkedTerminalId = sourcePane
       ? (sourcePane.tabIds.map(id => tabs.find(t => t.id === id)).find(t => t?.type === 'terminal')?.id
           ?? sourcePane.linkedTerminalId)
       : undefined
     const newLeaf = createLeaf([], '', page, linkedTerminalId)
-    setLayoutRoot(prev => splitPaneInTree(prev, focusedPaneId, direction, newLeaf, newLeafFirst))
-    setFocusedPaneId(newLeaf.id)
-  }, [focusedPaneId, layoutRoot, tabs])
+    updateLayout(activeWorkspaceId, l => ({
+      root: splitPaneInTree(l.root, l.focusedPaneId, direction, newLeaf, newLeafFirst),
+      focusedPaneId: newLeaf.id,
+    }))
+  }, [activeLayout, activeWorkspaceId, tabs, updateLayout])
 
   const handleStartPageDrag = useCallback((page: PageId, startX: number, startY: number) => {
     const state = { dragging: false, edge: null as 'up' | 'down' | 'left' | 'right' | null }
@@ -997,7 +1072,7 @@ export default function App() {
             }}
             onOpenFile={(path, line, col) => {
               void handleOpenFileAtLine(path, line, col)
-              setLayoutRoot(prev => updateLeafInTree(prev, pane.id, l => ({ ...l, activePage: 'terminal' })))
+              updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, pane.id, lf => ({ ...lf, activePage: 'terminal' })) }))
             }}
             onCweScan={cwd => { void handleCweScan(cwd) }}
           />
@@ -1117,7 +1192,7 @@ export default function App() {
       forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal])
 
   // ── Determine if tree has only one pane ───────────────────────────────────────
-  const isOnlyPane = useMemo(() => getAllLeaves(layoutRoot).length <= 1, [layoutRoot])
+  const isOnlyPane = useMemo(() => getAllLeaves(activeLayout.root).length <= 1, [activeLayout])
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const wcBtnBase = "flex items-center justify-center w-9 h-[30px] rounded-sm bg-transparent border-0 outline-none cursor-pointer text-[var(--tab-color)] transition-[background,color] duration-[100ms] p-0"
@@ -1161,8 +1236,13 @@ export default function App() {
           tabs={tabs}
           activeTerminalId={activeTerminalId}
           onSelectTab={id => {
-            const pane = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(id))
-            if (pane) { handleSelectTab(pane.id, id) }
+            const found = Object.entries(layouts)
+              .flatMap(([wsId, l]) => getAllLeaves(l.root).map(leaf => ({ wsId, leaf })))
+              .find(({ leaf }) => leaf.tabIds.includes(id))
+            if (found) {
+              if (found.wsId !== activeWorkspaceId) dispatch({ type: 'select', id: found.wsId })
+              handleSelectTab(found.leaf.id, id, found.wsId)
+            }
             setSearchOpen(false)
           }}
           onOpenFile={(path, line) => { void handleOpenFileAtLine(path, line ?? 0, 0); setSearchOpen(false) }}
@@ -1189,21 +1269,21 @@ export default function App() {
         {/* Pane column: global tab bar on top, split area below */}
         <div className="flex-1 overflow-hidden flex flex-col">
 
-          {/* Single global tab bar — spans full width regardless of split layout */}
+          {/* Single global tab bar — one entry per top-level tab (workspace) */}
           <PaneTabBar
-            paneId={tabBarPane?.id ?? ''}
-            tabs={tabBarPaneTabs}
-            activeId={tabBarPane?.activeTabId ?? ''}
+            paneId={activeWorkspaceId}
+            tabs={topLevelTabs}
+            activeId={activeWorkspaceId}
             canClosePane={false}
             windowControls={windowControls}
-            onSelect={tabId => { if (tabBarPane) handleSelectTab(tabBarPane.id, tabId) }}
+            onSelect={tabId => dispatch({ type: 'select', id: tabId })}
             onClose={handleCloseTab}
-            onNewTerminal={() => { if (tabBarPane) handleNewTerminal(tabBarPane.id) }}
+            onNewTerminal={handleNewWorkspaceTab}
             onClosePane={() => {}}
             onRename={(id, title) => dispatch({ type: 'rename-tab', id, title })}
             onSetColor={(id, color) => dispatch({ type: 'set-tab-color', id, color })}
             onDuplicate={id => { void handleDuplicateTab(id) }}
-            onDrop={tabId => { if (tabBarPane) handleDropTab(tabId, tabBarPane.id) }}
+            onDrop={() => {}}
           />
 
           {/* Split area — ref tracks size for terminal overlay positioning */}
@@ -1235,8 +1315,8 @@ export default function App() {
             )}
 
             <SplitPaneView
-              node={layoutRoot}
-              focusedPaneId={focusedPaneId}
+              node={activeLayout.root}
+              focusedPaneId={activeLayout.focusedPaneId}
               isOnlyPane={isOnlyPane}
               onFocus={handleFocusPane}
               onClosePane={handleClosePane}
@@ -1246,7 +1326,8 @@ export default function App() {
 
           {/* Terminal overlay — keyed by tab ID, never unmounts on split/close */}
           {contentAreaSize.w > 0 && tabs.filter(t => t.type === 'terminal').map(tab => {
-            const owningLeaf = getAllLeaves(layoutRoot).find(l => l.tabIds.includes(tab.id))
+            const allLeaves = Object.values(layouts).flatMap(l => getAllLeaves(l.root))
+            const owningLeaf = allLeaves.find(l => l.tabIds.includes(tab.id))
             let leaf: LeafPane | undefined
             let visible = false
             if (owningLeaf && owningLeaf.activePage === 'terminal') {
@@ -1258,11 +1339,13 @@ export default function App() {
             if (!visible) {
               // Page-only pane (created by dragging the "terminal" page to split)
               // shows the linked tab's terminal even though it doesn't own the tab
-              const linkedLeaf = getAllLeaves(layoutRoot).find(l =>
+              const linkedLeaf = allLeaves.find(l =>
                 l.tabIds.length === 0 && l.linkedTerminalId === tab.id && l.activePage === 'terminal')
               if (linkedLeaf) { leaf = linkedLeaf; visible = true }
             }
-            const rect = leaf ? getPaneContentRect(layoutRoot, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+            // Only show in the overlay if the owning leaf belongs to the active workspace's layout
+            if (visible && leaf && !findLeaf(activeLayout.root, leaf.id)) visible = false
+            const rect = (visible && leaf) ? getPaneContentRect(activeLayout.root, leaf.id, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
             return (
               <div
                 key={tab.id}
@@ -1277,7 +1360,7 @@ export default function App() {
               >
                 <Terminal
                   tabId={tab.id}
-                  active={visible && !!leaf && leaf.id === focusedPaneId}
+                  active={visible && !!leaf && leaf.id === activeLayout.focusedPaneId}
                   xtermTheme={resolvedTheme.xtermTheme}
                   initialCwd={tab.initialCwd}
                   defaultZoom={currentZoom}
