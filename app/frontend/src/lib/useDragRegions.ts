@@ -1,8 +1,19 @@
 // Detects elements marked with --wails-draggable:drag and reports their
 // screen-coordinate bounding rects to the C++ host via window.setDragRects.
-// Only active in WebView host mode; no-ops in Wails mode.
+// Also starts an OS window-move on mousedown over a draggable region via
+// window.startDrag. Only active in WebView host mode; no-ops in Wails mode.
 import { useEffect, useCallback } from 'react'
 import { invoke, isWebViewHost } from './ipc'
+
+// Walk up from `el` to find the nearest ancestor (inclusive) with an explicit
+// --wails-draggable value, returning 'drag' / 'no-drag' / null if none set.
+function nearestDraggable(el: HTMLElement | null): string | null {
+  for (let cur = el; cur; cur = cur.parentElement) {
+    const v = cur.style.getPropertyValue('--wails-draggable').trim()
+    if (v) return v
+  }
+  return null
+}
 
 export function useDragRegions() {
   const update = useCallback(() => {
@@ -48,4 +59,19 @@ export function useDragRegions() {
       ro.disconnect()
     }
   }, [update])
+
+  // Initiate a native window move on mousedown inside a draggable region
+  useEffect(() => {
+    if (!isWebViewHost()) return
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      if (nearestDraggable(e.target as HTMLElement) !== 'drag') return
+      e.preventDefault()
+      invoke('window.startDrag').catch(() => {})
+    }
+
+    window.addEventListener('mousedown', onMouseDown)
+    return () => window.removeEventListener('mousedown', onMouseDown)
+  }, [])
 }
