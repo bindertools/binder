@@ -39,6 +39,7 @@ add_library(cmdide-backend-lib STATIC
     src/workflows.cpp
     src/workflow_yaml.cpp
     src/workflow_expr.cpp
+    src/process_registry.cpp
 )
 
 target_include_directories(cmdide-backend-lib PUBLIC
