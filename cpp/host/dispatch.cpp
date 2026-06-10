@@ -11,6 +11,7 @@
 #include "../src/pack.hpp"
 #include "../src/updater.hpp"
 #include "../src/git.hpp"
+#include "../src/workflows.hpp"
 #include "../src/base64.hpp"
 
 #include <nlohmann/json.hpp>
@@ -108,7 +109,8 @@ json Dispatcher::old_to_new(const std::string& type,
         session_ops::dispatch(type, msg, req_id, resp)||
         pack_ops::dispatch(type, msg, req_id, resp)  ||
         updater_ops::dispatch(type, msg, req_id, resp)||
-        git_ops::dispatch(type, msg, req_id, resp);
+        git_ops::dispatch(type, msg, req_id, resp)  ||
+        workflows_ops::dispatch(type, msg, req_id, resp);
 
     if (!handled) {
         return {{"ok", false}, {"error", "not yet implemented: " + type}};
@@ -822,6 +824,24 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             std::lock_guard<std::mutex> lk(sessions_mu_);
             term_sessions_[id].alignment = alignment;  // create if not yet started
         }
+        resolve_ok(seq, true);
+        return;
+    }
+
+    // ── Workflows: run/stop `act` locally, streaming output ──────────────────
+    if (type == "workflows.run") {
+        std::string path  = args.value("path",  std::string{});
+        std::string file  = args.value("file",  std::string{});
+        std::string runId = args.value("runId", std::string{});
+        workflows_ops::run_act(path, file, runId,
+            [this](const std::string& event, const json& data) { emit(event, data); });
+        resolve_ok(seq, true);
+        return;
+    }
+
+    if (type == "workflows.stop") {
+        std::string runId = args.value("runId", std::string{});
+        workflows_ops::stop_act(runId);
         resolve_ok(seq, true);
         return;
     }

@@ -36,6 +36,7 @@ add_library(cmdide-backend-lib STATIC
     src/pack.cpp
     src/updater.cpp
     src/git.cpp
+    src/workflows.cpp
 )
 
 target_include_directories(cmdide-backend-lib PUBLIC
