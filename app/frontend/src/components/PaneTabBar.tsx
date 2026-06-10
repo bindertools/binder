@@ -148,8 +148,7 @@ export default function PaneTabBar({
       }}
     >
       {/* Tab strip */}
-      <div className="flex items-stretch overflow-x-auto overflow-y-hidden flex-1 min-w-0 pane-tabbar__strip"
-        style={{ ['--wails-draggable' as any]: 'no-drag' }}>
+      <div className="flex items-stretch overflow-x-auto overflow-y-hidden flex-1 min-w-0 pane-tabbar__strip">
         {tabs.map(tab => {
           const isActive = tab.id === activeId
           return (
@@ -162,6 +161,7 @@ export default function PaneTabBar({
                   ? 'text-[var(--tab-color-hover)] bg-[var(--surface-raised,rgba(255,255,255,0.05))]'
                   : 'text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-[rgba(255,255,255,0.03)]',
               ].join(' ')}
+              style={{ ['--wails-draggable' as any]: 'no-drag' }}
               draggable={renamingId !== tab.id}
               onDragStart={e => { e.dataTransfer.setData('pane-tab-id', tab.id); e.dataTransfer.effectAllowed = 'move' }}
               onClick={() => onSelect(tab.id)}
@@ -204,6 +204,7 @@ export default function PaneTabBar({
         {/* New terminal */}
         <button
           className="flex items-center justify-center w-[28px] shrink-0 bg-transparent border-0 cursor-pointer text-[var(--tab-color)] opacity-35 transition-[opacity,background] duration-[100ms] hover:opacity-100 hover:bg-surface-raised hover:text-[var(--tab-color-hover)]"
+          style={{ ['--wails-draggable' as any]: 'no-drag' }}
           onClick={onNewTerminal}
           title="New terminal"
         >
