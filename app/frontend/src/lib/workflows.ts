@@ -20,9 +20,18 @@ export interface WorkflowContent {
   language: string
 }
 
-export interface ActStatus {
-  installed: boolean
-  version:   string
+export interface RunnerStatus {
+  bash: { available: boolean; path: string }
+  git:  { available: boolean; version: string }
+  pwsh: { available: boolean }
+}
+
+export interface WorkflowStepEvent {
+  job:       string
+  jobName:   string
+  stepIndex: number
+  stepName:  string
+  status:    'running' | 'success' | 'failure' | 'skipped'
 }
 
 export const workflows = {
@@ -32,8 +41,8 @@ export const workflows = {
   read: (path: string, file: string) =>
     invoke<WorkflowContent>('workflows.read', { path, file }),
 
-  checkAct: () =>
-    invoke<ActStatus>('workflows.checkAct', {}),
+  checkRunner: () =>
+    invoke<RunnerStatus>('workflows.checkRunner', {}),
 
   run: (path: string, file: string, runId: string) =>
     invoke<boolean>('workflows.run', { path, file, runId }),
