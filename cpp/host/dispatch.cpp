@@ -809,11 +809,19 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     if (type == "terminal.setcwd") {
         std::string id  = args.value("id",  std::string{});
         std::string cwd = args.value("cwd", std::string{});
+
+        std::string new_cwd = cwd;
+        try {
+            fs::path p = fs::weakly_canonical(fs::path(cwd));
+            if (fs::is_directory(p)) new_cwd = p.string();
+        } catch (const std::exception&) {}
+
         {
             std::lock_guard<std::mutex> lk(sessions_mu_);
             auto it = term_sessions_.find(id);
-            if (it != term_sessions_.end()) it->second.cwd = cwd;
+            if (it != term_sessions_.end()) it->second.cwd = new_cwd;
         }
+        emit_prompt(id, new_cwd);
         resolve_ok(seq, true);
         return;
     }
