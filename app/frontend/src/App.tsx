@@ -9,8 +9,7 @@ import ZoomIndicator from './components/ZoomIndicator'
 import SearchPalette from './components/SearchPalette'
 import SplitPaneView from './components/SplitPaneView'
 import PaneTabBar from './components/PaneTabBar'
-import Sidebar from './components/Sidebar'
-import type { PageId } from './components/Sidebar'
+import Sidebar, { type PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
@@ -28,8 +27,8 @@ import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload
 import {
   createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
   updateLeafInTree, updateRatioInTree, findLeaf, getAllLeaves, getFirstLeaf,
-  clearLinkedTerminalInTree, serializeLayout, deserializeLayout,
-  type PaneNode, type LeafPane, type SerializedNode,
+  clearLinkedTerminalInTree,
+  type PaneNode, type LeafPane,
 } from './paneModel'
 import { EventsOn, EventsOff, Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
 import {
@@ -879,18 +878,6 @@ export default function App() {
     const layout = layouts[workspaceId]
     const pane = layout ? findLeaf(layout.root, layout.focusedPaneId) : null
     dispatch({ type: 'add-terminal', id: newId, parentId: tabId, initialCwd: cwd || undefined, keepActive: true })
-    if (pane) {
-      updateLayout(workspaceId, l => ({ ...l, root: addTabToLeaf(l.root, pane.id, newId) }))
-    }
-  }, [tabs, layouts, updateLayout])
-
-  const handleAddSiblingTerminal = useCallback(async (parentTabId: string) => {
-    const cwd = await GetTerminalCwd(parentTabId).catch(() => '')
-    const newId = nextId()
-    const workspaceId = workspaceIdOf(parentTabId, tabs)
-    const layout = layouts[workspaceId]
-    const pane = layout ? findLeaf(layout.root, layout.focusedPaneId) : null
-    dispatch({ type: 'add-terminal', id: newId, parentId: parentTabId, initialCwd: cwd || undefined, keepActive: true })
     if (pane) {
       updateLayout(workspaceId, l => ({ ...l, root: addTabToLeaf(l.root, pane.id, newId) }))
     }

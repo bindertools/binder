@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react'
-import { PaneNode, LeafPane, SplitNode, updateRatioInTree } from '../paneModel'
+import { PaneNode, LeafPane, SplitNode } from '../paneModel'
 
 const DIVIDER_PX = 4
 
