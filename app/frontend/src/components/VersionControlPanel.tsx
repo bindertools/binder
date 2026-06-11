@@ -520,7 +520,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
               {stashes.map(s => (
                 <div key={s.ref} className="flex items-center gap-1.5 group">
                   <span className="flex-1 min-w-0 truncate text-[11px] text-[var(--tab-color)]" title={s.message}>
-                    <span className="text-[var(--tab-color)] opacity-50 font-mono">{s.ref.replace('stash@{', '').replace('}', '')} </span>
+                    <span className="text-[var(--tab-color)] opacity-50 font-mono">{s.ref.replace('stash@{', '').replace(/\}/g, '')} </span>
                     {s.message}
                   </span>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
