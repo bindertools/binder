@@ -151,7 +151,10 @@ interface BtnProps {
 }
 
 function SidebarBtn({ active, label, onClick, onMouseDown, children }: BtnProps) {
-  const cursorCls = onMouseDown ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+  // Drag cursor is applied globally via the `* { cursor: grabbing !important }`
+  // overlay once a drag actually starts (see App.tsx pageDrag), so this stays
+  // a plain pointer until then.
+  const cursorCls = 'cursor-pointer'
   const [tooltipVisible, setTooltipVisible] = useState(false)
   const btnRef  = useRef<HTMLButtonElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
