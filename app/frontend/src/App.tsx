@@ -14,6 +14,7 @@ import type { PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
+import NotepadPage from './components/NotepadPage'
 import WorkflowsPanel from './components/WorkflowsPanel'
 import WorkflowRunToasts from './components/WorkflowRunToasts'
 import PerfTab from './components/PerfTab'
@@ -77,11 +78,15 @@ function loadRecentPaths(): string[] {
   } catch { return [] }
 }
 
-function saveRecentPath(newPath: string): void {
+const RECENT_PATHS_LIMIT = 5
+
+function saveRecentPath(newPath: string): string[] {
   try {
     const current = loadRecentPaths().filter(p => p !== newPath)
-    localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify([newPath, ...current].slice(0, 7)))
-  } catch { /* ignore */ }
+    const next = [newPath, ...current].slice(0, RECENT_PATHS_LIMIT)
+    localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(next))
+    return next
+  } catch { return loadRecentPaths() }
 }
 
 function makeTerminalTab(id?: string, initialCwd?: string, parentId?: string): Tab {
@@ -458,6 +463,7 @@ export default function App() {
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
   const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
   const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
+  const [recentPaths,    setRecentPaths]    = useState<string[]>(loadRecentPaths)
 
   const pathDwellRef = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
 
@@ -896,6 +902,11 @@ export default function App() {
     updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: page })) }))
   }, [activeWorkspaceId, updateLayout])
 
+  const handleSelectRecentPath = useCallback((path: string) => {
+    if (!activeTerminalId) return
+    window.dispatchEvent(new CustomEvent('terminal:cd-to', { detail: { terminalId: activeTerminalId, path } }))
+  }, [activeTerminalId])
+
   const handlePanelMove = useCallback((page: PageId, dir: 'left' | 'right' | 'up' | 'down') => {
     const direction = (dir === 'left' || dir === 'right') ? 'h' : 'v'
     const newLeafFirst = dir === 'left' || dir === 'up'
@@ -912,6 +923,9 @@ export default function App() {
   }, [activeLayout, activeWorkspaceId, tabs, updateLayout])
 
   const handleStartPageDrag = useCallback((page: PageId, startX: number, startY: number) => {
+    // Dragging the page that's already open in the focused pane to split is disabled — it broke the UI.
+    if (page === activePage) return
+
     const state = { dragging: false, edge: null as 'up' | 'down' | 'left' | 'right' | null }
 
     const onMove = (e: MouseEvent) => {
@@ -954,7 +968,7 @@ export default function App() {
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [handlePanelMove])
+  }, [handlePanelMove, activePage])
 
   // ── Theme helpers ─────────────────────────────────────────────────────────────
   const handleApplyColors  = useCallback((colors: Record<string, string>) => setLiveColors(colors), [])
@@ -1040,7 +1054,7 @@ export default function App() {
     const prev = pathDwellRef.current.get(tabId)
     if (prev && prev.path !== cwd) {
       const dwell = Date.now() - prev.enteredAt
-      if (dwell >= 60000 || prev.relatedPageVisited) saveRecentPath(prev.path)
+      if (dwell >= 60000 || prev.relatedPageVisited) setRecentPaths(saveRecentPath(prev.path))
     }
     pathDwellRef.current.set(tabId, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
   }, [])
@@ -1094,6 +1108,9 @@ export default function App() {
         {pane.activePage === 'workflows' && (
           <WorkflowsPanel cwd={paneCwd} active={true}
             monacoTheme={resolvedTheme.monacoThemeId} monacoThemeDef={resolvedTheme.monacoThemeDef} />
+        )}
+        {pane.activePage === 'notepad' && (
+          <NotepadPage cwd={paneCwd} />
         )}
       </div>
     )
@@ -1264,6 +1281,8 @@ export default function App() {
           onSearch={() => setSearchOpen(true)}
           onStartPageDrag={handleStartPageDrag}
           showPlugins={__PLUGINS__}
+          recentPaths={recentPaths}
+          onSelectRecentPath={handleSelectRecentPath}
         />
 
         {/* Pane column: global tab bar on top, split area below */}
@@ -1366,7 +1385,6 @@ export default function App() {
                   defaultZoom={currentZoom}
                   commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
                   pluginCommands={pluginCommands}
-                  quickPaths={loadRecentPaths()}
                   onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
                 />
               </div>

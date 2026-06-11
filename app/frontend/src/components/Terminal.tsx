@@ -33,7 +33,6 @@ interface Props {
   defaultZoom?: number
   commandAlignment?: 'default' | 'top' | 'bottom'
   pluginCommands?: Record<string, InstalledPluginCommand>
-  quickPaths?: string[]
   onCwdChange?: (cwd: string) => void
 }
 
@@ -98,14 +97,12 @@ export default function Terminal({
   defaultZoom = 1,
   commandAlignment = 'default',
   pluginCommands = {},
-  quickPaths,
   onCwdChange,
 }: Props) {
   const containerRef           = useRef<HTMLDivElement>(null)
   const termRef                = useRef<XTerm | null>(null)
   const fitRef                 = useRef<FitAddon | null>(null)
   const activeRef              = useRef(active)
-  const hasShownQuickPathsRef  = useRef(false)
   useEffect(() => { activeRef.current = active }, [active])
   const ptyModeRef = useRef(false)
 
@@ -196,6 +193,16 @@ export default function Terminal({
     }
     window.addEventListener('terminal:select-dir', handler)
     return () => window.removeEventListener('terminal:select-dir', handler)
+  }, [tabId])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { terminalId, path } = (e as CustomEvent<{ terminalId: string; path: string }>).detail
+      if (terminalId !== tabId || !path) return
+      SetTerminalCwd(tabId, path).catch(() => {})
+    }
+    window.addEventListener('terminal:cd-to', handler)
+    return () => window.removeEventListener('terminal:cd-to', handler)
   }, [tabId])
 
   // When defaultZoom changes (config reload), update xterm font size and refit.
@@ -387,16 +394,6 @@ export default function Terminal({
     container.addEventListener('wheel', handleWheel, { passive: false })
 
     CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
-
-    if (quickPaths && quickPaths.length > 0 && !hasShownQuickPathsRef.current) {
-      hasShownQuickPathsRef.current = true
-      term.write('\r\n\x1b[2m  Recent paths:\x1b[0m\r\n')
-      quickPaths.forEach(p => {
-        const display = p.replace(/\\/g, '/')
-        term.write(`  \x1b[36;4m${display}\x1b[0m\r\n`)
-      })
-      term.write('\r\n')
-    }
 
     const outEvent = `terminal:output:${tabId}`
     // Use termRef.current (not the closure `term`) so that if the component
