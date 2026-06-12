@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { git, type GitStatus, type GitFileEntry, type GitStash } from '../lib/git'
+import { git, type GitStatus, type GitStash } from '../lib/git'
 
 interface Props {
   cwd: string
@@ -230,7 +230,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
 
   useEffect(() => {
     if (!active) return
-    refresh()
+    void refresh()
     const id = setInterval(refresh, 6000)
     return () => clearInterval(id)
   }, [active, refresh])
@@ -334,7 +334,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
                   ].join(' ')}
                   onClick={() => {
                     setShowBranches(false)
-                    if (b !== status?.branch) run(() => git.checkout(cwd, b))
+                    if (b !== status?.branch) void run(() => git.checkout(cwd, b))
                   }}
                 >
                   {b === status?.branch && '• '}{b}
@@ -463,7 +463,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
             onChange={e => setCommitMsg(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && commitMsg.trim()) {
-                run(() => git.commit(cwd, commitMsg.trim()))
+                void run(() => git.commit(cwd, commitMsg.trim()))
                 setCommitMsg('')
               }
             }}
@@ -476,7 +476,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
               onClick={() => {
                 const msg = commitMsg.trim()
                 if (!msg) return
-                run(() => git.commit(cwd, msg))
+                void run(() => git.commit(cwd, msg))
                 setCommitMsg('')
               }}
             />
@@ -510,7 +510,7 @@ export default function VersionControlPanel({ cwd, active }: Props) {
               label="Stash"
               disabled={pending || totalChanges === 0}
               onClick={() => {
-                run(() => git.stash(cwd, stashMsg.trim() || undefined as any))
+                void run(() => git.stash(cwd, stashMsg.trim() || undefined as any))
                 setStashMsg('')
               }}
             />
