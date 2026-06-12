@@ -43,58 +43,89 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: app/frontend
 
-  # ── Auto-fix — npm audit (app frontend) ──────────────────────────────────────
-  # When npm audit flags high/critical vulnerabilities on a PR, try `npm audit fix`
-  # on the PR's own branch and open a follow-up PR with the updated lockfile so
-  # outdated dependencies are easy to review and merge separately.
-  npm-audit-app-autofix:
-    name: Auto-fix — npm audit (app/frontend)
+  # ── Suggest — npm audit fix (app frontend) ────────────────────────────────────
+  # When npm audit fails on a PR, run `npm audit fix` and post the resulting
+  # lockfile diff as a PR comment so the update is easy to review and apply.
+  npm-audit-app-suggest:
+    name: Suggest — npm audit fix (app/frontend)
     needs: npm-audit-app
     if: >-
       always() &&
       needs.npm-audit-app.result == 'failure' &&
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !startsWith(github.head_ref, 'auto-fix/')
+      github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GH_PAT || github.token }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
 
       - name: npm audit fix
         run: npm audit fix
         working-directory: app/frontend
         continue-on-error: true
 
-      - name: Open auto-fix PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GH_PAT || github.token }}
-          commit-message: "fix(deps): npm audit fix for app/frontend"
-          branch: auto-fix/audit-app-${{ github.event.pull_request.number }}
-          base: ${{ github.head_ref }}
-          delete-branch: true
-          title: "fix(deps): npm audit fix for app/frontend (#${{ github.event.pull_request.number }})"
-          body: |
-            The `npm audit — app/frontend` check on #${{ github.event.pull_request.number }} failed,
-            and `npm audit fix` was able to automatically resolve some or all of the
-            flagged vulnerabilities.
+      - name: Capture lockfile diff
+        id: diff
+        run: |
+          git diff -- app/frontend/package-lock.json app/frontend/package.json > /tmp/audit-app-diff.patch
+          if [ -s /tmp/audit-app-diff.patch ]; then
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          fi
 
-            Merge this into the source branch to clear (or reduce) the audit failure.
-          labels: |
-            automated
-            dependencies
+      - name: Post audit-fix suggestion
+        if: steps.diff.outputs.has_diff == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-app-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const marker = '<!-- audit-fix-suggestion: app-frontend -->';
+            const body = `${marker}\n` +
+              `## 📦 npm audit fix available — app/frontend\n\n` +
+              "The `npm audit — app/frontend` check failed. Running `npm audit fix` in `app/frontend` produces:\n\n" +
+              "```diff\n" + diff + "\n```\n\n" +
+              "Review and apply this locally, then commit the result.";
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
 
   # ── npm audit — setup frontend ───────────────────────────────────────────────
   npm-audit-setup:
@@ -117,55 +148,87 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: setup/windows/frontend
 
-  # ── Auto-fix — npm audit (setup frontend) ────────────────────────────────────
-  npm-audit-setup-autofix:
-    name: Auto-fix — npm audit (setup/frontend)
+  # ── Suggest — npm audit fix (setup frontend) ──────────────────────────────────
+  npm-audit-setup-suggest:
+    name: Suggest — npm audit fix (setup/frontend)
     needs: npm-audit-setup
     if: >-
       always() &&
       needs.npm-audit-setup.result == 'failure' &&
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      !startsWith(github.head_ref, 'auto-fix/')
+      github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GH_PAT || github.token }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: setup/windows/frontend
 
       - name: npm audit fix
         run: npm audit fix
         working-directory: setup/windows/frontend
         continue-on-error: true
 
-      - name: Open auto-fix PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GH_PAT || github.token }}
-          commit-message: "fix(deps): npm audit fix for setup/frontend"
-          branch: auto-fix/audit-setup-${{ github.event.pull_request.number }}
-          base: ${{ github.head_ref }}
-          delete-branch: true
-          title: "fix(deps): npm audit fix for setup/frontend (#${{ github.event.pull_request.number }})"
-          body: |
-            The `npm audit — setup/frontend` check on #${{ github.event.pull_request.number }} failed,
-            and `npm audit fix` was able to automatically resolve some or all of the
-            flagged vulnerabilities.
+      - name: Capture lockfile diff
+        id: diff
+        run: |
+          git diff -- setup/windows/frontend/package-lock.json setup/windows/frontend/package.json > /tmp/audit-setup-diff.patch
+          if [ -s /tmp/audit-setup-diff.patch ]; then
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          fi
 
-            Merge this into the source branch to clear (or reduce) the audit failure.
-          labels: |
-            automated
-            dependencies
+      - name: Post audit-fix suggestion
+        if: steps.diff.outputs.has_diff == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-setup-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const marker = '<!-- audit-fix-suggestion: setup-frontend -->';
+            const body = `${marker}\n` +
+              `## 📦 npm audit fix available — setup/frontend\n\n` +
+              "The `npm audit — setup/frontend` check failed. Running `npm audit fix` in `setup/windows/frontend` produces:\n\n" +
+              "```diff\n" + diff + "\n```\n\n" +
+              "Review and apply this locally, then commit the result.";
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
 
   # ── Secret / credential scanning ─────────────────────────────────────────────
   gitleaks:
