@@ -101,6 +101,7 @@ export default function Terminal({
   onCwdChange,
 }: Props) {
   const containerRef           = useRef<HTMLDivElement>(null)
+  const rootRef                = useRef<HTMLDivElement>(null)
   const termRef                = useRef<XTerm | null>(null)
   const fitRef                 = useRef<FitAddon | null>(null)
   const activeRef              = useRef(active)
@@ -404,16 +405,21 @@ export default function Terminal({
     window.addEventListener('keydown', handleCtrlKeyDown)
     window.addEventListener('keyup',   handleCtrlKeyUp)
 
+    // Ctrl+scroll zoom: applies to both the hidden xterm (PTY mode) and the
+    // visible command-block UI (via the --term-font-size CSS variable below).
+    // Attached to the root wrapper, not the xterm container, since the
+    // container is zero-size whenever no PTY is active.
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
       e.preventDefault()
-      const current = termRef.current?.options.fontSize ?? 13
+      const current = termRef.current?.options.fontSize ?? fontSize
       const next = e.deltaY < 0 ? Math.min(current + 1, 36) : Math.max(current - 1, 8)
       if (termRef.current) termRef.current.options.fontSize = next
       fitRef.current?.fit()
       setFontSize(next)
     }
-    container.addEventListener('wheel', handleWheel, { passive: false })
+    const root = rootRef.current
+    root?.addEventListener('wheel', handleWheel, { passive: false })
 
     CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
 
@@ -671,7 +677,7 @@ export default function Terminal({
 
     return () => {
       ro.disconnect()
-      container.removeEventListener('wheel', handleWheel)
+      root?.removeEventListener('wheel', handleWheel)
       container.removeEventListener('mousemove', handleCtrlMouseMove)
       container.removeEventListener('mousedown', handleCtrlClick)
       window.removeEventListener('keydown', handleCtrlKeyDown)
@@ -786,7 +792,7 @@ export default function Terminal({
       ].join(' ')}
     >
       <span className={`term-dot term-dot--${isPtyActive ? 'running' : 'idle'}`} />
-      {barPrompt.branch && <span className="term-branch-tag">[{barPrompt.branch}]</span>}
+      {barPrompt.branch && <span className="term-branch-tag">({barPrompt.branch})</span>}
       <span className="term-cwd">{barPath}</span>
       <span className="term-arrow">{'❯'}</span>
       {isPtyActive ? (
@@ -800,7 +806,8 @@ export default function Terminal({
           value={inputBarValue}
           onChange={handleInputBarChange}
           onKeyDown={handleInputBarKeyDown}
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono text-[13px] caret-[var(--info-bar-hover-color)] px-2"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono caret-[var(--info-bar-hover-color)] px-2"
+          style={{ fontSize: 'inherit' }}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
@@ -811,15 +818,29 @@ export default function Terminal({
     </div>
   )
 
+  // In 'default' alignment the input row flows inline as the next line after
+  // the last block's output (like a real shell prompt), instead of being
+  // pinned to the bottom of the pane. 'top'/'bottom' remain pinned bars; a
+  // pinned row is also kept in 'default' while a PTY is active so there's
+  // still a status row once the block list is hidden.
+  const showInlineInputRow = commandAlignment === 'default' && !isPtyActive
+  const showPinnedInputRow = commandAlignment !== 'default' || isPtyActive
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div
+      ref={rootRef}
+      className="flex-1 flex flex-col overflow-hidden"
+      style={{ '--term-font-size': `${fontSize}px` } as React.CSSProperties}
+    >
       {commandAlignment === 'top' && inputRow}
-      {!isPtyActive && <TerminalBlockList blocks={blocks} />}
+      {!isPtyActive && (
+        <TerminalBlockList blocks={blocks} inputRow={showInlineInputRow ? inputRow : undefined} />
+      )}
       <div
         ref={containerRef}
         className={isPtyActive ? 'flex-1 px-3 py-2 bg-[var(--app-bg)] overflow-hidden' : 'term-xterm-hidden'}
       />
-      {commandAlignment !== 'top' && inputRow}
+      {commandAlignment !== 'top' && showPinnedInputRow && inputRow}
 
       {menu && ReactDOM.createPortal(
         <div

@@ -527,7 +527,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         for (char& c : lower) c = (char)tolower((unsigned char)c);
 
         if (lower == "cls" || lower == "clear") {
-            emit("terminal:output:" + id, json(std::string("\x1b[2J\x1b[H")));
+            emit("terminal:output:" + id, json(std::string("\x1b[2J\x1b[H\r\nCleared successfully\r\n")));
             emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
@@ -585,6 +585,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
             cwd = new_cwd;
             emit("terminal:cwd:" + id, json(cwd));
+            emit("terminal:output:" + id, json("\r\nPath changed to " + new_cwd + "\r\n"));
             emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;

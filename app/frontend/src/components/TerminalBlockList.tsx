@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ansiToLines, ansiSegmentStyle } from '../lib/ansi'
 import type { CommandBlock } from '../lib/terminalBlocks'
 
 interface Props {
   blocks: CommandBlock[]
+  inputRow?: ReactNode
 }
 
 const MAX_LINES = 25
 
-export default function TerminalBlockList({ blocks }: Props) {
+export default function TerminalBlockList({ blocks, inputRow }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const toggleExpanded = (id: string) => {
@@ -35,7 +36,7 @@ export default function TerminalBlockList({ blocks }: Props) {
           <div key={block.id} className="term-block">
             <div className="term-block-header">
               <span className={`term-dot term-dot--${block.status}`} />
-              {block.branch && <span className="term-branch-tag">[{block.branch}]</span>}
+              {block.branch && <span className="term-branch-tag">({block.branch})</span>}
               <span className="term-cwd">{block.cwd}</span>
               <span className="term-arrow">{'❯'}</span>
               <span className="term-command">{block.command}</span>
@@ -79,6 +80,7 @@ export default function TerminalBlockList({ blocks }: Props) {
           </div>
         )
       })}
+      {inputRow}
     </div>
   )
 }
