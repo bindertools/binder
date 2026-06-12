@@ -766,6 +766,15 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             auto it = terminals_.find(id);
             if (it != terminals_.end()) { it->second->Interrupt(); }
         }
+#ifdef _WIN32
+        // Non-PTY foreground command (e.g. a dev server run via run_command) —
+        // kill its whole process tree via the tracked job object.
+        {
+            std::lock_guard<std::mutex> lk(running_jobs_mu_);
+            auto it = running_jobs_.find(id);
+            if (it != running_jobs_.end()) { TerminateJobObject(it->second, 1); }
+        }
+#endif
         resolve_ok(seq, true);
         return;
     }
@@ -1648,6 +1657,16 @@ int Dispatcher::run_command(const std::string& id,
         return 1;
     }
 
+    // Track this command's process tree in a job object so terminal.interrupt
+    // (Ctrl+C from the frontend) can kill it — cmd.exe and everything it spawns
+    // (npm, node, etc.) — even though it's blocking this thread, not a ConPTY.
+    HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
+    if (hJob) {
+        AssignProcessToJobObject(hJob, pi.hProcess);
+        std::lock_guard<std::mutex> lk(running_jobs_mu_);
+        running_jobs_[id] = hJob;
+    }
+
     char buf[4096];
     DWORD n;
     while (ReadFile(hrd, buf, sizeof(buf), &n, nullptr) && n > 0) {
@@ -1668,6 +1687,11 @@ int Dispatcher::run_command(const std::string& id,
     GetExitCodeProcess(pi.hProcess, &exitCode);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    if (hJob) {
+        std::lock_guard<std::mutex> lk(running_jobs_mu_);
+        running_jobs_.erase(id);
+        CloseHandle(hJob);
+    }
     return (int)exitCode;
 
 #else

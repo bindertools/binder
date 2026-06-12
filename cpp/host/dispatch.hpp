@@ -76,4 +76,12 @@ private:
     struct TerminalSession { std::string cwd; std::string alignment = "default"; };
     std::map<std::string, TerminalSession> term_sessions_;
     std::mutex sessions_mu_;
+
+#ifdef _WIN32
+    // Job object for each in-flight run_command() process, so terminal.interrupt
+    // can kill a foreground command (and its whole child tree, e.g. npm -> node)
+    // even though it's not a ConPTY session in terminals_.
+    std::unordered_map<std::string, HANDLE> running_jobs_;
+    std::mutex running_jobs_mu_;
+#endif
 };
