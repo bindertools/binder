@@ -79,6 +79,7 @@
   --color-warning: #FF9F0A;
   --color-error:   #FF453A;
   --color-info:    #5AC8FA;
+  --dot-running:   #e6e6e6;
 
   /* Surfaces */
   --surface-raised:   rgba(255,255,255,0.04);
@@ -144,3 +145,143 @@
 }
 .xterm-viewport::-webkit-scrollbar { display: none !important; }
 .xterm-scroll-area { visibility: hidden; }
+
+/* xterm container when no PTY is active — kept mounted so it can take over
+   instantly once an interactive program starts, but invisible until then. */
+.term-xterm-hidden {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ── Terminal command blocks ─────────────────────────────────────────────────── */
+.term-blocks {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--app-bg);
+}
+
+.term-block {
+  padding: 1px 12px;
+}
+
+.term-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.term-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.term-dot--idle {
+  background: transparent;
+  border: 1px solid var(--info-bar-color);
+}
+
+.term-dot--running {
+  background: var(--dot-running);
+  animation: term-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.term-dot--success {
+  background: var(--dot-running);
+}
+
+.term-dot--background {
+  background: var(--color-success);
+}
+
+.term-dot--error {
+  background: var(--color-error);
+}
+
+@keyframes term-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.term-branch-tag {
+  flex-shrink: 0;
+  color: var(--color-warning);
+}
+
+.term-cwd {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-info);
+}
+
+.term-arrow {
+  flex-shrink: 0;
+  color: var(--info-bar-color);
+}
+
+.term-command {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--info-bar-hover-color);
+}
+
+.term-ts {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--info-bar-color);
+  font-size: 11px;
+}
+
+.term-output {
+  padding: 2px 0 6px;
+}
+
+.term-output-line {
+  display: flex;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.term-output-glyph {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  color: var(--info-bar-color);
+}
+
+.term-output-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.term-output-more {
+  cursor: pointer;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.term-output-more:hover {
+  opacity: 1;
+}
+
+/* ── Terminal input row ──────────────────────────────────────────────────────── */
+.term-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}

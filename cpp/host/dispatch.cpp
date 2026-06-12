@@ -38,6 +38,8 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#else
+#include <sys/wait.h>
 #endif
 
 using json = nlohmann::json;
@@ -236,7 +238,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 term_sessions_[id].alignment == "default")
                 term_sessions_[id].alignment = alignment;
         }
-        emit_prompt(id, cwd);
+        emit_prompt(id, cwd, 0);
         resolve_ok(seq, {{"ok", true}});
         return;
     }
@@ -268,7 +270,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
         }
 
         if (cmd.empty()) {
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -515,7 +517,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 emit("terminal:output:" + id, json(
                     "\r\n\x1b[31mUnknown command: /" + name + "\x1b[0m\r\n"));
             }
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -526,14 +528,14 @@ void Dispatcher::dispatch_worker(const std::string& seq,
 
         if (lower == "cls" || lower == "clear") {
             emit("terminal:output:" + id, json(std::string("\x1b[2J\x1b[H")));
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
         if (lower == "exit") {
             emit("terminal:output:" + id, json(std::string(
                 "\r\n\x1b[33m[close the tab to exit]\x1b[0m\r\n")));
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -564,7 +566,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     } else {
                         emit("terminal:output:" + id, json(std::string(
                             "\r\n\x1b[31mThe system cannot find the path specified.\x1b[0m\r\n")));
-                        emit_prompt(id, cwd);
+                        emit_prompt(id, cwd, 1);
                         resolve_ok(seq, true);
                         return;
                     }
@@ -572,7 +574,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             } catch (const std::exception& e) {
                 emit("terminal:output:" + id, json(
                     std::string("\r\n\x1b[31mcd: ") + e.what() + "\x1b[0m\r\n"));
-                emit_prompt(id, cwd);
+                emit_prompt(id, cwd, 1);
                 resolve_ok(seq, true);
                 return;
             }
@@ -583,7 +585,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
             cwd = new_cwd;
             emit("terminal:cwd:" + id, json(cwd));
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -638,7 +640,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
 
             if (entries.empty()) {
                 emit("terminal:output:" + id, json(std::string("\r\n")));
-                emit_prompt(id, cwd);
+                emit_prompt(id, cwd, 0);
                 resolve_ok(seq, true);
                 return;
             }
@@ -678,7 +680,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
 
             emit("terminal:output:" + id, json(output));
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -699,7 +701,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             system(("xdg-open \"" + target + "\" &").c_str());
 #endif
             emit("terminal:output:" + id, json(std::string("\r\n")));
-            emit_prompt(id, cwd);
+            emit_prompt(id, cwd, 0);
             resolve_ok(seq, true);
             return;
         }
@@ -727,8 +729,8 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
         }
 
-        run_command(id, cmd, cwd);
-        emit_prompt(id, cwd);
+        int exitCode = run_command(id, cmd, cwd);
+        emit_prompt(id, cwd, exitCode);
         resolve_ok(seq, true);
         return;
     }
@@ -821,7 +823,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             auto it = term_sessions_.find(id);
             if (it != term_sessions_.end()) it->second.cwd = new_cwd;
         }
-        emit_prompt(id, new_cwd);
+        emit_prompt(id, new_cwd, 0);
         resolve_ok(seq, true);
         return;
     }
@@ -1579,7 +1581,7 @@ std::string Dispatcher::format_cwd(const std::string& cwd, bool minimal) {
     return parts[parts.size()-2] + "/" + parts.back();
 }
 
-void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd) {
+void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd, int exitCode) {
     auto cfg      = Config::instance().get();
     bool minimal     = cfg.value("minimal_pwd", false);
     bool show_ts     = cfg.value("show_timestamps", false);
@@ -1600,43 +1602,25 @@ void Dispatcher::emit_prompt(const std::string& id, const std::string& cwd) {
     }
 
     emit("terminal:bar-prompt:" + id,
-         json({{"path", display}, {"branch", branch}, {"ts", ts_str}}));
+         json({{"path", display}, {"branch", branch}, {"ts", ts_str}, {"exitCode", exitCode}}));
 
     // Always notify the frontend of the updated CWD
     emit("terminal:cwd:" + id, json(cwd));
 
-    // Suppress ANSI prompt in bar mode — the bar widget handles the prompt display
-    std::string alignment;
-    {
-        std::lock_guard<std::mutex> lk(sessions_mu_);
-        auto it = term_sessions_.find(id);
-        if (it != term_sessions_.end()) alignment = it->second.alignment;
-    }
-    if (alignment != "default") {
-        emit("terminal:output:" + id, json(std::string("\r\n")));
-        return;
-    }
-
-    std::string prompt = "\r\n";
-    if (!ts_str.empty())
-        prompt += "\x1b[97m" + ts_str + "\x1b[0m ";
-    prompt += "\x1b[36m" + display + "\x1b[0m";
-    if (!branch.empty())
-        prompt += " \x1b[33m(" + branch + ")\x1b[0m";
-    prompt += " \x1b[32m❯\x1b[0m ";
-
-    emit("terminal:output:" + id, json(prompt));
+    // The frontend renders its own block header (branch/path/timestamp/exit status),
+    // so the raw output stream just needs a line break between commands.
+    emit("terminal:output:" + id, json(std::string("\r\n")));
 }
 
-void Dispatcher::run_command(const std::string& id,
-                              const std::string& cmd,
-                              const std::string& cwd) {
+int Dispatcher::run_command(const std::string& id,
+                             const std::string& cmd,
+                             const std::string& cwd) {
 #ifdef _WIN32
     SECURITY_ATTRIBUTES sa{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     HANDLE hrd = INVALID_HANDLE_VALUE, hwr = INVALID_HANDLE_VALUE;
     if (!CreatePipe(&hrd, &hwr, &sa, 0)) {
         emit("terminal:output:" + id, json(std::string("\r\n\x1b[31merror: pipe failed\x1b[0m\r\n")));
-        return;
+        return 1;
     }
     SetHandleInformation(hrd, HANDLE_FLAG_INHERIT, 0);
 
@@ -1660,7 +1644,7 @@ void Dispatcher::run_command(const std::string& id,
         CloseHandle(hrd);
         emit("terminal:output:" + id, json(std::string(
             "\r\n\x1b[31m'" + cmd + "' is not recognized\x1b[0m\r\n")));
-        return;
+        return 1;
     }
 
     char buf[4096];
@@ -1679,8 +1663,11 @@ void Dispatcher::run_command(const std::string& id,
     }
     CloseHandle(hrd);
     WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    return (int)exitCode;
 
 #else
     // Unix: popen with cd to target directory
@@ -1689,7 +1676,7 @@ void Dispatcher::run_command(const std::string& id,
     if (!f) {
         emit("terminal:output:" + id, json(std::string(
             "\r\n\x1b[31merror: could not run command\x1b[0m\r\n")));
-        return;
+        return 1;
     }
     char buf[4096]; size_t n;
     while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
@@ -1703,6 +1690,7 @@ void Dispatcher::run_command(const std::string& id,
         }
         emit("terminal:output:" + id, json(out));
     }
-    pclose(f);
+    int status = pclose(f);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 #endif
 }

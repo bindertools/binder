@@ -61,8 +61,8 @@ private:
 #endif
 
     // ── Terminal helpers ──────────────────────────────────────────────────────
-    void emit_prompt(const std::string& id, const std::string& cwd);
-    void run_command(const std::string& id,
+    void emit_prompt(const std::string& id, const std::string& cwd, int exitCode);
+    int run_command(const std::string& id,
                      const std::string& cmd,
                      const std::string& cwd);
     static std::string get_git_branch(const std::string& dir);
