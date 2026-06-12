@@ -24,3 +24,23 @@ export function deriveStatus(exitCode: number, background: boolean): CommandBloc
   if (exitCode !== 0) return 'error'
   return background ? 'background' : 'success'
 }
+
+// Heuristic: a still-running command (e.g. a dev server) whose output
+// contains one of these signals has finished starting up and is now serving
+// — show it the same as a backgrounded process (green dot) even though it
+// hasn't exited and is still holding the terminal.
+const READY_PATTERNS: RegExp[] = [
+  /ready in \d/i,
+  /compiled successfully/i,
+  /webpack compiled/i,
+  /listening on/i,
+  /server (is )?running/i,
+  /started server on/i,
+  /local:\s*https?:\/\//i,
+  /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)[:/]/i,
+  /watching for file changes/i,
+]
+
+export function isRuntimeReady(output: string): boolean {
+  return READY_PATTERNS.some(p => p.test(output))
+}

@@ -708,6 +708,10 @@ export default function Terminal({
     }
   }, [active, isPtyActive])
 
+  // True while the most recent command hasn't returned yet — locks the input
+  // row like a traditional terminal waiting for its prompt back.
+  const isCommandRunning = blocks.length > 0 && blocks[blocks.length - 1].status === 'running'
+
   // ── input-bar handlers (bar modes only) ─────────────────────────────────────
   const handleInputBarChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -717,6 +721,15 @@ export default function Terminal({
   }, [])
 
   const handleInputBarKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // While the previous command is still running, the input is locked like a
+    // traditional shell waiting for its prompt back — only Ctrl+C is honored.
+    if (isCommandRunning) {
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault()
+        void InterruptCommand(tabId)
+      }
+      return
+    }
     if (e.key === 'Enter') {
       e.preventDefault()
       const value = inputBarValue
@@ -767,7 +780,7 @@ export default function Terminal({
         setInputBarValue(v); lineRef.current = v
       }
     }
-  }, [inputBarValue]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inputBarValue, isCommandRunning]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── render ────────────────────────────────────────────────────────────────────
   const cwdLabel = React.useMemo(() => {
@@ -791,7 +804,7 @@ export default function Terminal({
         'border-[var(--border-color)]',
       ].join(' ')}
     >
-      <span className={`term-dot term-dot--${isPtyActive ? 'running' : 'idle'}`} />
+      <span className={`term-dot term-dot--${isPtyActive || isCommandRunning ? 'running' : 'idle'}`} />
       {barPrompt.branch && <span className="term-branch-tag">({barPrompt.branch})</span>}
       <span className="term-cwd">{barPath}</span>
       <span className="term-arrow">{'❯'}</span>
@@ -803,10 +816,12 @@ export default function Terminal({
         <input
           ref={inputBarRef}
           type="text"
-          value={inputBarValue}
+          value={isCommandRunning ? '' : inputBarValue}
           onChange={handleInputBarChange}
           onKeyDown={handleInputBarKeyDown}
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono caret-[var(--info-bar-hover-color)] px-2"
+          readOnly={isCommandRunning}
+          placeholder={isCommandRunning ? 'Running… (Ctrl+C to interrupt)' : undefined}
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono caret-[var(--info-bar-hover-color)] px-2 placeholder:italic placeholder:opacity-40"
           style={{ fontSize: 'inherit' }}
           spellCheck={false}
           autoComplete="off"

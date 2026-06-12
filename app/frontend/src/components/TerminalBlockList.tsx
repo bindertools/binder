@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ansiToLines, ansiSegmentStyle } from '../lib/ansi'
-import type { CommandBlock } from '../lib/terminalBlocks'
+import { isRuntimeReady, type CommandBlock } from '../lib/terminalBlocks'
 
 interface Props {
   blocks: CommandBlock[]
@@ -34,10 +34,17 @@ export default function TerminalBlockList({ blocks, inputRow }: Props) {
         const visibleLines = isExpanded ? lines : lines.slice(0, MAX_LINES)
         const hiddenCount = lines.length - visibleLines.length
 
+        // A still-running command whose output signals it's up (a dev server
+        // that finished starting) shows green instead of the running pulse,
+        // even though the block stays 'running' (and the terminal stays locked).
+        const dotStatus = block.status === 'running' && isRuntimeReady(block.outputRaw)
+          ? 'background'
+          : block.status
+
         return (
           <div key={block.id} className="term-block">
             <div className="term-block-header">
-              <span className={`term-dot term-dot--${block.status}`} />
+              <span className={`term-dot term-dot--${dotStatus}`} />
               {block.branch && <span className="term-branch-tag">({block.branch})</span>}
               <span className="term-cwd">{block.cwd}</span>
               <span className="term-arrow">{'❯'}</span>
