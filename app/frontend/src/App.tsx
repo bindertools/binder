@@ -127,6 +127,23 @@ function getPaneTerminalId(pane: LeafPane, tabs: Tab[]): string | null {
     ?? null
 }
 
+// Sticky set of leaf-pane ids that have ever shown `pageId`: once a pane opens
+// that page, its overlay instance is kept mounted (like terminals) so the
+// page's internal state survives switching pages/tabs and back.
+function useStickyLeafIds(allLeavesWithWs: { wsId: string; leaf: LeafPane }[], pageId: PageId): string[] {
+  const idsRef = useRef<Set<string>>(new Set())
+  return useMemo(() => {
+    const currentIds = new Set(allLeavesWithWs.map(({ leaf }) => leaf.id))
+    for (const { leaf } of allLeavesWithWs) {
+      if (leaf.activePage === pageId) idsRef.current.add(leaf.id)
+    }
+    for (const id of idsRef.current) {
+      if (!currentIds.has(id)) idsRef.current.delete(id)
+    }
+    return [...idsRef.current]
+  }, [allLeavesWithWs, pageId])
+}
+
 // ── Tab reducer ───────────────────────────────────────────────────────────────
 
 type TabState = { tabs: Tab[]; activeId: string }
@@ -453,17 +470,13 @@ export default function App() {
   // Sticky set: once a pane opens the Code Editor, its FullscreenIDE instance is
   // kept mounted (in an overlay, like terminals) so explorer/open-files/cursor
   // state survives switching pages or tabs and back.
-  const editorLeafIdsRef = useRef<Set<string>>(new Set())
-  const editorLeafIds = useMemo(() => {
-    const currentIds = new Set(allLeavesWithWs.map(({ leaf }) => leaf.id))
-    for (const { leaf } of allLeavesWithWs) {
-      if (leaf.activePage === 'editor') editorLeafIdsRef.current.add(leaf.id)
-    }
-    for (const id of editorLeafIdsRef.current) {
-      if (!currentIds.has(id)) editorLeafIdsRef.current.delete(id)
-    }
-    return [...editorLeafIdsRef.current]
-  }, [allLeavesWithWs])
+  const editorLeafIds = useStickyLeafIds(allLeavesWithWs, 'editor')
+
+  // ── Leaves that have ever shown the Workflows page ───────────────────────────
+  // Sticky set: keeps WorkflowsPanel mounted (in an overlay, like terminals/editor)
+  // so the workflow list/content it already fetched survive switching pages or
+  // tabs and back, instead of refetching and re-skeletoning every time.
+  const workflowsLeafIds = useStickyLeafIds(allLeavesWithWs, 'workflows')
 
   const updateLayout = useCallback((workspaceId: string, fn: (l: Layout) => Layout) => {
     setLayouts(prev => {
@@ -1122,10 +1135,8 @@ export default function App() {
         {pane.activePage === 'versioncontrol' && (
           <VersionControlPanel cwd={paneCwd} active={true} />
         )}
-        {pane.activePage === 'workflows' && (
-          <WorkflowsPanel cwd={paneCwd} active={true}
-            monacoTheme={resolvedTheme.monacoThemeId} monacoThemeDef={resolvedTheme.monacoThemeDef} />
-        )}
+        {/* 'workflows' page is rendered by the always-mounted WorkflowsPanel overlay
+            below SplitPaneView, so its fetched list/content survive switching pages/tabs. */}
         {pane.activePage === 'notepad' && (
           <NotepadPage cwd={paneCwd} />
         )}
@@ -1428,6 +1439,34 @@ export default function App() {
               >
                 <FullscreenIDE cwd={paneCwd} theme={resolvedTheme} indentGuides={appConfig.indent_guides}
                   minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom} />
+              </div>
+            )
+          })}
+
+          {/* Workflows overlay — one WorkflowsPanel per pane that has shown the
+              Workflows page, kept mounted (like terminals/editor) so its workflow
+              list/content survive switching pages/tabs; the panel itself does a
+              silent background re-check on re-entry and while active. */}
+          {contentAreaSize.w > 0 && workflowsLeafIds.map(leafId => {
+            const found = allLeavesWithWs.find(({ leaf }) => leaf.id === leafId)
+            if (!found) return null
+            const { wsId, leaf } = found
+            const paneTerminalId = getPaneTerminalId(leaf, tabs)
+            const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
+            const visible = wsId === activeWorkspaceId && leaf.activePage === 'workflows' && !!findLeaf(activeLayout.root, leafId)
+            const rect = visible ? getPaneContentRect(activeLayout.root, leafId, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+            return (
+              <div
+                key={leafId}
+                style={{
+                  position: 'absolute',
+                  left: rect?.x ?? 0, top: rect?.y ?? 0,
+                  width: rect?.w ?? 0, height: rect?.h ?? 0,
+                  display: visible && rect ? 'block' : 'none',
+                }}
+              >
+                <WorkflowsPanel cwd={paneCwd} active={visible}
+                  monacoTheme={resolvedTheme.monacoThemeId} monacoThemeDef={resolvedTheme.monacoThemeDef} />
               </div>
             )
           })}

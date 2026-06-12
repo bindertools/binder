@@ -402,6 +402,7 @@ const lastSelection = new Map<string, SelectionState>()
 export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDef }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
+  const [checking, setChecking] = useState(false)
   const [error,    setError]    = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<string | null>(() => lastSelection.get(cwd)?.file ?? null)
   const [section,  setSection]  = useState<Section>(() => lastSelection.get(cwd)?.section ?? 'code')
@@ -415,24 +416,66 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
     workflows.checkRunner().then(setRunnerStatus).catch(() => setRunnerStatus(null))
   }, [])
 
-  const refresh = useCallback(async () => {
+  // `background` refreshes don't show the skeleton or clobber error/loading
+  // state — they just silently update the list (and the open file's content,
+  // if it changed) and flash the small "checking" indicator next to the count.
+  const refresh = useCallback(async (opts?: { background?: boolean }) => {
     if (!cwd) return
-    setLoading(true)
+    const background = opts?.background ?? false
+    if (background) setChecking(true)
+    else setLoading(true)
     try {
       const r = await workflows.list(cwd)
       setList(r.workflows)
-      setError(null)
+      if (!background) setError(null)
+      if (background && selectedFile && r.workflows.some(w => w.file === selectedFile)) {
+        try {
+          const c = await workflows.read(cwd, selectedFile)
+          setContent(prev => prev === c.content ? prev : c.content)
+        } catch { /* keep showing last good content */ }
+      }
     } catch (e: any) {
-      setError(e?.message ?? 'failed to list workflows')
+      if (!background) setError(e?.message ?? 'failed to list workflows')
     } finally {
-      setLoading(false)
+      if (background) setChecking(false)
+      else setLoading(false)
     }
+  }, [cwd, selectedFile])
+
+  // First activation does a full load (with skeleton). Re-entering an already-
+  // loaded panel, or a cwd change, triggers a silent background re-check instead.
+  const hasLoadedRef = useRef(false)
+  const prevActiveRef = useRef(false)
+  const prevCwdRef = useRef(cwd)
+
+  useEffect(() => {
+    if (prevCwdRef.current === cwd) return
+    prevCwdRef.current = cwd
+    const sel = lastSelection.get(cwd)
+    setSelectedFile(sel?.file ?? null)
+    setSection(sel?.section ?? 'code')
+    setList([])
+    setError(null)
+    hasLoadedRef.current = false
   }, [cwd])
 
   useEffect(() => {
-    if (!active) return
-    void refresh()
-  }, [active, refresh])
+    if (!active || !cwd) { prevActiveRef.current = active; return }
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true
+      void refresh()
+    } else if (!prevActiveRef.current) {
+      void refresh({ background: true })
+    }
+    prevActiveRef.current = active
+  }, [active, cwd, refresh])
+
+  // While the page is open, periodically re-check for new/changed workflows.
+  useEffect(() => {
+    if (!active || !cwd) return
+    const id = window.setInterval(() => { void refresh({ background: true }) }, 60000)
+    return () => window.clearInterval(id)
+  }, [active, cwd, refresh])
 
   // Re-apply a custom theme definition if it changes while this panel is mounted.
   useEffect(() => {
@@ -488,6 +531,11 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
         <div className="wf-sidebar__header">
           <span className="wf-sidebar__title">
             Workflows{list.length > 0 && <span className="wf-sidebar__count">({list.length})</span>}
+            {checking && (
+              <span className="wf-sidebar__checking" title="Checking for new workflows…">
+                <Spinner size={10} />
+              </span>
+            )}
           </span>
           <button className="wf-sidebar__refresh" title="Refresh" onClick={() => void refresh()} disabled={loading}>
             <RefreshIcon />
