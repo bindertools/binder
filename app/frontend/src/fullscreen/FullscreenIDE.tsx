@@ -129,6 +129,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const rightEditorRef = useRef<any>(null)
   const rightMonacoRef = useRef<any>(null)
 
+  // ── per-file cursor/scroll position, keyed by "panel:path" ───────────────────
+  // Monaco view state survives switching between open files (and back) even
+  // though each file gets its own editor model (key={fileObj.path} below).
+  const viewStatesRef = useRef<Map<string, any>>(new Map())
+
   // ── stable refs (avoid stale closures in memoised callbacks) ─────────────────
   const leftActiveRef   = useRef<string | null>(null)
   const rightActiveRef  = useRef<string | null>(null)
@@ -230,6 +235,17 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     return () => EventsOff('fullscreen:file-changed')
   }, [])
 
+  // ── switch active file in a panel, preserving cursor/scroll for both files ───
+  const switchActiveFile = useCallback((panel: 'left' | 'right', path: string | null) => {
+    const editor = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
+    const currentPath = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
+    if (editor && currentPath && currentPath !== path) {
+      viewStatesRef.current.set(`${panel}:${currentPath}`, editor.saveViewState())
+    }
+    if (panel === 'left') setLeftActive(path)
+    else setRightActive(path)
+  }, [])
+
   // ── open file (with preview-replacement logic) ────────────────────────────────
   const openFile = useCallback(async (node: FileNode, targetPanel?: 'left' | 'right') => {
     if (node.isDir) return
@@ -237,8 +253,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     // Already open: just activate it in its panel
     const already = openFiles.find(f => f.path === node.path)
     if (already) {
-      if (already.panel === 'left') setLeftActive(node.path)
-      else setRightActive(node.path)
+      switchActiveFile(already.panel, node.path)
       setFocusedPanel(already.panel)
       setSelectedPaths(new Set())
       return
@@ -261,13 +276,12 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         return [...prev, newFile]
       })
 
-      if (panel === 'left') setLeftActive(node.path)
-      else setRightActive(node.path)
+      switchActiveFile(panel, node.path)
       setFocusedPanel(panel)
       setSelectedPaths(new Set())
     } catch { /* permission error */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openFiles])
+  }, [openFiles, switchActiveFile])
 
   // ── close files ───────────────────────────────────────────────────────────────
   const closeFiles = useCallback((paths: string[]) => {
@@ -295,6 +309,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       paths.forEach(p => next.delete(p))
       return next
     })
+    // Drop cached cursor/scroll positions for closed files
+    for (const p of paths) {
+      viewStatesRef.current.delete(`left:${p}`)
+      viewStatesRef.current.delete(`right:${p}`)
+    }
   }, [])
 
   // ── move to panel ─────────────────────────────────────────────────────────────
@@ -303,11 +322,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       paths.includes(f.path) ? { ...f, panel: target, pinned: true } : f
     ))
     setSplitMode(true)
-    if (target === 'right') setRightActive(paths[0])
-    else setLeftActive(paths[0])
+    switchActiveFile(target, paths[0])
     setFocusedPanel(target)
     setSelectedPaths(new Set())
-  }, [])
+  }, [switchActiveFile])
 
   // ── tab multi-select ──────────────────────────────────────────────────────────
   const handleSelectTab = useCallback((path: string, e: React.MouseEvent) => {
@@ -337,11 +355,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const activateFile = useCallback((path: string) => {
     const file = openFiles.find(f => f.path === path)
     if (!file) return
-    if (file.panel === 'left') setLeftActive(path)
-    else setRightActive(path)
+    switchActiveFile(file.panel, path)
     setFocusedPanel(file.panel)
     setSelectedPaths(new Set())
-  }, [openFiles])
+  }, [openFiles, switchActiveFile])
 
   // ── drag-and-drop between panels ─────────────────────────────────────────────
   const onTabDragStart = useCallback((e: React.DragEvent, path: string) => {
@@ -538,7 +555,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     fileObj: OpenFile | undefined,
     onChange: (v: string | undefined) => void,
     onMount: (editor: any, monaco: any) => void,
-    _isFocused: boolean,
+    panel: 'left' | 'right',
   ) => {
     if (!fileObj) {
       return (
@@ -553,16 +570,21 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         </div>
       )
     }
+    const path = fileObj.path
     return (
       <MonacoEditor
-        key={fileObj.path}
+        key={path}
         value={fileObj.content}
         language={fileObj.language}
         theme={theme.monacoThemeId}
         beforeMount={beforeMount}
         loading={<div style={{ width: '100%', height: '100%', background: 'var(--ide-editor-bg)' }} />}
         onChange={onChange}
-        onMount={onMount}
+        onMount={(editor, monaco) => {
+          onMount(editor, monaco)
+          const savedState = viewStatesRef.current.get(`${panel}:${path}`)
+          if (savedState) editor.restoreViewState(savedState)
+        }}
         options={monacoOptions}
       />
     )
@@ -652,7 +674,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
             onDrop={onPanelDrop}
           />
           <div className="ide-editor">
-            {renderMonaco(leftFileObj, leftOnChange, onLeftMount, focusedPanel === 'left')}
+            {renderMonaco(leftFileObj, leftOnChange, onLeftMount, 'left')}
           </div>
         </div>
 
@@ -678,7 +700,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
                 onDrop={onPanelDrop}
               />
               <div className="ide-editor">
-                {renderMonaco(rightFileObj, rightOnChange, onRightMount, focusedPanel === 'right')}
+                {renderMonaco(rightFileObj, rightOnChange, onRightMount, 'right')}
               </div>
             </div>
           </>

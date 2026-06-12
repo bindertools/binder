@@ -117,6 +117,16 @@ function workspaceIdOf(tabId: string, tabs: Tab[]): string {
   return cur?.id ?? tabId
 }
 
+// The terminal a pane's editor/sidebar pages are tied to (for cwd lookups, etc.)
+function getPaneTerminalId(pane: LeafPane, tabs: Tab[]): string | null {
+  const paneTabs = pane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
+  const activeTab = paneTabs.find(t => t.id === pane.activeTabId)
+  return (activeTab?.type === 'terminal' ? activeTab.id : null)
+    ?? paneTabs.find(t => t.type === 'terminal')?.id
+    ?? pane.linkedTerminalId
+    ?? null
+}
+
 // ── Tab reducer ───────────────────────────────────────────────────────────────
 
 type TabState = { tabs: Tab[]; activeId: string }
@@ -432,6 +442,28 @@ export default function App() {
     () => layouts[activeWorkspaceId] ?? Object.values(layouts)[0] ?? { root: initialLeaf, focusedPaneId: initialLeaf.id },
     [layouts, activeWorkspaceId],
   )
+
+  // ── Every leaf pane across every workspace, with its owning workspace id ─────
+  const allLeavesWithWs = useMemo(
+    () => Object.entries(layouts).flatMap(([wsId, l]) => getAllLeaves(l.root).map(leaf => ({ wsId, leaf }))),
+    [layouts],
+  )
+
+  // ── Leaves that have ever shown the editor page ──────────────────────────────
+  // Sticky set: once a pane opens the Code Editor, its FullscreenIDE instance is
+  // kept mounted (in an overlay, like terminals) so explorer/open-files/cursor
+  // state survives switching pages or tabs and back.
+  const editorLeafIdsRef = useRef<Set<string>>(new Set())
+  const editorLeafIds = useMemo(() => {
+    const currentIds = new Set(allLeavesWithWs.map(({ leaf }) => leaf.id))
+    for (const { leaf } of allLeavesWithWs) {
+      if (leaf.activePage === 'editor') editorLeafIdsRef.current.add(leaf.id)
+    }
+    for (const id of editorLeafIdsRef.current) {
+      if (!currentIds.has(id)) editorLeafIdsRef.current.delete(id)
+    }
+    return [...editorLeafIdsRef.current]
+  }, [allLeavesWithWs])
 
   const updateLayout = useCallback((workspaceId: string, fn: (l: Layout) => Layout) => {
     setLayouts(prev => {
@@ -1050,10 +1082,8 @@ export default function App() {
   function renderSidebarPage(pane: LeafPane, paneTerminalId: string | null, paneCwd: string): React.ReactNode {
     return (
       <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
-        {pane.activePage === 'editor' && (
-          <FullscreenIDE cwd={paneCwd} theme={resolvedTheme} indentGuides={appConfig.indent_guides}
-            minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom} />
-        )}
+        {/* 'editor' page is rendered by the always-mounted FullscreenIDE overlay below SplitPaneView,
+            so its state (open files, explorer, cursor position) survives switching pages/tabs. */}
         {pane.activePage === 'database' && (
           <DatabasePage key={paneTerminalId ?? 'no-terminal'} terminalId={paneTerminalId} cwd={paneCwd}
             initialDbPath={forcedDbPath} privacyMode={appConfig.database_privacy} />
@@ -1153,10 +1183,7 @@ export default function App() {
     const paneTabs = pane.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
     const activeTab = paneTabs.find(t => t.id === pane.activeTabId)
 
-    const paneTerminalId = (activeTab?.type === 'terminal' ? activeTab.id : null)
-      ?? paneTabs.find(t => t.type === 'terminal')?.id
-      ?? pane.linkedTerminalId
-      ?? null
+    const paneTerminalId = getPaneTerminalId(pane, tabs)
     const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
 
     // Non-terminal sidebar pages
@@ -1374,6 +1401,33 @@ export default function App() {
                   pluginCommands={pluginCommands}
                   onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
                 />
+              </div>
+            )
+          })}
+
+          {/* Code Editor overlay — one FullscreenIDE per pane that has shown the
+              editor page, kept mounted (like terminals) so explorer state, open
+              files, and cursor/scroll positions survive switching pages/tabs */}
+          {contentAreaSize.w > 0 && editorLeafIds.map(leafId => {
+            const found = allLeavesWithWs.find(({ leaf }) => leaf.id === leafId)
+            if (!found) return null
+            const { wsId, leaf } = found
+            const paneTerminalId = getPaneTerminalId(leaf, tabs)
+            const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
+            const visible = wsId === activeWorkspaceId && leaf.activePage === 'editor' && !!findLeaf(activeLayout.root, leafId)
+            const rect = visible ? getPaneContentRect(activeLayout.root, leafId, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+            return (
+              <div
+                key={leafId}
+                style={{
+                  position: 'absolute',
+                  left: rect?.x ?? 0, top: rect?.y ?? 0,
+                  width: rect?.w ?? 0, height: rect?.h ?? 0,
+                  display: visible && rect ? 'block' : 'none',
+                }}
+              >
+                <FullscreenIDE cwd={paneCwd} theme={resolvedTheme} indentGuides={appConfig.indent_guides}
+                  minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom} />
               </div>
             )
           })}
