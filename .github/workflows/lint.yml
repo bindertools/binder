@@ -70,3 +70,62 @@ jobs:
         # All actual ESLint errors must be 0 for CI to pass.
         run: npx eslint src
         working-directory: app/frontend
+
+  # ── Auto-fix — ESLint ─────────────────────────────────────────────────────────
+  # When ESLint fails on a PR, try `eslint --fix` on the PR's own branch and open
+  # a follow-up PR with the auto-fixable corrections so they're easy to review
+  # and merge separately from the rest of the change.
+  lint-autofix:
+    name: Auto-fix — ESLint
+    needs: ts-eslint
+    if: >-
+      always() &&
+      needs.ts-eslint.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.head_ref, 'auto-fix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: ESLint --fix
+        run: npm run lint:fix
+        working-directory: app/frontend
+        continue-on-error: true
+
+      - name: Open auto-fix PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+          commit-message: "fix(frontend): auto-fix ESLint issues"
+          branch: auto-fix/lint-${{ github.event.pull_request.number }}
+          base: ${{ github.head_ref }}
+          delete-branch: true
+          title: "fix(frontend): auto-fix ESLint issues for #${{ github.event.pull_request.number }}"
+          body: |
+            The `ESLint` check on #${{ github.event.pull_request.number }} failed, and `eslint --fix`
+            was able to automatically correct some or all of the issues.
+
+            Merge this into the source branch to clear the lint failure.
+          labels: |
+            automated
+            lint

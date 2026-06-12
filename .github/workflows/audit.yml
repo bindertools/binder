@@ -43,6 +43,59 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: app/frontend
 
+  # ── Auto-fix — npm audit (app frontend) ──────────────────────────────────────
+  # When npm audit flags high/critical vulnerabilities on a PR, try `npm audit fix`
+  # on the PR's own branch and open a follow-up PR with the updated lockfile so
+  # outdated dependencies are easy to review and merge separately.
+  npm-audit-app-autofix:
+    name: Auto-fix — npm audit (app/frontend)
+    needs: npm-audit-app
+    if: >-
+      always() &&
+      needs.npm-audit-app.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.head_ref, 'auto-fix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: npm audit fix
+        run: npm audit fix
+        working-directory: app/frontend
+        continue-on-error: true
+
+      - name: Open auto-fix PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+          commit-message: "fix(deps): npm audit fix for app/frontend"
+          branch: auto-fix/audit-app-${{ github.event.pull_request.number }}
+          base: ${{ github.head_ref }}
+          delete-branch: true
+          title: "fix(deps): npm audit fix for app/frontend (#${{ github.event.pull_request.number }})"
+          body: |
+            The `npm audit — app/frontend` check on #${{ github.event.pull_request.number }} failed,
+            and `npm audit fix` was able to automatically resolve some or all of the
+            flagged vulnerabilities.
+
+            Merge this into the source branch to clear (or reduce) the audit failure.
+          labels: |
+            automated
+            dependencies
+
   # ── npm audit — setup frontend ───────────────────────────────────────────────
   npm-audit-setup:
     name: npm audit — setup/frontend
@@ -63,6 +116,56 @@ jobs:
       - name: Run npm audit
         run: npm audit --audit-level=high
         working-directory: setup/windows/frontend
+
+  # ── Auto-fix — npm audit (setup frontend) ────────────────────────────────────
+  npm-audit-setup-autofix:
+    name: Auto-fix — npm audit (setup/frontend)
+    needs: npm-audit-setup
+    if: >-
+      always() &&
+      needs.npm-audit-setup.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.head_ref, 'auto-fix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: npm audit fix
+        run: npm audit fix
+        working-directory: setup/windows/frontend
+        continue-on-error: true
+
+      - name: Open auto-fix PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+          commit-message: "fix(deps): npm audit fix for setup/frontend"
+          branch: auto-fix/audit-setup-${{ github.event.pull_request.number }}
+          base: ${{ github.head_ref }}
+          delete-branch: true
+          title: "fix(deps): npm audit fix for setup/frontend (#${{ github.event.pull_request.number }})"
+          body: |
+            The `npm audit — setup/frontend` check on #${{ github.event.pull_request.number }} failed,
+            and `npm audit fix` was able to automatically resolve some or all of the
+            flagged vulnerabilities.
+
+            Merge this into the source branch to clear (or reduce) the audit failure.
+          labels: |
+            automated
+            dependencies
 
   # ── Secret / credential scanning ─────────────────────────────────────────────
   gitleaks:
