@@ -24,6 +24,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import '@xterm/xterm/css/xterm.css'
 import TerminalBlockList from './TerminalBlockList'
+import GitBranchIcon from './GitBranchIcon'
 import { type CommandBlock, isBackgroundCommand, deriveStatus } from '../lib/terminalBlocks'
 
 interface Props {
@@ -831,8 +832,13 @@ export default function Terminal({
       ].join(' ')}
     >
       <span className={`term-dot term-dot--${isPtyActive || isCommandRunning ? 'running' : 'idle'}`} />
-      {barPrompt.branch && <span className="term-branch-tag">({barPrompt.branch})</span>}
       <span className="term-cwd">{barPath}</span>
+      {barPrompt.branch && (
+        <span className="term-branch-tag">
+          <GitBranchIcon />
+          {barPrompt.branch}
+        </span>
+      )}
       <span className="term-arrow">{'❯'}</span>
       {isPtyActive ? (
         <div className="flex items-center px-2 text-[11px] font-mono text-[var(--tab-color)] opacity-40 italic select-none shrink-0">

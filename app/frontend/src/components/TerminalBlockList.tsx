@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ansiToLines, ansiSegmentStyle } from '../lib/ansi'
 import { isRuntimeReady, type CommandBlock } from '../lib/terminalBlocks'
+import GitBranchIcon from './GitBranchIcon'
 
 interface Props {
   blocks: CommandBlock[]
@@ -45,8 +46,13 @@ export default function TerminalBlockList({ blocks, inputRow }: Props) {
           <div key={block.id} className="term-block">
             <div className="term-block-header">
               <span className={`term-dot term-dot--${dotStatus}`} />
-              {block.branch && <span className="term-branch-tag">({block.branch})</span>}
               <span className="term-cwd">{block.cwd}</span>
+              {block.branch && (
+                <span className="term-branch-tag">
+                  <GitBranchIcon />
+                  {block.branch}
+                </span>
+              )}
               <span className="term-arrow">{'❯'}</span>
               <span className="term-command">{block.command}</span>
               {block.ts && <span className="term-ts">{block.ts}</span>}
