@@ -25,7 +25,9 @@ export default function TerminalBlockList({ blocks, inputRow }: Props) {
     <div className="term-blocks">
       {blocks.map(block => {
         const lines = ansiToLines(block.outputRaw)
-        // Drop a single trailing empty line (the \r\n emitted before the next prompt).
+        // Drop leading/trailing empty lines so the "└" connector lines up with
+        // the first line of real content, regardless of leading/trailing \r\n.
+        while (lines.length && lines[0].length === 0) lines.shift()
         while (lines.length && lines[lines.length - 1].length === 0) lines.pop()
 
         const isExpanded = expanded.has(block.id)

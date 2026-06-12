@@ -177,8 +177,8 @@
 
 .term-dot {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
+  width: 0.6em;
+  height: 0.6em;
   border-radius: 50%;
 }
 
