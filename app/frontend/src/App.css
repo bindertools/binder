@@ -217,7 +217,7 @@
   margin-left: 0.6em;
   padding: 0 0.4em;
   border: 1px solid var(--color-sep-strong);
-  border-radius: 4px;
+  border-radius: 15px;
   color: var(--info-bar-hover-color);
   font-weight: 400;
   font-size: 0.8em;
@@ -299,7 +299,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 6px 12px;
   font-family: var(--font-mono);
   font-size: var(--term-font-size, 13px);
 }

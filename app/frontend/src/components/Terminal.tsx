@@ -826,7 +826,7 @@ export default function Terminal({
   const inputRow = (
     <div
       className={[
-        'term-input-row flex items-stretch h-9 shrink-0',
+        'term-input-row flex items-stretch min-h-9 shrink-0',
         commandAlignment === 'top' ? 'border-b' : 'border-t',
         'border-[var(--border-color)]',
       ].join(' ')}
