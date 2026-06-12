@@ -430,6 +430,13 @@ export default function Terminal({
     EventsOn(outEvent, (data: string) => {
       termRef.current?.write(data)
       if (ptyModeRef.current) return
+      // 'clear'/'cls' sends an ANSI clear-screen sequence — drop every earlier
+      // block (keeping only the in-flight 'clear' block itself) so the block
+      // list actually empties instead of just printing a confirmation line.
+      if (data.includes('\x1b[2J')) {
+        const last = blocksRef.current[blocksRef.current.length - 1]
+        blocksRef.current = last ? [last] : []
+      }
       const list = blocksRef.current
       const last = list[list.length - 1]
       if (last && last.status === 'running') {
