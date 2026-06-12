@@ -405,6 +405,24 @@ export default function Terminal({
     window.addEventListener('keydown', handleCtrlKeyDown)
     window.addEventListener('keyup',   handleCtrlKeyUp)
 
+    // Ctrl+C must interrupt a running foreground command no matter what's
+    // focused within this terminal — the input bar's own onKeyDown only fires
+    // while it has focus. Skipped while a PTY is active (xterm's own custom
+    // key handler above already forwards ^C to the pty) and while the input
+    // bar has focus (its handler covers that case and would double-fire).
+    const handleGlobalInterrupt = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.key === 'c')) return
+      if (!activeRef.current || ptyModeRef.current) return
+      if (document.activeElement === inputBarRef.current) return
+      const last = blocksRef.current[blocksRef.current.length - 1]
+      if (last?.status !== 'running') return
+      const el = document.activeElement
+      if (el && el !== document.body && !rootRef.current?.contains(el)) return
+      e.preventDefault()
+      void InterruptCommand(tabId)
+    }
+    window.addEventListener('keydown', handleGlobalInterrupt)
+
     // Ctrl+scroll zoom: applies to both the hidden xterm (PTY mode) and the
     // visible command-block UI (via the --term-font-size CSS variable below).
     // Attached to the root wrapper, not the xterm container, since the
@@ -689,6 +707,7 @@ export default function Terminal({
       container.removeEventListener('mousedown', handleCtrlClick)
       window.removeEventListener('keydown', handleCtrlKeyDown)
       window.removeEventListener('keyup',   handleCtrlKeyUp)
+      window.removeEventListener('keydown', handleGlobalInterrupt)
       window.removeEventListener('paste', onWindowPaste)
       window.removeEventListener('plugin:execute', handlePluginExec)
       EventsOff(outEvent)
@@ -848,11 +867,23 @@ export default function Terminal({
   const showInlineInputRow = commandAlignment === 'default' && !isPtyActive
   const showPinnedInputRow = commandAlignment !== 'default' || isPtyActive
 
+  // Clicking anywhere in the terminal pane (other than an interactive element,
+  // like the "click to expand" output toggle) sends focus to the input bar so
+  // the user can start typing immediately — mirrors opening/switching to this
+  // terminal tab, which also focuses it via the effect above.
+  const handlePaneMouseDown = (e: React.MouseEvent) => {
+    if (isPtyActive) return
+    const target = e.target as HTMLElement
+    if (target.closest('input, button, a, .term-output-more')) return
+    requestAnimationFrame(() => inputBarRef.current?.focus())
+  }
+
   return (
     <div
       ref={rootRef}
       className="flex-1 flex flex-col overflow-hidden"
       style={{ '--term-font-size': `${fontSize}px` } as React.CSSProperties}
+      onMouseDown={handlePaneMouseDown}
     >
       {commandAlignment === 'top' && inputRow}
       {!isPtyActive && (
