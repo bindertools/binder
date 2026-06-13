@@ -159,6 +159,76 @@ const char* kQueryTypescriptExtra = R"TSQ(
 
 const std::string kQueryTypescript = std::string(kQueryJavascriptCore) + kQueryTypescriptExtra;
 
+// ── Completion queries ────────────────────────────────────────────────────────
+// Symbol-extraction queries for editor.completions: capture names classify
+// each captured identifier into a completion "kind" (returned to the
+// frontend for icon selection). Predicate-free, like the highlight queries;
+// if a pattern doesn't compile for a given grammar the whole query fails to
+// compile and tree-sitter-based symbols are simply skipped for that buffer
+// (word-based fallback + keywords still work).
+
+const char* kCompletionQueryJson = R"TSQ(
+(pair key: (string) @property)
+)TSQ";
+
+const char* kCompletionQueryJavascript = R"TSQ(
+(function_declaration name: (identifier) @function)
+(function_expression name: (identifier) @function)
+(generator_function_declaration name: (identifier) @function)
+(method_definition name: (property_identifier) @function)
+(class_declaration name: (identifier) @class)
+(variable_declarator name: (identifier) @variable)
+(property_identifier) @property
+(shorthand_property_identifier) @property
+)TSQ";
+
+const char* kCompletionQueryTypescript = R"TSQ(
+(function_declaration name: (identifier) @function)
+(function_expression name: (identifier) @function)
+(generator_function_declaration name: (identifier) @function)
+(method_definition name: (property_identifier) @function)
+(class_declaration name: (type_identifier) @class)
+(interface_declaration name: (type_identifier) @type)
+(type_alias_declaration name: (type_identifier) @type)
+(enum_declaration name: (identifier) @type)
+(variable_declarator name: (identifier) @variable)
+(required_parameter pattern: (identifier) @variable)
+(optional_parameter pattern: (identifier) @variable)
+(property_identifier) @property
+(shorthand_property_identifier) @property
+)TSQ";
+
+// Per-language static keyword tables (mirrors the keyword lists in the
+// highlight queries above).
+const std::map<std::string, std::vector<std::string>> kKeywords = {
+    {"json", {"true", "false", "null"}},
+    {"javascript", {
+        "var", "let", "const", "function", "class", "return", "if", "else", "for", "while", "do",
+        "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof", "in", "of",
+        "try", "catch", "finally", "throw", "async", "await", "yield", "import", "export", "from",
+        "default", "extends", "static", "get", "set", "void", "debugger", "this", "super",
+        "true", "false", "null", "undefined",
+    }},
+    {"typescript", {
+        "var", "let", "const", "function", "class", "return", "if", "else", "for", "while", "do",
+        "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof", "in", "of",
+        "try", "catch", "finally", "throw", "async", "await", "yield", "import", "export", "from",
+        "default", "extends", "static", "get", "set", "void", "debugger", "this", "super",
+        "true", "false", "null", "undefined",
+        "abstract", "declare", "enum", "implements", "interface", "keyof", "namespace",
+        "private", "protected", "public", "type", "readonly", "override", "satisfies",
+    }},
+    {"tsx", {
+        "var", "let", "const", "function", "class", "return", "if", "else", "for", "while", "do",
+        "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof", "in", "of",
+        "try", "catch", "finally", "throw", "async", "await", "yield", "import", "export", "from",
+        "default", "extends", "static", "get", "set", "void", "debugger", "this", "super",
+        "true", "false", "null", "undefined",
+        "abstract", "declare", "enum", "implements", "interface", "keyof", "namespace",
+        "private", "protected", "public", "type", "readonly", "override", "satisfies",
+    }},
+};
+
 struct LanguageDef {
     const char* name;
     const TSLanguage* (*fn)(void);
@@ -226,6 +296,50 @@ CompiledQuery* compiled_query_for(const LanguageDef* lang) {
     return raw;
 }
 
+const char* completion_query_src(const LanguageDef* lang) {
+    if (lang == &kLanguages[0]) return kCompletionQueryJson;       // json
+    if (lang == &kLanguages[1]) return kCompletionQueryJavascript; // javascript
+    return kCompletionQueryTypescript;                              // typescript, tsx
+}
+
+// Compiled completion-query cache (one per language, compiled on first use).
+// Unlike CompiledQuery, capture names are kept verbatim as completion "kinds"
+// (function/class/type/variable/property/...) rather than mapped to styleIds.
+struct CompiledCompletionQuery {
+    TSQuery* query = nullptr;
+    std::vector<std::string> capture_kinds; // capture index → kind name
+};
+
+CompiledCompletionQuery* completion_query_for(const LanguageDef* lang) {
+    static std::map<const LanguageDef*, std::unique_ptr<CompiledCompletionQuery>> cache;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lk(mu);
+    auto it = cache.find(lang);
+    if (it != cache.end()) return it->second.get();
+
+    const char* src = completion_query_src(lang);
+    auto cq = std::make_unique<CompiledCompletionQuery>();
+    uint32_t err_offset = 0;
+    TSQueryError err_type = TSQueryErrorNone;
+    TSQuery* q = ts_query_new(lang->fn(), src, (uint32_t)strlen(src), &err_offset, &err_type);
+    if (!q) {
+        spdlog::error("editor: completion query failed for {} at offset {} (err {})",
+                      lang->name, err_offset, (int)err_type);
+    } else {
+        cq->query = q;
+        uint32_t n = ts_query_capture_count(q);
+        cq->capture_kinds.resize(n);
+        for (uint32_t i = 0; i < n; i++) {
+            uint32_t len = 0;
+            const char* nm = ts_query_capture_name_for_id(q, i, &len);
+            cq->capture_kinds[i] = std::string(nm, len);
+        }
+    }
+    auto* raw = cq.get();
+    cache[lang] = std::move(cq);
+    return raw;
+}
+
 // ── Undo/redo ─────────────────────────────────────────────────────────────────
 // Each EditEntry records one applied edit in its pre-edit (forward) form:
 // replacing [sl,sc, el,ec) with new_text, where old_text is what was removed.
@@ -264,6 +378,8 @@ struct Buffer {
     std::map<std::string, json> view_states; // per viewKey ("" = default): opaque cursor/scroll state
     std::vector<EditGroup> undo_stack;
     std::vector<EditGroup> redo_stack;
+    std::map<std::string, std::string> completion_symbols; // name -> kind, cached per version
+    int completion_symbols_version = -1;
 
     ~Buffer() {
         if (tree) ts_tree_delete(tree);
@@ -896,6 +1012,101 @@ json op_search(const json& msg) {
     return {{"matches", matches}};
 }
 
+// ── Completions ───────────────────────────────────────────────────────────────
+// Symbol table is rebuilt lazily on version change: a word-based pass over the
+// whole buffer (covers plaintext/unsupported languages and anything the
+// tree-sitter query misses), then a tree-sitter pass that overrides the kind
+// for declaration-classified identifiers (function/class/type/property/...).
+
+void rebuild_completion_symbols(Buffer& b) {
+    b.completion_symbols.clear();
+
+    static const std::regex word_re(R"(\b[A-Za-z_][A-Za-z0-9_]*\b)");
+    auto wit = std::sregex_iterator(b.text.begin(), b.text.end(), word_re);
+    auto wend = std::sregex_iterator();
+    for (; wit != wend && b.completion_symbols.size() < 2000; ++wit) {
+        std::string w = wit->str();
+        if (w.size() < 2) continue;
+        b.completion_symbols.emplace(w, "variable");
+    }
+
+    if (b.lang && b.tree) {
+        CompiledCompletionQuery* cq = completion_query_for(b.lang);
+        if (cq->query) {
+            TSQueryCursor* cursor = ts_query_cursor_new();
+            ts_query_cursor_exec(cursor, cq->query, ts_tree_root_node(b.tree));
+            TSQueryMatch match;
+            while (ts_query_cursor_next_match(cursor, &match)) {
+                for (uint16_t ci = 0; ci < match.capture_count; ci++) {
+                    const TSQueryCapture& cap = match.captures[ci];
+                    uint32_t s = ts_node_start_byte(cap.node);
+                    uint32_t e = ts_node_end_byte(cap.node);
+                    if (e <= s || e > b.text.size()) continue;
+                    std::string name = b.text.substr(s, e - s);
+                    // JSON object keys are captured as quoted strings.
+                    if (name.size() >= 2 && name.front() == '"' && name.back() == '"')
+                        name = name.substr(1, name.size() - 2);
+                    if (name.empty()) continue;
+                    b.completion_symbols[name] = cq->capture_kinds[cap.index];
+                }
+            }
+            ts_query_cursor_delete(cursor);
+        }
+    }
+    b.completion_symbols_version = b.version;
+}
+
+json op_completions(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    uint32_t line = msg.value("line", 0u);
+    uint32_t col = msg.value("col", 0u);
+
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
+    if (line >= b->line_count()) return {{"items", json::array()}};
+
+    uint32_t ls, le;
+    b->line_bytes(line, ls, le);
+    uint32_t pos = u16_col_to_byte(b->text, ls, le, col);
+    uint32_t start = pos;
+    while (start > ls) {
+        unsigned char c = (unsigned char)b->text[start - 1];
+        bool word_char = c == '_' || (c >= '0' && c <= '9') ||
+                         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        if (!word_char) break;
+        start--;
+    }
+    std::string prefix = b->text.substr(start, pos - start);
+
+    if (b->completion_symbols_version != b->version) rebuild_completion_symbols(*b);
+
+    std::map<std::string, std::string> matches; // sorted by name, dedup'd
+
+    if (b->lang) {
+        auto kwit = kKeywords.find(b->lang->name);
+        if (kwit != kKeywords.end()) {
+            for (const auto& kw : kwit->second) {
+                if (kw != prefix && kw.rfind(prefix, 0) == 0)
+                    matches.emplace(kw, "keyword");
+            }
+        }
+    }
+
+    for (const auto& [name, kind] : b->completion_symbols) {
+        if (matches.size() >= 200) break;
+        if (name != prefix && name.rfind(prefix, 0) == 0)
+            matches.emplace(name, kind);
+    }
+
+    json items = json::array();
+    for (const auto& [name, kind] : matches) {
+        items.push_back({{"label", name}, {"kind", kind}, {"insertText", name}});
+        if (items.size() >= 50) break;
+    }
+    return {{"items", items}};
+}
+
 json op_save(const json& msg) {
     int id = msg.value("bufferId", 0);
     std::lock_guard<std::mutex> lk(g_mu);
@@ -963,6 +1174,7 @@ bool dispatch(const std::string& type, const json& msg,
     else if (type == "editor.redo")          resp = op_redo(msg);
     else if (type == "editor.matchBracket")  resp = op_match_bracket(msg);
     else if (type == "editor.search")        resp = op_search(msg);
+    else if (type == "editor.completions")   resp = op_completions(msg);
     else if (type == "editor.save")          resp = op_save(msg);
     else if (type == "editor.close")         resp = op_close(msg);
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);

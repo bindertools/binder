@@ -22,6 +22,10 @@
 //   editor.search    {bufferId, query, regex?, caseSensitive?, wholeWord?}
 //                                                     → {matches: [{startLine, startCol,
 //                                                        endLine, endCol}]} (capped at 10000)
+//   editor.completions {bufferId, line, col}         → {items: [{label, kind, insertText}]}
+//                          Combines tree-sitter symbol extraction, per-language
+//                          keyword tables and a word-based fallback, filtered
+//                          by the identifier prefix immediately left of (line, col).
 //   editor.save      {bufferId}                      → {saved}
 //   editor.close     {bufferId}                      → {closed}
 //   editor.viewstate.set {bufferId, viewKey?, state} → {}
