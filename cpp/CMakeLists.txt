@@ -43,6 +43,8 @@ add_library(cmdide-grammars STATIC
     third_party/grammars/tree-sitter-rust/src/scanner.c
     third_party/grammars/tree-sitter-go/src/parser.c
     third_party/grammars/tree-sitter-java/src/parser.c
+    third_party/grammars/tree-sitter-lua/src/parser.c
+    third_party/grammars/tree-sitter-lua/src/scanner.c
 )
 set_target_properties(cmdide-grammars PROPERTIES LINKER_LANGUAGE C)
 target_include_directories(cmdide-grammars PRIVATE
@@ -56,6 +58,7 @@ target_include_directories(cmdide-grammars PRIVATE
     third_party/grammars/tree-sitter-rust/src
     third_party/grammars/tree-sitter-go/src
     third_party/grammars/tree-sitter-java/src
+    third_party/grammars/tree-sitter-lua/src
 )
 
 # ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────

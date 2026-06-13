@@ -33,6 +33,7 @@ const TSLanguage* tree_sitter_c_sharp(void);
 const TSLanguage* tree_sitter_rust(void);
 const TSLanguage* tree_sitter_go(void);
 const TSLanguage* tree_sitter_java(void);
+const TSLanguage* tree_sitter_lua(void);
 }
 
 using json = nlohmann::json;
@@ -568,6 +569,121 @@ const char* kCompletionQueryJava = R"TSQ(
 (field_declaration declarator: (variable_declarator name: (identifier) @property))
 )TSQ";
 
+// Lua — adapted from tree-sitter-lua's highlights.scm with `#eq?`/`#match?`/
+// `#any-of?` predicates dropped (the "self" builtin, all-caps-constant, and
+// builtin-function heuristics).
+const char* kQueryLua = R"TSQ(
+"return" @keyword
+
+["goto" "in" "local"] @keyword
+
+(label_statement) @variable
+
+(break_statement) @keyword
+
+(do_statement ["do" "end"] @keyword)
+
+(while_statement ["while" "do" "end"] @keyword)
+
+(repeat_statement ["repeat" "until"] @keyword)
+
+(if_statement ["if" "elseif" "else" "then" "end"] @keyword)
+
+(elseif_statement ["elseif" "then" "end"] @keyword)
+
+(else_statement ["else" "end"] @keyword)
+
+(for_statement ["for" "do" "end"] @keyword)
+
+(function_declaration ["function" "end"] @keyword)
+
+(function_definition ["function" "end"] @keyword)
+
+["and" "not" "or"] @keyword
+
+[
+  "+" "-" "*" "/" "%" "^" "#" "==" "~=" "<=" ">=" "<" ">" "=" "&" "~" "|" "<<" ">>" "//" ".."
+] @operator
+
+[";" ":" "," "."] @punctuation.delimiter
+
+["(" ")" "[" "]" "{" "}"] @punctuation.bracket
+
+(identifier) @variable
+
+(variable_list
+  (attribute
+    "<" @punctuation.bracket
+    (identifier) @property
+    ">" @punctuation.bracket))
+
+(vararg_expression) @constant
+
+(nil) @constant
+
+[(false) (true)] @constant
+
+(field name: (identifier) @property)
+
+(dot_index_expression field: (identifier) @property)
+
+(parameters (identifier) @variable)
+
+(function_declaration
+  name: [
+    (identifier) @function
+    (dot_index_expression
+      field: (identifier) @function)
+  ])
+
+(function_declaration
+  name: (method_index_expression
+    method: (identifier) @function))
+
+(assignment_statement
+  (variable_list .
+    name: [
+      (identifier) @function
+      (dot_index_expression
+        field: (identifier) @function)
+    ])
+  (expression_list .
+    value: (function_definition)))
+
+(table_constructor
+  (field
+    name: (identifier) @function
+    value: (function_definition)))
+
+(function_call
+  name: [
+    (identifier) @function
+    (dot_index_expression
+      field: (identifier) @function)
+    (method_index_expression
+      method: (identifier) @function)
+  ])
+
+(comment) @comment
+
+(hash_bang_line) @comment
+
+(number) @number
+
+(string) @string
+
+(escape_sequence) @escape
+)TSQ";
+
+const char* kCompletionQueryLua = R"TSQ(
+(function_declaration name: (identifier) @function)
+(function_declaration name: (dot_index_expression field: (identifier) @function))
+(function_declaration name: (method_index_expression method: (identifier) @function))
+(variable_list name: (identifier) @variable)
+(parameters (identifier) @variable)
+(field name: (identifier) @property)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -663,6 +779,15 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "String", "Integer", "Long", "Double", "Float", "Boolean", "Character", "Object",
         "List", "Map", "Set", "ArrayList", "HashMap", "HashSet", "System",
     }},
+    {"lua", {
+        "and", "break", "do", "else", "elseif", "end", "for", "function", "goto", "if", "in",
+        "local", "not", "or", "repeat", "return", "then", "until", "while",
+        "true", "false", "nil", "self",
+        "assert", "collectgarbage", "dofile", "error", "getmetatable", "ipairs", "load",
+        "loadfile", "next", "pairs", "pcall", "print", "rawequal", "rawget", "rawset",
+        "require", "select", "setmetatable", "tonumber", "tostring", "type", "xpcall",
+        "string", "table", "math", "io", "os", "coroutine",
+    }},
 };
 
 struct LanguageDef {
@@ -686,6 +811,7 @@ const LanguageDef kLanguages[] = {
     {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust},
     {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo},
     {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava},
+    {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -706,6 +832,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "rs")                                    return &kLanguages[7];
     if (ext == "go")                                    return &kLanguages[8];
     if (ext == "java")                                  return &kLanguages[9];
+    if (ext == "lua")                                   return &kLanguages[10];
     return nullptr;
 }
 
