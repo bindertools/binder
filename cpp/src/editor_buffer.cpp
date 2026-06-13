@@ -29,6 +29,7 @@ const TSLanguage* tree_sitter_typescript(void);
 const TSLanguage* tree_sitter_tsx(void);
 const TSLanguage* tree_sitter_c(void);
 const TSLanguage* tree_sitter_cpp(void);
+const TSLanguage* tree_sitter_c_sharp(void);
 }
 
 using json = nlohmann::json;
@@ -231,6 +232,67 @@ const char* kQueryCppExtra = R"TSQ(
 
 const std::string kQueryCpp = std::string(kQueryC) + kQueryCppExtra;
 
+// C# — adapted from tree-sitter-c-sharp's highlights.scm with `#match?`
+// predicates dropped and `interpolation_start`/`interpolation_brace` removed
+// (not visible named nodes in this grammar version).
+const char* kQueryCSharp = R"TSQ(
+(identifier) @variable
+
+[(real_literal) (integer_literal)] @number
+
+[(character_literal) (string_literal) (raw_string_literal)
+ (verbatim_string_literal) (interpolated_string_expression)
+ (interpolation_quote)] @string
+(escape_sequence) @escape
+
+[(boolean_literal) (null_literal)] @constant
+
+[";" "." ","] @punctuation.delimiter
+["(" ")" "[" "]" "{" "}"] @punctuation.bracket
+
+["--" "-" "-=" "&" "&=" "&&" "+" "++" "+=" "<" "<=" "<<" "<<=" "=" "=="
+ "!" "!=" "=>" ">" ">=" ">>" ">>=" ">>>" ">>>=" "|" "|=" "||" "?" "??"
+ "??=" "^" "^=" "~" "*" "*=" "/" "/=" "%" "%=" ":"] @operator
+
+[(modifier) "this" (implicit_type)] @keyword
+["add" "alias" "as" "base" "break" "case" "catch" "checked" "class" "continue"
+ "default" "delegate" "do" "else" "enum" "event" "explicit" "extern" "finally"
+ "for" "foreach" "global" "goto" "if" "implicit" "interface" "is" "lock"
+ "namespace" "notnull" "operator" "params" "return" "remove" "sizeof"
+ "stackalloc" "static" "struct" "switch" "throw" "try" "typeof" "unchecked"
+ "using" "while" "new" "await" "in" "yield" "get" "set" "when" "out" "ref"
+ "from" "where" "select" "record" "init" "with" "let"] @keyword
+
+(predefined_type) @type
+
+(interface_declaration name: (identifier) @type)
+(class_declaration name: (identifier) @type)
+(enum_declaration name: (identifier) @type)
+(struct_declaration (identifier) @type)
+(record_declaration (identifier) @type)
+(namespace_declaration name: (identifier) @type)
+(generic_name (identifier) @type)
+(parameter type: (identifier) @type)
+(type_argument_list (identifier) @type)
+(as_expression right: (identifier) @type)
+(is_expression right: (identifier) @type)
+(base_list (identifier) @type)
+(_ type: (identifier) @type)
+
+(method_declaration name: (identifier) @function)
+(local_function_statement name: (identifier) @function)
+(constructor_declaration name: (identifier) @function)
+(destructor_declaration name: (identifier) @function)
+(invocation_expression (member_access_expression name: (identifier) @function))
+
+(enum_member_declaration (identifier) @property)
+(type_parameter (identifier) @property)
+(type_parameter_constraints_clause (identifier) @property)
+(attribute name: (identifier) @property)
+
+(comment) @comment
+)TSQ";
+
 // ── Completion queries ────────────────────────────────────────────────────────
 // Symbol-extraction queries for editor.completions: capture names classify
 // each captured identifier into a completion "kind" (returned to the
@@ -305,6 +367,22 @@ const char* kCompletionQueryCpp = R"TSQ(
 (field_identifier) @property
 )TSQ";
 
+const char* kCompletionQueryCSharp = R"TSQ(
+(method_declaration name: (identifier) @function)
+(local_function_statement name: (identifier) @function)
+(constructor_declaration name: (identifier) @function)
+(interface_declaration name: (identifier) @class)
+(class_declaration name: (identifier) @class)
+(struct_declaration (identifier) @class)
+(record_declaration (identifier) @class)
+(enum_declaration name: (identifier) @class)
+(namespace_declaration name: (identifier) @type)
+(enum_member_declaration (identifier) @property)
+(parameter name: (identifier) @variable)
+(variable_declarator (identifier) @variable)
+(property_declaration name: (identifier) @property)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -353,6 +431,21 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "throw", "try", "typename", "using", "concept", "requires", "virtual",
         "this", "operator",
     }},
+    {"csharp", {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked",
+        "class", "const", "continue", "decimal", "default", "delegate", "do", "double", "else",
+        "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for",
+        "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock",
+        "long", "namespace", "new", "null", "object", "operator", "out", "override", "params",
+        "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short",
+        "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true",
+        "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual",
+        "void", "volatile", "while",
+        "add", "alias", "ascending", "async", "await", "by", "descending", "dynamic", "equals",
+        "from", "get", "global", "group", "init", "into", "join", "let", "nameof", "notnull",
+        "on", "orderby", "partial", "record", "remove", "select", "set", "value", "var", "when",
+        "where", "with", "yield",
+    }},
 };
 
 struct LanguageDef {
@@ -372,6 +465,7 @@ const LanguageDef kLanguages[] = {
     {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript},
     {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC},
     {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp},
+    {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -388,6 +482,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "c++" ||
         ext == "hpp" || ext == "hh" || ext == "hxx" || ext == "h++" ||
         ext == "ino" || ext == "tpp")                   return &kLanguages[5];
+    if (ext == "cs")                                    return &kLanguages[6];
     return nullptr;
 }
 
