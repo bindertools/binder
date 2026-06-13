@@ -2,6 +2,7 @@ import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import MonacoEditor, { OnMount, BeforeMount } from '@monaco-editor/react'
 import { WriteFile } from '../../wailsjs/go/main/App'
 import { THEMES } from '../themes'
+import GpuEditor from './GpuEditor'
 import type * as Monaco from 'monaco-editor'
 
 interface Props {
@@ -39,6 +40,7 @@ export default function Editor({
   const saveTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastGotoLine = useRef<number | undefined>(undefined)
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
+  const [useGpuEditor, setUseGpuEditor] = useState(false)
 
   // Navigate to the requested line whenever gotoLine changes.
   useEffect(() => {
@@ -178,9 +180,33 @@ export default function Editor({
     })
   }, [filePath])
 
+  if (useGpuEditor) {
+    return (
+      <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden relative">
+        <button
+          className="absolute top-[2px] right-[8px] z-10 px-[8px] h-[20px] text-[10px] rounded-[4px] border border-[var(--border-color)] bg-[var(--info-bar-bg)] text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] cursor-pointer"
+          onClick={() => setUseGpuEditor(false)}
+          title="Switch back to Monaco"
+        >
+          GPU editor (beta) — switch back
+        </button>
+        <GpuEditor filePath={filePath} fontSize={fontSize} />
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
-      <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px]">{filePath}</div>
+      <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px] flex items-center justify-between">
+        <span>{filePath}</span>
+        <button
+          className="px-[8px] h-[18px] text-[10px] rounded-[4px] border border-[var(--border-color)] bg-transparent text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] cursor-pointer shrink-0"
+          onClick={() => setUseGpuEditor(true)}
+          title="Try the in-house GPU-rendered editor"
+        >
+          GPU editor (beta)
+        </button>
+      </div>
       <MonacoEditor
         height="calc(100% - 24px)"
         language={language}
