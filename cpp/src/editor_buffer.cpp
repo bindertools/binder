@@ -233,13 +233,17 @@ struct LanguageDef {
     const char* name;
     const TSLanguage* (*fn)(void);
     const char* query_src;
+    // Symbol-extraction query for editor.completions. Empty = skip
+    // tree-sitter completions for this language (word-based + keyword
+    // completions still work).
+    const char* completion_query_src = "";
 };
 
 const LanguageDef kLanguages[] = {
-    {"json",       tree_sitter_json,       kQueryJson},
-    {"javascript", tree_sitter_javascript, kQueryJavascript.c_str()},
-    {"typescript", tree_sitter_typescript, kQueryTypescript.c_str()},
-    {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str()},
+    {"json",       tree_sitter_json,       kQueryJson,               kCompletionQueryJson},
+    {"javascript", tree_sitter_javascript, kQueryJavascript.c_str(), kCompletionQueryJavascript},
+    {"typescript", tree_sitter_typescript, kQueryTypescript.c_str(), kCompletionQueryTypescript},
+    {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -296,12 +300,6 @@ CompiledQuery* compiled_query_for(const LanguageDef* lang) {
     return raw;
 }
 
-const char* completion_query_src(const LanguageDef* lang) {
-    if (lang == &kLanguages[0]) return kCompletionQueryJson;       // json
-    if (lang == &kLanguages[1]) return kCompletionQueryJavascript; // javascript
-    return kCompletionQueryTypescript;                              // typescript, tsx
-}
-
 // Compiled completion-query cache (one per language, compiled on first use).
 // Unlike CompiledQuery, capture names are kept verbatim as completion "kinds"
 // (function/class/type/variable/property/...) rather than mapped to styleIds.
@@ -317,7 +315,7 @@ CompiledCompletionQuery* completion_query_for(const LanguageDef* lang) {
     auto it = cache.find(lang);
     if (it != cache.end()) return it->second.get();
 
-    const char* src = completion_query_src(lang);
+    const char* src = lang->completion_query_src;
     auto cq = std::make_unique<CompiledCompletionQuery>();
     uint32_t err_offset = 0;
     TSQueryError err_type = TSQueryErrorNone;
