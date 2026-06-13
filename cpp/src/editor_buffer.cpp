@@ -28,6 +28,7 @@ const TSLanguage* tree_sitter_javascript(void);
 const TSLanguage* tree_sitter_typescript(void);
 const TSLanguage* tree_sitter_tsx(void);
 const TSLanguage* tree_sitter_c(void);
+const TSLanguage* tree_sitter_cpp(void);
 }
 
 using json = nlohmann::json;
@@ -200,6 +201,36 @@ const char* kQueryC = R"TSQ(
 (comment) @comment
 )TSQ";
 
+// C++ — C's query plus C++-specific keywords/operators/types, adapted from
+// tree-sitter-cpp's highlights.scm with `#match?` predicates dropped.
+const char* kQueryCppExtra = R"TSQ(
+(this) @variable.builtin
+["nullptr"] @constant
+
+[
+ "catch" "class" "co_await" "co_return" "co_yield" "constexpr" "constinit"
+ "consteval" "delete" "explicit" "final" "friend" "mutable" "namespace"
+ "noexcept" "new" "override" "private" "protected" "public" "template"
+ "throw" "try" "typename" "using" "concept" "requires"
+] @keyword
+(virtual) @keyword
+
+["::" "<=>" "->*" ".*" "..."] @operator
+
+(auto) @type
+(namespace_identifier) @type
+
+(call_expression function: (qualified_identifier name: (identifier) @function))
+(template_function name: (identifier) @function)
+(template_method name: (field_identifier) @function)
+(function_declarator declarator: (qualified_identifier name: (identifier) @function))
+(function_declarator declarator: (field_identifier) @function)
+
+(raw_string_literal) @string
+)TSQ";
+
+const std::string kQueryCpp = std::string(kQueryC) + kQueryCppExtra;
+
 // ── Completion queries ────────────────────────────────────────────────────────
 // Symbol-extraction queries for editor.completions: capture names classify
 // each captured identifier into a completion "kind" (returned to the
@@ -254,6 +285,26 @@ const char* kCompletionQueryC = R"TSQ(
 (field_identifier) @property
 )TSQ";
 
+const char* kCompletionQueryCpp = R"TSQ(
+(function_definition declarator: (function_declarator declarator: (identifier) @function))
+(function_definition declarator: (function_declarator declarator: (field_identifier) @function))
+(declaration declarator: (function_declarator declarator: (identifier) @function))
+(template_function name: (identifier) @function)
+(template_method name: (field_identifier) @function)
+(class_specifier name: (type_identifier) @class)
+(struct_specifier name: (type_identifier) @class)
+(union_specifier name: (type_identifier) @class)
+(enum_specifier name: (type_identifier) @class)
+(namespace_definition name: (namespace_identifier) @type)
+(type_definition declarator: (type_identifier) @type)
+(preproc_def name: (identifier) @constant)
+(preproc_function_def name: (identifier) @function)
+(declaration declarator: (identifier) @variable)
+(init_declarator declarator: (identifier) @variable)
+(parameter_declaration declarator: (identifier) @variable)
+(field_identifier) @property
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -290,6 +341,18 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "auto", "char", "double", "float", "int", "long", "short", "signed", "unsigned", "void",
         "true", "false", "NULL",
     }},
+    {"cpp", {
+        "break", "case", "const", "continue", "default", "do", "else", "enum", "extern", "for",
+        "goto", "if", "inline", "register", "return", "sizeof", "static",
+        "struct", "switch", "typedef", "union", "volatile", "while",
+        "auto", "char", "double", "float", "int", "long", "short", "signed", "unsigned", "void",
+        "true", "false", "nullptr",
+        "catch", "class", "co_await", "co_return", "co_yield", "constexpr", "constinit",
+        "consteval", "delete", "explicit", "final", "friend", "mutable", "namespace",
+        "noexcept", "new", "override", "private", "protected", "public", "template",
+        "throw", "try", "typename", "using", "concept", "requires", "virtual",
+        "this", "operator",
+    }},
 };
 
 struct LanguageDef {
@@ -308,6 +371,7 @@ const LanguageDef kLanguages[] = {
     {"typescript", tree_sitter_typescript, kQueryTypescript.c_str(), kCompletionQueryTypescript},
     {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript},
     {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC},
+    {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -321,6 +385,9 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "ts" || ext == "mts" || ext == "cts")    return &kLanguages[2];
     if (ext == "tsx")                                   return &kLanguages[3];
     if (ext == "c" || ext == "h")                       return &kLanguages[4];
+    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "c++" ||
+        ext == "hpp" || ext == "hh" || ext == "hxx" || ext == "h++" ||
+        ext == "ino" || ext == "tpp")                   return &kLanguages[5];
     return nullptr;
 }
 
