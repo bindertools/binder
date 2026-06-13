@@ -259,7 +259,8 @@ struct Buffer {
     int version = 1;
     int refcount = 1;
     bool dirty = false;
-    json view_state;                     // opaque frontend state (cursor/scroll)
+    std::string eol = "LF";              // "LF" or "CRLF", detected on open
+    std::map<std::string, json> view_states; // per viewKey ("" = default): opaque cursor/scroll state
     std::vector<EditGroup> undo_stack;
     std::vector<EditGroup> redo_stack;
 
@@ -519,6 +520,7 @@ json op_open(const json& msg) {
                     {"lineCount", b.line_count()},
                     {"language", b.lang ? b.lang->name : "plaintext"},
                     {"version", b.version}, {"styles", kStyles},
+                    {"eol", b.eol}, {"dirty", b.dirty},
                     {"existing", true}};
         }
     }
@@ -531,15 +533,21 @@ json op_open(const json& msg) {
     buf->path = path;
     buf->text.assign(std::istreambuf_iterator<char>(f),
                      std::istreambuf_iterator<char>());
-    // Normalize CRLF → LF so byte offsets match what the frontend renders.
+    // Normalize CRLF → LF so byte offsets match what the frontend renders,
+    // remembering whether the file used CRLF for the status bar.
     std::string norm;
     norm.reserve(buf->text.size());
+    bool has_crlf = false;
     for (size_t i = 0; i < buf->text.size(); i++) {
         if (buf->text[i] == '\r' &&
-            i + 1 < buf->text.size() && buf->text[i + 1] == '\n') continue;
+            i + 1 < buf->text.size() && buf->text[i + 1] == '\n') {
+            has_crlf = true;
+            continue;
+        }
         norm.push_back(buf->text[i]);
     }
     buf->text = std::move(norm);
+    buf->eol = has_crlf ? "CRLF" : "LF";
     buf->rebuild_line_offsets();
 
     buf->lang = language_for_path(path);
@@ -555,7 +563,8 @@ json op_open(const json& msg) {
                  path, b.id, b.line_count(), b.lang ? b.lang->name : "plaintext");
     return {{"bufferId", b.id}, {"lineCount", b.line_count()},
             {"language", b.lang ? b.lang->name : "plaintext"},
-            {"version", b.version}, {"styles", kStyles}, {"existing", false}};
+            {"version", b.version}, {"styles", kStyles},
+            {"eol", b.eol}, {"dirty", b.dirty}, {"existing", false}};
 }
 
 json op_lines(const json& msg) {
@@ -845,19 +854,22 @@ json op_close(const json& msg) {
 
 json op_viewstate_set(const json& msg) {
     int id = msg.value("bufferId", 0);
+    std::string view_key = msg.value("viewKey", "");
     std::lock_guard<std::mutex> lk(g_mu);
     Buffer* b = find_buffer(id);
     if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
-    b->view_state = msg.value("state", json::object());
+    b->view_states[view_key] = msg.value("state", json::object());
     return json::object();
 }
 
 json op_viewstate_get(const json& msg) {
     int id = msg.value("bufferId", 0);
+    std::string view_key = msg.value("viewKey", "");
     std::lock_guard<std::mutex> lk(g_mu);
     Buffer* b = find_buffer(id);
     if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
-    return {{"state", b->view_state}};
+    auto it = b->view_states.find(view_key);
+    return {{"state", it != b->view_states.end() ? it->second : json::object()}};
 }
 
 json op_buffers(const json&) {

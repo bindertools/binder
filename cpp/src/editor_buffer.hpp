@@ -8,7 +8,8 @@
 // tab displays them.
 //
 // IPC surface (all editor.*):
-//   editor.open      {path}                          → {bufferId, lineCount, language, version, styles}
+//   editor.open      {path}                          → {bufferId, lineCount, language, version, styles,
+//                                                        eol: "LF"|"CRLF", dirty, existing}
 //   editor.lines     {bufferId, start, end}          → {version, lines: [{text, spans: [[s,e,style],…]}]}
 //   editor.edit      {bufferId, edits: [{startLine,startCol,endLine,endCol,text}],
 //                      cursorLine?, cursorCol?}      → {version, lineCount, dirtyStart, dirtyEnd}
@@ -20,8 +21,11 @@
 //                                                        matchLine, matchCol} | {found: false}
 //   editor.save      {bufferId}                      → {saved}
 //   editor.close     {bufferId}                      → {closed}
-//   editor.viewstate.set {bufferId, state}           → {}
-//   editor.viewstate.get {bufferId}                  → {state}
+//   editor.viewstate.set {bufferId, viewKey?, state} → {}
+//   editor.viewstate.get {bufferId, viewKey?}        → {state}
+//                          viewKey lets two panes showing the same buffer
+//                          (editor.open refcounts by path) keep independent
+//                          cursor/scroll; omitted = shared "" key.
 //   editor.buffers   {}                              → {buffers: [{bufferId, path, lineCount, dirty}]}
 //
 // Columns in the IPC contract are UTF-16 code units (JS string indexing).

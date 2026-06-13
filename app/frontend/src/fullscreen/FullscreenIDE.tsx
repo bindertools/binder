@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import MonacoEditor from '@monaco-editor/react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
+import { ExplorerOpen, ExplorerGetFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
 import MenuBar from './MenuBar'
-import type { AppTheme } from '../themes'
+import GpuEditor, { type GpuEditorHandle } from '../components/GpuEditor'
+import { themeToGpuColors, type AppTheme } from '../themes'
 import './fullscreen.scss'
 
 // All git logic lives here in the frontend — the app has no git-specific code.
@@ -92,7 +92,16 @@ interface Props {
   defaultZoom: number
 }
 
-export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordWrap, defaultZoom }: Props) {
+interface PaneStatus {
+  line: number
+  col: number
+  totalLines: number
+  eol: 'LF' | 'CRLF'
+}
+
+const INITIAL_PANE_STATUS: PaneStatus = { line: 1, col: 1, totalLines: 0, eol: 'LF' }
+
+export default function FullscreenIDE({ cwd, theme, defaultZoom }: Props) {
   // ── file state ───────────────────────────────────────────────────────────────
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
@@ -116,23 +125,14 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── drag-and-drop ─────────────────────────────────────────────────────────────
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
 
-  // ── status bar ───────────────────────────────────────────────────────────────
-  const [statusLine, setStatusLine] = useState({ line: 1, col: 1 })
-  const [lineEnding, setLineEnding] = useState<'CRLF' | 'LF'>('LF')
-  const [tabSize,    setTabSize]    = useState(2)
-  const [totalLines, setTotalLines] = useState(0)
+  // ── status bar (per-panel — each GpuEditor reports its own state) ─────────────
+  const [leftStatus,  setLeftStatus]  = useState<PaneStatus>(INITIAL_PANE_STATUS)
+  const [rightStatus, setRightStatus] = useState<PaneStatus>(INITIAL_PANE_STATUS)
   const [fontSize,   setFontSize]   = useState(() => Math.round(13 * defaultZoom))
 
   // ── editor refs ───────────────────────────────────────────────────────────────
-  const leftEditorRef  = useRef<any>(null)
-  const leftMonacoRef  = useRef<any>(null)
-  const rightEditorRef = useRef<any>(null)
-  const rightMonacoRef = useRef<any>(null)
-
-  // ── per-file cursor/scroll position, keyed by "panel:path" ───────────────────
-  // Monaco view state survives switching between open files (and back) even
-  // though each file gets its own editor model (key={fileObj.path} below).
-  const viewStatesRef = useRef<Map<string, any>>(new Map())
+  const leftEditorRef  = useRef<GpuEditorHandle>(null)
+  const rightEditorRef = useRef<GpuEditorHandle>(null)
 
   // ── stable refs (avoid stale closures in memoised callbacks) ─────────────────
   const leftActiveRef   = useRef<string | null>(null)
@@ -155,51 +155,31 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── derived ───────────────────────────────────────────────────────────────────
   const activeFile    = focusedPanel === 'left' ? leftActive : rightActive
   const activeFileObj = openFiles.find(f => f.path === activeFile)
+  const activeStatus  = focusedPanel === 'left' ? leftStatus : rightStatus
+
+  // ── GPU editor colors derived from the active theme ──────────────────────────
+  const gpuColors = useMemo(() => themeToGpuColors(theme), [theme])
 
   // ── theme CSS vars ────────────────────────────────────────────────────────────
-  const themeVars = useMemo((): React.CSSProperties => {
-    const mc = theme.monacoThemeDef?.colors ?? {}
-    const editorBg  = mc['editor.background']       ?? theme.appBg
-    const accent    = mc['editorCursor.foreground']  ?? '#51afef'
-    const selection = (mc['editor.selectionBackground'] ?? '#2257a0').slice(0, 7)
-    return {
-      '--ide-bg':        theme.appBg,
-      '--ide-bg-alt':    theme.infoBarBg,
-      '--ide-bg-hi':     theme.infoBarHoverBg,
-      '--ide-border':    theme.borderColor,
-      '--ide-border-lo': theme.tabAddBorder,
-      '--ide-text-lo':   theme.infoBarColor,
-      '--ide-text-mid':  theme.tabColor,
-      '--ide-text-hi':   theme.tabColorHover,
-      '--ide-fg':        theme.infoBarHoverColor,
-      '--ide-accent':    accent,
-      '--ide-select':    selection,
-      '--ide-editor-bg': editorBg,
-    } as React.CSSProperties
-  }, [theme])
+  const themeVars = useMemo((): React.CSSProperties => ({
+    '--ide-bg':        theme.appBg,
+    '--ide-bg-alt':    theme.infoBarBg,
+    '--ide-bg-hi':     theme.infoBarHoverBg,
+    '--ide-border':    theme.borderColor,
+    '--ide-border-lo': theme.tabAddBorder,
+    '--ide-text-lo':   theme.infoBarColor,
+    '--ide-text-mid':  theme.tabColor,
+    '--ide-text-hi':   theme.tabColorHover,
+    '--ide-fg':        theme.infoBarHoverColor,
+    '--ide-accent':    gpuColors.cursor,
+    '--ide-select':    gpuColors.selection.slice(0, 7),
+    '--ide-editor-bg': gpuColors.bg,
+  } as React.CSSProperties), [theme, gpuColors])
 
-  // ── zoom / option sync ────────────────────────────────────────────────────────
+  // ── zoom sync ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const next = Math.round(13 * defaultZoom)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
+    setFontSize(Math.round(13 * defaultZoom))
   }, [defaultZoom])
-
-  useEffect(() => {
-    const opts = {
-      minimap: { enabled: minimap },
-      wordWrap: wordWrap ? 'on' : 'off',
-      guides: {
-        indentation: indentGuides,
-        bracketPairs: indentGuides,
-        bracketPairsHorizontal: indentGuides,
-        highlightActiveIndentation: indentGuides,
-      },
-    }
-    leftEditorRef.current?.updateOptions(opts)
-    rightEditorRef.current?.updateOptions(opts)
-  }, [minimap, wordWrap, indentGuides])
 
   // ── tree loading ──────────────────────────────────────────────────────────────
   const loadTree = useCallback(async () => {
@@ -235,13 +215,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     return () => EventsOff('fullscreen:file-changed')
   }, [])
 
-  // ── switch active file in a panel, preserving cursor/scroll for both files ───
+  // ── switch active file in a panel ──────────────────────────────────────────
   const switchActiveFile = useCallback((panel: 'left' | 'right', path: string | null) => {
-    const editor = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
-    const currentPath = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
-    if (editor && currentPath && currentPath !== path) {
-      viewStatesRef.current.set(`${panel}:${currentPath}`, editor.saveViewState())
-    }
     if (panel === 'left') setLeftActive(path)
     else setRightActive(path)
   }, [])
@@ -309,11 +284,6 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       paths.forEach(p => next.delete(p))
       return next
     })
-    // Drop cached cursor/scroll positions for closed files
-    for (const p of paths) {
-      viewStatesRef.current.delete(`left:${p}`)
-      viewStatesRef.current.delete(`right:${p}`)
-    }
   }, [])
 
   // ── move to panel ─────────────────────────────────────────────────────────────
@@ -380,12 +350,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── save ─────────────────────────────────────────────────────────────────────
   const saveFile = useCallback(async () => {
     const panel = focusedPanelRef.current
-    const path  = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
-    if (!path) return
-    const editor = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
-    if (!editor) return
-    await ExplorerSaveFile(path, editor.getValue())
-    setOpenFiles(prev => prev.map(f => f.path === path ? { ...f, dirty: false } : f))
+    const ref = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
+    await ref?.save()
   }, [])
 
   useEffect(() => {
@@ -395,85 +361,6 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [saveFile])
-
-  // ── editor change ─────────────────────────────────────────────────────────────
-  const leftOnChange = useCallback((value: string | undefined) => {
-    if (value === undefined) return
-    const path = leftActiveRef.current
-    if (!path) return
-    setOpenFiles(prev => prev.map(f =>
-      f.path === path ? { ...f, content: value, dirty: true, pinned: true } : f
-    ))
-  }, [])
-
-  const rightOnChange = useCallback((value: string | undefined) => {
-    if (value === undefined) return
-    const path = rightActiveRef.current
-    if (!path) return
-    setOpenFiles(prev => prev.map(f =>
-      f.path === path ? { ...f, content: value, dirty: true, pinned: true } : f
-    ))
-  }, [])
-
-  // ── editor mount factory ──────────────────────────────────────────────────────
-  const setupEditor = (editor: any, monaco: any, panel: 'left' | 'right') => {
-    editor.onDidFocusEditorText(() => {
-      setFocusedPanel(panel)
-      focusedPanelRef.current = panel
-    })
-
-    editor.onDidChangeCursorPosition((e: any) => {
-      setStatusLine({ line: e.position.lineNumber, col: e.position.column })
-    })
-
-    const syncModel = () => {
-      const model = editor.getModel()
-      if (!model) return
-      setLineEnding(model.getEOL() === '\r\n' ? 'CRLF' : 'LF')
-      setTotalLines(model.getLineCount())
-      setTabSize(editor.getOption(monaco.editor.EditorOption.tabSize))
-    }
-    syncModel()
-    editor.onDidChangeModel(syncModel)
-    editor.onDidChangeModelContent(() => {
-      setTotalLines(editor.getModel()?.getLineCount() ?? 0)
-    })
-
-    // Ctrl+S — onKeyDown fires before Monaco's keybinding service so it cannot be swallowed
-    editor.onKeyDown((e: any) => {
-      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.KeyS) {
-        e.preventDefault()
-        e.stopPropagation()
-        void saveFile()
-      }
-    })
-
-    const dom = editor.getDomNode()
-    if (dom) {
-      dom.addEventListener('wheel', (e: WheelEvent) => {
-        if (!e.ctrlKey) return
-        e.preventDefault()
-        const cur  = editor.getOption(monaco.editor.EditorOption.fontSize)
-        const next = e.deltaY < 0 ? Math.min(cur + 1, 36) : Math.max(cur - 1, 8)
-        setFontSize(next)
-        editor.updateOptions({ fontSize: next })
-      }, { passive: false })
-    }
-  }
-
-  const onLeftMount = useCallback((editor: any, monaco: any) => {
-    leftEditorRef.current  = editor
-    leftMonacoRef.current  = monaco
-    setupEditor(editor, monaco, 'left')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const onRightMount = useCallback((editor: any, monaco: any) => {
-    rightEditorRef.current  = editor
-    rightMonacoRef.current  = monaco
-    setupEditor(editor, monaco, 'right')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── explorer resize ───────────────────────────────────────────────────────────
   const onExplorerDividerDown = useCallback((e: React.MouseEvent) => {
@@ -518,44 +405,14 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     document.addEventListener('mouseup', onUp)
   }, [explorerW, explorerPos, collapsed])
 
-  // ── Monaco options object (shared across both editors) ────────────────────────
-  const monacoOptions = useMemo(() => ({
-    fontSize,
-    fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
-    fontLigatures: true,
-    minimap: { enabled: minimap },
-    scrollBeyondLastLine: false,
-    lineNumbers: 'on' as const,
-    renderLineHighlight: 'line' as const,
-    wordWrap: (wordWrap ? 'on' : 'off') as 'on' | 'off',
-    tabSize: 2,
-    padding: { top: 8 },
-    smoothScrolling: true,
-    folding: true,
-    bracketPairColorization: { enabled: true },
-    guides: {
-      indentation: indentGuides,
-      bracketPairs: indentGuides,
-      bracketPairsHorizontal: indentGuides,
-      highlightActiveIndentation: indentGuides,
-    },
-  }), [fontSize, minimap, wordWrap, indentGuides])
-
-  const beforeMount = useCallback((monaco: any) => {
-    if (theme.monacoThemeDef) {
-      monaco.editor.defineTheme(theme.monacoThemeId, theme.monacoThemeDef as any)
-    }
-  }, [theme])
-
   // ── render helpers ────────────────────────────────────────────────────────────
   const leftFileObj  = openFiles.find(f => f.path === leftActive)
   const rightFileObj = openFiles.find(f => f.path === rightActive)
 
-  const renderMonaco = (
+  const renderEditor = (
     fileObj: OpenFile | undefined,
-    onChange: (v: string | undefined) => void,
-    onMount: (editor: any, monaco: any) => void,
-    panel: 'left' | 'right',
+    editorRef: React.RefObject<GpuEditorHandle>,
+    viewKey: 'left' | 'right',
   ) => {
     if (!fileObj) {
       return (
@@ -570,22 +427,22 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         </div>
       )
     }
-    const path = fileObj.path
+    const setStatus = viewKey === 'left' ? setLeftStatus : setRightStatus
     return (
-      <MonacoEditor
-        key={path}
-        value={fileObj.content}
-        language={fileObj.language}
-        theme={theme.monacoThemeId}
-        beforeMount={beforeMount}
-        loading={<div style={{ width: '100%', height: '100%', background: 'var(--ide-editor-bg)' }} />}
-        onChange={onChange}
-        onMount={(editor, monaco) => {
-          onMount(editor, monaco)
-          const savedState = viewStatesRef.current.get(`${panel}:${path}`)
-          if (savedState) editor.restoreViewState(savedState)
-        }}
-        options={monacoOptions}
+      <GpuEditor
+        key={fileObj.path}
+        ref={editorRef}
+        filePath={fileObj.path}
+        fontSize={fontSize}
+        colors={gpuColors}
+        viewKey={viewKey}
+        showHeader={false}
+        onCursorChange={(line, col) => setStatus(s => ({ ...s, line: line + 1, col: col + 1 }))}
+        onLineCountChange={n => setStatus(s => ({ ...s, totalLines: n }))}
+        onEolChange={eol => setStatus(s => ({ ...s, eol }))}
+        onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>
+          f.path === fileObj.path ? { ...f, dirty, pinned: dirty ? true : f.pinned } : f
+        ))}
       />
     )
   }
@@ -674,7 +531,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
             onDrop={onPanelDrop}
           />
           <div className="ide-editor">
-            {renderMonaco(leftFileObj, leftOnChange, onLeftMount, 'left')}
+            {renderEditor(leftFileObj, leftEditorRef, 'left')}
           </div>
         </div>
 
@@ -700,7 +557,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
                 onDrop={onPanelDrop}
               />
               <div className="ide-editor">
-                {renderMonaco(rightFileObj, rightOnChange, onRightMount, 'right')}
+                {renderEditor(rightFileObj, rightEditorRef, 'right')}
               </div>
             </div>
           </>
@@ -720,11 +577,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         {activeFileObj && (
           <>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">UTF-8</span>
-            <span className="ide-statusbar__segment ide-statusbar__segment--right">{lineEnding}</span>
-            <span className="ide-statusbar__segment ide-statusbar__segment--right">Spaces: {tabSize}</span>
+            <span className="ide-statusbar__segment ide-statusbar__segment--right">{activeStatus.eol}</span>
+            <span className="ide-statusbar__segment ide-statusbar__segment--right">Spaces: 2</span>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">{activeFileObj.language}</span>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">
-              Ln {statusLine.line}/{totalLines}  Col {statusLine.col}
+              Ln {activeStatus.line}/{activeStatus.totalLines}  Col {activeStatus.col}
             </span>
           </>
         )}
@@ -736,31 +593,25 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const explorerDivider = <div className="ide-divider" onMouseDown={onExplorerDividerDown} />
 
   // Stable getter so MenuBar always reads the currently-focused editor
-  const getEditor = useCallback(() =>
-    focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
-  , [])
+  const getEditor = useCallback(() => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return null
+    return {
+      focus: handle.focus,
+      // Monaco-command compatibility shim for MenuBar: only undo/redo map
+      // onto the GPU editor today. Find/replace, format, minimap toggle,
+      // smart selection, go-to-symbol, etc. are addressed in later phases.
+      trigger: (_source: string, cmd: string) => {
+        if (cmd === 'undo') handle.undo()
+        else if (cmd === 'redo') handle.redo()
+      },
+    }
+  }, [])
 
   // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
-  const zoomIn    = useCallback(() => {
-    const next = Math.min(fontSize + 1, 36)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [fontSize])
-
-  const zoomOut   = useCallback(() => {
-    const next = Math.max(fontSize - 1, 8)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [fontSize])
-
-  const resetZoom = useCallback(() => {
-    const next = Math.round(13 * defaultZoom)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [defaultZoom])
+  const zoomIn    = useCallback(() => setFontSize(f => Math.min(f + 1, 36)), [])
+  const zoomOut   = useCallback(() => setFontSize(f => Math.max(f - 1, 8)), [])
+  const resetZoom = useCallback(() => setFontSize(Math.round(13 * defaultZoom)), [defaultZoom])
 
   // Close the active file in the focused panel
   const closeActive = useCallback(() => {

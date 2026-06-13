@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react'
+import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import { invoke } from '../lib/ipc'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
 import type { GpuEditorColors } from '../themes'
@@ -12,6 +12,8 @@ interface OpenResp {
   version: number
   styles: string[]
   existing: boolean
+  eol: 'LF' | 'CRLF'
+  dirty: boolean
 }
 
 interface ViewState {
@@ -21,12 +23,30 @@ interface ViewState {
   cursorCol?: number
 }
 
+export interface GpuEditorHandle {
+  focus: () => void
+  save: () => Promise<void>
+  undo: () => void
+  redo: () => void
+}
+
 interface Props {
   filePath: string
   fontSize?: number
   colors?: GpuEditorColors
   readOnly?: boolean
   gotoLine?: number
+  // Per-pane view-state key (cursor/scroll position), so two panes showing
+  // the same buffer keep independent cursor/scroll. Omit for single-pane
+  // consumers (backend defaults to a shared "" key).
+  viewKey?: string
+  // Show the internal filename/status header bar. Consumers with their own
+  // tab bar + status bar (FullscreenIDE) set this to false.
+  showHeader?: boolean
+  onCursorChange?: (line: number, col: number) => void
+  onLineCountChange?: (count: number) => void
+  onDirtyChange?: (dirty: boolean) => void
+  onEolChange?: (eol: 'LF' | 'CRLF') => void
 }
 
 // Fallback palette used until a theme-derived `colors` prop arrives —
@@ -125,7 +145,10 @@ const FONT_FAMILY = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Mona
 const MIN_FONT_SIZE = 8
 const MAX_FONT_SIZE = 36
 
-export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = false, gotoLine }: Props) {
+const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
+  filePath, fontSize = 13, colors, readOnly = false, gotoLine, viewKey,
+  showHeader = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -148,11 +171,36 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
   readOnlyRef.current = readOnly
   const fontSizeRef = useRef<number>(fontSize)
   const lastGotoLineRef = useRef<number | undefined>(undefined)
+  const viewKeyRef = useRef<string | undefined>(viewKey)
+  viewKeyRef.current = viewKey
+  const dirtyRef = useRef<boolean>(false)
+
+  const onCursorChangeRef = useRef(onCursorChange)
+  onCursorChangeRef.current = onCursorChange
+  const onLineCountChangeRef = useRef(onLineCountChange)
+  onLineCountChangeRef.current = onLineCountChange
+  const onDirtyChangeRef = useRef(onDirtyChange)
+  onDirtyChangeRef.current = onDirtyChange
+  const onEolChangeRef = useRef(onEolChange)
+  onEolChangeRef.current = onEolChange
 
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState('')
 
   const paintRef = useRef<PaintColors>(buildPaintColors(colors ?? DEFAULT_GPU_COLORS))
+
+  // Notify consumers (e.g. FullscreenIDE's status bar) of the primary
+  // cursor's position. Cheap to call after every cursor-affecting op.
+  const notifyCursor = useCallback(() => {
+    const { line, col } = cursorsRef.current[0]
+    onCursorChangeRef.current?.(line, col)
+  }, [])
+
+  const notifyDirty = useCallback((dirty: boolean) => {
+    if (dirtyRef.current === dirty) return
+    dirtyRef.current = dirty
+    onDirtyChangeRef.current?.(dirty)
+  }, [])
 
   // ── Drawing ─────────────────────────────────────────────────────────────────
 
@@ -392,11 +440,14 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     cursorsRef.current = dedupeCursors(cursors)
 
     setStatus('●')
+    notifyDirty(true)
+    onLineCountChangeRef.current?.(lineCountRef.current)
+    notifyCursor()
     ensureCursorVisible()
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, fetchVisible, updateBracketMatch])
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
 
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
     if (readOnlyRef.current) return
@@ -416,14 +467,24 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     }]
     cursorVisibleRef.current = true
     setStatus('●')
+    notifyDirty(true)
+    onLineCountChangeRef.current?.(lineCountRef.current)
+    notifyCursor()
     ensureCursorVisible()
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, fetchVisible, updateBracketMatch])
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
 
   const undo = useCallback(() => applyUndoRedo('editor.undo'), [applyUndoRedo])
   const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
+
+  const save = useCallback(async () => {
+    if (readOnlyRef.current) return
+    await invoke('editor.save', { bufferId: bufferIdRef.current })
+    setStatus('')
+    notifyDirty(false)
+  }, [notifyDirty])
 
   const insertText = useCallback(async (text: string) => {
     const ops = cursorsRef.current.map((c, idx) => {
@@ -523,6 +584,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       if (allTypeOver) {
         cursorsRef.current = cursors.map(c => ({ line: c.line, col: c.col + 1 }))
         cursorVisibleRef.current = true
+        notifyCursor()
         ensureCursorVisible()
         draw()
         void updateBracketMatch()
@@ -554,7 +616,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     }
 
     await insertText(ch)
-  }, [applyMultiEdit, draw, ensureCursorVisible, ensureLine, insertText, updateBracketMatch])
+  }, [applyMultiEdit, draw, ensureCursorVisible, ensureLine, insertText, notifyCursor, updateBracketMatch])
 
   // ── Cursor navigation ──────────────────────────────────────────────────────
 
@@ -593,11 +655,12 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     }
     cursorsRef.current = dedupeCursors(next)
     cursorVisibleRef.current = true
+    notifyCursor()
     ensureCursorVisible()
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Move every cursor to a position derived from its own current position
   // (used for Home/End, which apply per-line).
@@ -617,11 +680,12 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     }
     cursorsRef.current = dedupeCursors(next)
     cursorVisibleRef.current = true
+    notifyCursor()
     ensureCursorVisible()
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Collapse to a single cursor at (line, col) — used for plain clicks/drags.
   const setCursorTo = useCallback(async (line: number, col: number, extend: boolean) => {
@@ -634,11 +698,12 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     col = Math.max(0, Math.min(data?.text.length ?? 0, col))
     cursorsRef.current = [{ line, col, anchorLine, anchorCol }]
     cursorVisibleRef.current = true
+    notifyCursor()
     ensureCursorVisible()
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
@@ -684,12 +749,20 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
 
       let vs: ViewState = {}
       try {
-        const vsResp = await invoke<{ state: ViewState }>('editor.viewstate.get', { bufferId: open.bufferId })
+        const vsResp = await invoke<{ state: ViewState }>('editor.viewstate.get', {
+          bufferId: open.bufferId, viewKey: viewKeyRef.current,
+        })
         vs = vsResp.state ?? {}
       } catch { /* no saved state */ }
       topLineRef.current = vs.topLine ?? 0
       leftColRef.current = vs.leftCol ?? 0
       cursorsRef.current = [{ line: vs.cursorLine ?? 0, col: vs.cursorCol ?? 0 }]
+
+      dirtyRef.current = open.dirty
+      onDirtyChangeRef.current?.(open.dirty)
+      onLineCountChangeRef.current?.(open.lineCount)
+      onEolChangeRef.current?.(open.eol)
+      notifyCursor()
 
       recomputeViewport()
       setReady(true)
@@ -711,7 +784,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       if (bufferId) {
         const primary = cursorsRef.current[0]
         void invoke('editor.viewstate.set', {
-          bufferId,
+          bufferId, viewKey: viewKeyRef.current,
           state: {
             topLine: topLineRef.current, leftCol: leftColRef.current,
             cursorLine: primary.line, cursorCol: primary.col,
@@ -788,7 +861,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       case 's':
         if ((e.ctrlKey || e.metaKey) && !readOnlyRef.current) {
           e.preventDefault()
-          void invoke('editor.save', { bufferId: bufferIdRef.current }).then(() => setStatus(''))
+          void save()
         }
         return
       case 'z':
@@ -811,7 +884,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
         }
         return
     }
-  }, [addCursorVertical, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, redo, undo])
+  }, [addCursorVertical, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, redo, save, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -888,12 +961,21 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     return () => container.removeEventListener('wheel', handler)
   }, [clampScroll, draw, fetchVisible, recomputeViewport])
 
+  useImperativeHandle(ref, () => ({
+    focus: () => textareaRef.current?.focus(),
+    save,
+    undo: () => { void undo() },
+    redo: () => { void redo() },
+  }), [save, undo, redo])
+
   return (
     <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
-      <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px] flex items-center justify-between">
-        <span>{filePath}</span>
-        <span>{status}</span>
-      </div>
+      {showHeader && (
+        <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px] flex items-center justify-between">
+          <span>{filePath}</span>
+          <span>{status}</span>
+        </div>
+      )}
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden"
@@ -926,4 +1008,6 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       </div>
     </div>
   )
-}
+})
+
+export default GpuEditor
