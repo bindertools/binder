@@ -35,6 +35,7 @@ const TSLanguage* tree_sitter_go(void);
 const TSLanguage* tree_sitter_java(void);
 const TSLanguage* tree_sitter_lua(void);
 const TSLanguage* tree_sitter_python(void);
+const TSLanguage* tree_sitter_bash(void);
 }
 
 using json = nlohmann::json;
@@ -743,6 +744,37 @@ const char* kCompletionQueryPython = R"TSQ(
 (keyword_argument name: (identifier) @property)
 )TSQ";
 
+// Bash — adapted from tree-sitter-bash's highlights.scm with the `#match?`
+// predicate dropped (the "looks like a command-line flag" heuristic) and the
+// `@embedded` whole-node captures on command/process substitution removed
+// (no corresponding kStyles slot).
+const char* kQueryBash = R"TSQ(
+[(string) (raw_string) (heredoc_body) (heredoc_start)] @string
+
+(command_name) @function
+
+(variable_name) @property
+
+[
+  "case" "do" "done" "elif" "else" "esac" "export" "fi" "for" "function" "if" "in"
+  "select" "then" "unset" "until" "while"
+] @keyword
+
+(comment) @comment
+
+(function_definition name: (word) @function)
+
+(file_descriptor) @number
+
+["$" "&&" ">" ">>" "<" "|"] @operator
+)TSQ";
+
+const char* kCompletionQueryBash = R"TSQ(
+(function_definition name: (word) @function)
+(variable_assignment name: (variable_name) @variable)
+(for_statement variable: (variable_name) @variable)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -856,6 +888,11 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "print", "len", "range", "int", "str", "float", "bool", "list", "dict", "set", "tuple",
         "type", "isinstance", "super", "object", "enumerate", "zip", "map", "filter", "open",
     }},
+    {"bash", {
+        "case", "do", "done", "elif", "else", "esac", "export", "fi", "for", "function", "if",
+        "in", "select", "then", "unset", "until", "while", "local", "return", "break", "continue",
+        "echo", "printf", "read", "cd", "exit", "source", "alias", "shift", "test",
+    }},
 };
 
 struct LanguageDef {
@@ -881,6 +918,7 @@ const LanguageDef kLanguages[] = {
     {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava},
     {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua},
     {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython},
+    {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -903,6 +941,9 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "java")                                  return &kLanguages[9];
     if (ext == "lua")                                   return &kLanguages[10];
     if (ext == "py" || ext == "pyw" || ext == "pyi")    return &kLanguages[11];
+    if (ext == "sh" || ext == "bash" || ext == "zsh" ||
+        ext == "bashrc" || ext == "bash_profile" || ext == "profile")
+                                                         return &kLanguages[12];
     return nullptr;
 }
 
