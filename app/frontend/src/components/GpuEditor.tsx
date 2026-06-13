@@ -4,6 +4,7 @@ import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
 import { computeMinimapGeometry, drawMinimap, minimapLineAt, MINIMAP_WIDTH, type MinimapGeometry } from '../lib/minimapRenderer'
 import type { GpuEditorColors } from '../themes'
 import FindReplaceBar from './FindReplaceBar'
+import CompletionsPopup, { type CompletionItem } from './CompletionsPopup'
 
 interface LineData { text: string; spans: [number, number, number][] }
 
@@ -231,6 +232,20 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   findCaseSensitiveRef.current = findCaseSensitive
   const findWholeWordRef = useRef(false)
   findWholeWordRef.current = findWholeWord
+
+  // ── Autocomplete state ───────────────────────────────────────────────────────
+  const [completionOpen, setCompletionOpen] = useState(false)
+  const [completionItems, setCompletionItems] = useState<CompletionItem[]>([])
+  const [completionIndex, setCompletionIndex] = useState(0)
+  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0 })
+
+  const completionOpenRef = useRef(false)
+  completionOpenRef.current = completionOpen
+  const completionItemsRef = useRef<CompletionItem[]>([])
+  completionItemsRef.current = completionItems
+  const completionIndexRef = useRef(0)
+  completionIndexRef.current = completionIndex
+  const completionDebounceRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Notify consumers (e.g. FullscreenIDE's status bar) of the primary
   // cursor's position. Cheap to call after every cursor-affecting op.
@@ -509,6 +524,52 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [draw])
 
+  // ── Autocomplete ─────────────────────────────────────────────────────────────
+
+  const closeCompletions = useCallback(() => {
+    if (completionDebounceRef.current) clearTimeout(completionDebounceRef.current)
+    if (completionOpenRef.current) setCompletionOpen(false)
+  }, [])
+
+  // Pixel position just below the primary cursor, for positioning the popup.
+  const cursorPixelPos = useCallback(() => {
+    const renderer = rendererRef.current
+    const { line, col } = cursorsRef.current[0]
+    if (!renderer) return { x: 0, y: 0 }
+    const gutterDigits = Math.max(3, String(Math.max(1, lineCountRef.current)).length)
+    const gutterWidth = (gutterDigits + 1) * renderer.cellWidth
+    const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
+    const y = (line - topLineRef.current + 1) * renderer.cellHeight
+    return { x, y }
+  }, [])
+
+  // Fetch completions for the primary cursor's position. No-op for
+  // multi-cursor/selection (ambiguous insertion point).
+  const requestCompletions = useCallback(async () => {
+    if (readOnlyRef.current || cursorsRef.current.length > 1 || rangeOf(cursorsRef.current[0])) {
+      closeCompletions()
+      return
+    }
+    const { line, col } = cursorsRef.current[0]
+    try {
+      const resp = await invoke<{ items: CompletionItem[] }>('editor.completions', {
+        bufferId: bufferIdRef.current, line, col,
+      })
+      if (resp.items.length === 0) { closeCompletions(); return }
+      setCompletionItems(resp.items)
+      setCompletionIndex(0)
+      setCompletionPos(cursorPixelPos())
+      setCompletionOpen(true)
+    } catch {
+      closeCompletions()
+    }
+  }, [closeCompletions, cursorPixelPos])
+
+  const scheduleCompletions = useCallback(() => {
+    if (completionDebounceRef.current) clearTimeout(completionDebounceRef.current)
+    completionDebounceRef.current = setTimeout(() => { void requestCompletions() }, 150)
+  }, [requestCompletions])
+
   // ── Editing ─────────────────────────────────────────────────────────────────
 
   // Apply one edit per cursor (some cursors may be skipped — e.g. a no-op
@@ -561,8 +622,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void updateBracketMatch()
   }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
 
+  // Replace the identifier prefix immediately left of the cursor with the
+  // selected completion's insertText.
+  const acceptCompletion = useCallback(async () => {
+    const item = completionItemsRef.current[completionIndexRef.current]
+    closeCompletions()
+    if (!item) return
+    const { line, col } = cursorsRef.current[0]
+    const data = await ensureLine(line)
+    const text = data?.text ?? ''
+    let start = col
+    while (start > 0 && /[A-Za-z0-9_]/.test(text[start - 1])) start--
+    await applyMultiEdit([{ idx: 0, range: [line, start, line, col], text: item.insertText }])
+  }, [applyMultiEdit, closeCompletions, ensureLine])
+
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
     if (readOnlyRef.current) return
+    closeCompletions()
     const resp = await invoke<{
       applied: boolean; version: number; lineCount: number
       dirtyStart?: number; dirtyEnd?: number
@@ -586,7 +662,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
+  }, [closeCompletions, draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
 
   const undo = useCallback(() => applyUndoRedo('editor.undo'), [applyUndoRedo])
   const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
@@ -663,6 +739,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const matches = matchesRef.current
     const n = matches.length
     if (n === 0) return
+    closeCompletions()
     const idx = ((currentMatchRef.current + delta) % n + n) % n
     currentMatchRef.current = idx
     setCurrentMatch(idx)
@@ -673,7 +750,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor])
+  }, [closeCompletions, draw, ensureCursorVisible, fetchVisible, notifyCursor])
 
   const replaceCurrent = useCallback(async () => {
     const m = matchesRef.current[currentMatchRef.current]
@@ -701,10 +778,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   }, [draw])
 
   const openFind = useCallback((mode: 'find' | 'replace') => {
+    closeCompletions()
     setFindMode(mode)
     setFindOpen(true)
     if (findQueryRef.current) void runSearch()
-  }, [runSearch])
+  }, [closeCompletions, runSearch])
 
   const insertText = useCallback(async (text: string) => {
     const ops = cursorsRef.current.map((c, idx) => {
@@ -715,6 +793,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   }, [applyMultiEdit])
 
   const deleteBackward = useCallback(async () => {
+    closeCompletions()
     const cursors = cursorsRef.current
     const ops: { idx: number; range: [number, number, number, number]; text: string }[] = []
     for (let idx = 0; idx < cursors.length; idx++) {
@@ -730,9 +809,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       }
     }
     await applyMultiEdit(ops)
-  }, [applyMultiEdit, ensureLine])
+  }, [applyMultiEdit, closeCompletions, ensureLine])
 
   const deleteForward = useCallback(async () => {
+    closeCompletions()
     const cursors = cursorsRef.current
     const ops: { idx: number; range: [number, number, number, number]; text: string }[] = []
     for (let idx = 0; idx < cursors.length; idx++) {
@@ -748,7 +828,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       }
     }
     await applyMultiEdit(ops)
-  }, [applyMultiEdit, ensureLine])
+  }, [applyMultiEdit, closeCompletions, ensureLine])
 
   // Enter: copy the current line's leading whitespace onto the new line,
   // adding one indent level if the cursor sits right after an opening
@@ -756,6 +836,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   // split into a blank indented line with the closer pushed to its own line,
   // cursor left on the blank line.
   const handleEnter = useCallback(async () => {
+    closeCompletions()
     const cursors = cursorsRef.current
     const ops: Parameters<typeof applyMultiEdit>[0] = []
     for (let idx = 0; idx < cursors.length; idx++) {
@@ -785,7 +866,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       }
     }
     await applyMultiEdit(ops)
-  }, [applyMultiEdit, ensureLine])
+  }, [applyMultiEdit, closeCompletions, ensureLine])
 
   // Handle a single typed character that may participate in an auto-close
   // pair: typing an opener inserts both halves with the cursor between them
@@ -841,6 +922,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   // ── Cursor navigation ──────────────────────────────────────────────────────
 
   const moveCursor = useCallback(async (dl: number, dc: number, extend: boolean) => {
+    closeCompletions()
     const cursors = cursorsRef.current
     const next: Cursor[] = []
     for (const c of cursors) {
@@ -880,11 +962,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Move every cursor to a position derived from its own current position
   // (used for Home/End, which apply per-line).
   const moveCursorsTo = useCallback(async (transform: (c: Cursor) => { line: number; col: number }, extend: boolean) => {
+    closeCompletions()
     const cursors = cursorsRef.current
     const next: Cursor[] = []
     for (const c of cursors) {
@@ -905,10 +988,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Collapse to a single cursor at (line, col) — used for plain clicks/drags.
   const setCursorTo = useCallback(async (line: number, col: number, extend: boolean) => {
+    closeCompletions()
     const primary = cursorsRef.current[0]
     let anchorLine = primary.anchorLine, anchorCol = primary.anchorCol
     if (!extend) { anchorLine = undefined; anchorCol = undefined }
@@ -923,20 +1007,22 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
+    closeCompletions()
     line = Math.max(0, Math.min(lineCountRef.current - 1, line))
     const data = await ensureLine(line)
     col = Math.max(0, Math.min(data?.text.length ?? 0, col))
     cursorsRef.current = dedupeCursors([...cursorsRef.current, { line, col }])
     cursorVisibleRef.current = true
     draw()
-  }, [draw, ensureLine])
+  }, [closeCompletions, draw, ensureLine])
 
   // Ctrl+Alt+Up/Down — add a cursor directly above/below the primary cursor.
   const addCursorVertical = useCallback(async (delta: number) => {
+    closeCompletions()
     const primary = cursorsRef.current[0]
     const line = primary.line + delta
     if (line < 0 || line >= lineCountRef.current) return
@@ -947,7 +1033,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible])
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -1069,6 +1155,35 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const shift = e.shiftKey
+
+    if (completionOpenRef.current) {
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          setCompletionIndex(i => (i - 1 + completionItemsRef.current.length) % completionItemsRef.current.length)
+          return
+        case 'ArrowDown':
+          e.preventDefault()
+          setCompletionIndex(i => (i + 1) % completionItemsRef.current.length)
+          return
+        case 'Enter':
+        case 'Tab':
+          e.preventDefault()
+          void acceptCompletion()
+          return
+        case 'Escape':
+          e.preventDefault()
+          closeCompletions()
+          return
+      }
+    }
+
+    if (e.ctrlKey && e.key === ' ') {
+      e.preventDefault()
+      void requestCompletions()
+      return
+    }
+
     switch (e.key) {
       case 'ArrowUp':
         if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(-1); return }
@@ -1126,14 +1241,18 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [addCursorVertical, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, save, undo])
+  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
     const text = ta.value
     ta.value = ''
-    if (text) void insertText(text)
-  }, [insertText])
+    if (!text) return
+    void insertText(text).then(() => {
+      if (text.length === 1 && /[A-Za-z0-9_]/.test(text)) scheduleCompletions()
+      else closeCompletions()
+    })
+  }, [closeCompletions, insertText, scheduleCompletions])
 
   const pixelToPos = useCallback((clientX: number, clientY: number) => {
     const renderer = rendererRef.current
@@ -1306,6 +1425,16 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
             onReplace={() => void replaceCurrent()}
             onReplaceAll={() => void replaceAllMatches()}
             onClose={closeFind}
+          />
+        )}
+        {completionOpen && (
+          <CompletionsPopup
+            items={completionItems}
+            index={completionIndex}
+            x={completionPos.x}
+            y={completionPos.y}
+            onSelect={setCompletionIndex}
+            onAccept={i => { completionIndexRef.current = i; void acceptCompletion() }}
           />
         )}
       </div>
