@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import { invoke } from '../lib/ipc'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
+import { computeMinimapGeometry, drawMinimap, minimapLineAt, MINIMAP_WIDTH, type MinimapGeometry } from '../lib/minimapRenderer'
 import type { GpuEditorColors } from '../themes'
 import FindReplaceBar from './FindReplaceBar'
 
@@ -38,6 +39,7 @@ interface Props {
   fontSize?: number
   colors?: GpuEditorColors
   readOnly?: boolean
+  minimap?: boolean
   gotoLine?: number
   // Per-pane view-state key (cursor/scroll position), so two panes showing
   // the same buffer keep independent cursor/scroll. Omit for single-pane
@@ -155,11 +157,12 @@ const MIN_FONT_SIZE = 8
 const MAX_FONT_SIZE = 36
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
-  filePath, fontSize = 13, colors, readOnly = false, gotoLine, viewKey,
+  filePath, fontSize = 13, colors, readOnly = false, minimap = false, gotoLine, viewKey,
   showHeader = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const rendererRef = useRef<GpuTextRenderer | null>(null)
 
@@ -178,6 +181,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const dprRef = useRef<number>(1)
   const readOnlyRef = useRef<boolean>(readOnly)
   readOnlyRef.current = readOnly
+  const minimapRef = useRef<boolean>(minimap)
+  minimapRef.current = minimap
+  const minimapGeomRef = useRef<MinimapGeometry>({ firstLine: 0, lastLine: -1, rowHeight: 2 })
+  const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
+  const minimapFetchingRef = useRef(false)
   const fontSizeRef = useRef<number>(fontSize)
   const lastGotoLineRef = useRef<number | undefined>(undefined)
   const viewKeyRef = useRef<string | undefined>(viewKey)
@@ -355,6 +363,29 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     }
 
     renderer.endFrame()
+
+    // Minimap overlay (separate Canvas2D, drawn after the WebGL frame)
+    if (minimapRef.current) {
+      const mmCanvas = minimapCanvasRef.current
+      const ctx = mmCanvas?.getContext('2d')
+      if (ctx && mmCanvas) {
+        const dpr = dprRef.current || 1
+        const mmHeight = mmCanvas.height / dpr
+        const geom = computeMinimapGeometry(lineCount, mmHeight, top, rows)
+        minimapGeomRef.current = geom
+        ctx.save()
+        ctx.scale(dpr, dpr)
+        drawMinimap(
+          ctx, MINIMAP_WIDTH, mmHeight,
+          ln => lineCacheRef.current.get(ln),
+          paintRef.current.styles, paintRef.current.bg,
+          top, rows, paintRef.current.selection,
+          geom,
+        )
+        ctx.restore()
+        minimapFetchRef.current(geom.firstLine, geom.lastLine)
+      }
+    }
   }, [])
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -381,6 +412,25 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void fetchLines(missing[0], missing[missing.length - 1])
   }, [fetchLines])
 
+  // Lazily fetch lines needed by the minimap in chunks, redrawing as each
+  // chunk arrives. Serialized via minimapFetchingRef so concurrent draw()
+  // calls (scrolling, blinking) don't pile up redundant requests.
+  const fetchMinimapLines = useCallback((first: number, last: number) => {
+    if (minimapFetchingRef.current) return
+    const CHUNK = 300
+    const run = (start: number) => {
+      if (start > last) { minimapFetchingRef.current = false; return }
+      const end = Math.min(last, start + CHUNK - 1)
+      const missing: number[] = []
+      for (let ln = start; ln <= end; ln++) if (!lineCacheRef.current.has(ln)) missing.push(ln)
+      if (missing.length === 0) { run(end + 1); return }
+      minimapFetchingRef.current = true
+      void fetchLines(missing[0], missing[missing.length - 1]).then(() => run(end + 1))
+    }
+    run(first)
+  }, [fetchLines])
+  minimapFetchRef.current = fetchMinimapLines
+
   // Ensure a single line is cached (for cursor-movement length checks); returns its text length.
   const ensureLine = useCallback(async (ln: number): Promise<LineData | undefined> => {
     if (ln < 0 || ln >= lineCountRef.current) return undefined
@@ -405,8 +455,18 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     dprRef.current = dpr
     renderer.resize(w, h, dpr)
     const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1) * renderer.cellWidth
+    const minimapW = minimapRef.current ? MINIMAP_WIDTH : 0
     visibleRowsRef.current = Math.max(1, Math.ceil(h / renderer.cellHeight))
-    visibleColsRef.current = Math.max(1, Math.floor((w - gutterWidth) / renderer.cellWidth))
+    visibleColsRef.current = Math.max(1, Math.floor((w - gutterWidth - minimapW) / renderer.cellWidth))
+
+    const mmCanvas = minimapCanvasRef.current
+    if (mmCanvas) {
+      mmCanvas.width = Math.max(1, Math.round(MINIMAP_WIDTH * dpr))
+      mmCanvas.height = Math.max(1, Math.round(h * dpr))
+      mmCanvas.style.width = `${MINIMAP_WIDTH}px`
+      mmCanvas.style.height = `${h}px`
+    }
+
     fetchVisible()
     draw()
   }, [draw, fetchVisible])
@@ -997,6 +1057,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     return () => clearTimeout(t)
   }, [findOpen, findQuery, findRegex, findCaseSensitive, findWholeWord, runSearch])
 
+  // Toggling the minimap changes the available text columns and the
+  // minimap canvas size.
+  useEffect(() => {
+    if (!ready) return
+    recomputeViewport()
+    draw()
+  }, [minimap, ready, recomputeViewport, draw])
+
   // ── Input handlers ──────────────────────────────────────────────────────────
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1103,6 +1171,34 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const onMouseUp = useCallback(() => { draggingRef.current = false }, [])
 
+  // ── Minimap interaction ─────────────────────────────────────────────────────
+
+  const minimapDraggingRef = useRef(false)
+
+  // Center the viewport on the line under the given client Y coordinate.
+  const scrollToMinimapY = useCallback((clientY: number) => {
+    const mmCanvas = minimapCanvasRef.current
+    if (!mmCanvas) return
+    const rect = mmCanvas.getBoundingClientRect()
+    const line = minimapLineAt(clientY - rect.top, minimapGeomRef.current)
+    topLineRef.current = Math.max(0, line - Math.floor(visibleRowsRef.current / 2))
+    clampScroll()
+    fetchVisible()
+    draw()
+  }, [clampScroll, draw, fetchVisible])
+
+  const onMinimapMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    minimapDraggingRef.current = true
+    scrollToMinimapY(e.clientY)
+  }, [scrollToMinimapY])
+
+  const onMinimapMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!minimapDraggingRef.current) return
+    scrollToMinimapY(e.clientY)
+  }, [scrollToMinimapY])
+
+  const onMinimapMouseUp = useCallback(() => { minimapDraggingRef.current = false }, [])
+
   // Native (non-passive) wheel listener: Ctrl+wheel zooms the font and must
   // call preventDefault to stop the browser's page-zoom; plain wheel scrolls
   // the viewport. React's onWheel can't reliably preventDefault wheel events.
@@ -1161,6 +1257,16 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           onMouseUp={onMouseUp}
           style={{ display: 'block', cursor: 'text' }}
         />
+        {minimap && (
+          <canvas
+            ref={minimapCanvasRef}
+            onMouseDown={onMinimapMouseDown}
+            onMouseMove={onMinimapMouseMove}
+            onMouseUp={onMinimapMouseUp}
+            onMouseLeave={onMinimapMouseUp}
+            style={{ position: 'absolute', top: 0, right: 0, width: `${MINIMAP_WIDTH}px`, height: '100%', cursor: 'pointer' }}
+          />
+        )}
         <textarea
           ref={textareaRef}
           onKeyDown={onKeyDown}

@@ -1151,7 +1151,7 @@ export default function App() {
     if (tab.type === 'editor') {
       return (
         <Editor tabId={tab.id} filePath={tab.filePath!} active={true}
-          defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} />
+          defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} minimap={appConfig.minimap} />
       )
     }
     if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />
