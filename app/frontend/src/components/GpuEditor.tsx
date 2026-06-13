@@ -26,6 +26,7 @@ interface Props {
   fontSize?: number
   colors?: GpuEditorColors
   readOnly?: boolean
+  gotoLine?: number
 }
 
 // Fallback palette used until a theme-derived `colors` prop arrives —
@@ -120,7 +121,11 @@ const AUTO_CLOSE_CLOSERS = new Set([')', ']', '}', '"', "'", '`'])
 
 const OVERSCAN = 10
 
-export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = false }: Props) {
+const FONT_FAMILY = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace"
+const MIN_FONT_SIZE = 8
+const MAX_FONT_SIZE = 36
+
+export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = false, gotoLine }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -141,6 +146,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
   const dprRef = useRef<number>(1)
   const readOnlyRef = useRef<boolean>(readOnly)
   readOnlyRef.current = readOnly
+  const fontSizeRef = useRef<number>(fontSize)
+  const lastGotoLineRef = useRef<number | undefined>(undefined)
 
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState('')
@@ -666,7 +673,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       const canvas = canvasRef.current
       if (!canvas) return
       const renderer = new GpuTextRenderer(canvas)
-      renderer.setFont("'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace", fontSize)
+      renderer.setFont(FONT_FAMILY, fontSizeRef.current)
       rendererRef.current = renderer
 
       const open = await invoke<OpenResp>('editor.open', { path: filePath })
@@ -730,6 +737,25 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
     paintRef.current = buildPaintColors(colors ?? DEFAULT_GPU_COLORS)
     draw()
   }, [colors, draw])
+
+  // External font-size changes (e.g. global zoom-level config) reset any
+  // local Ctrl+wheel zoom applied to this instance.
+  useEffect(() => {
+    if (!ready) return
+    fontSizeRef.current = fontSize
+    rendererRef.current?.setFont(FONT_FAMILY, fontSize)
+    recomputeViewport()
+    draw()
+  }, [fontSize, ready, recomputeViewport, draw])
+
+  // Jump to the requested line (1-based) whenever it changes.
+  useEffect(() => {
+    if (!ready || gotoLine === undefined || gotoLine === lastGotoLineRef.current) return
+    lastGotoLineRef.current = gotoLine
+    void setCursorTo(Math.max(0, gotoLine - 1), 0, false).then(() => {
+      textareaRef.current?.focus()
+    })
+  }, [gotoLine, ready, setCursorTo])
 
   // ── Input handlers ──────────────────────────────────────────────────────────
 
@@ -830,17 +856,37 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
 
   const onMouseUp = useCallback(() => { draggingRef.current = false }, [])
 
-  const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    const renderer = rendererRef.current
-    if (!renderer) return
-    const dLines = Math.round(e.deltaY / renderer.cellHeight) || (e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0)
-    const dCols = Math.round(e.deltaX / renderer.cellWidth)
-    if (dLines !== 0) topLineRef.current += dLines
-    if (dCols !== 0) leftColRef.current += dCols
-    clampScroll()
-    fetchVisible()
-    draw()
-  }, [clampScroll, draw, fetchVisible])
+  // Native (non-passive) wheel listener: Ctrl+wheel zooms the font and must
+  // call preventDefault to stop the browser's page-zoom; plain wheel scrolls
+  // the viewport. React's onWheel can't reliably preventDefault wheel events.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handler = (e: WheelEvent) => {
+      const renderer = rendererRef.current
+      if (!renderer) return
+      if (e.ctrlKey) {
+        e.preventDefault()
+        const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSizeRef.current + (e.deltaY < 0 ? 1 : -1)))
+        if (next !== fontSizeRef.current) {
+          fontSizeRef.current = next
+          renderer.setFont(FONT_FAMILY, next)
+          recomputeViewport()
+          draw()
+        }
+        return
+      }
+      const dLines = Math.round(e.deltaY / renderer.cellHeight) || (e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0)
+      const dCols = Math.round(e.deltaX / renderer.cellWidth)
+      if (dLines !== 0) topLineRef.current += dLines
+      if (dCols !== 0) leftColRef.current += dCols
+      clampScroll()
+      fetchVisible()
+      draw()
+    }
+    container.addEventListener('wheel', handler, { passive: false })
+    return () => container.removeEventListener('wheel', handler)
+  }, [clampScroll, draw, fetchVisible, recomputeViewport])
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
@@ -851,7 +897,6 @@ export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = 
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden"
-        onWheel={onWheel}
       >
         <canvas
           ref={canvasRef}

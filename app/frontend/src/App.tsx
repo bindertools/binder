@@ -1150,10 +1150,7 @@ export default function App() {
   function renderNonTerminalContent(tab: Tab): React.ReactNode {
     if (tab.type === 'editor') {
       return (
-        <Editor tabId={tab.id} filePath={tab.filePath!} content={tab.content ?? ''}
-          language={tab.language ?? 'plaintext'} active={true}
-          indentGuides={appConfig.indent_guides} monacoTheme={resolvedTheme.monacoThemeId}
-          monacoThemeDef={resolvedTheme.monacoThemeDef} minimap={appConfig.minimap}
+        <Editor tabId={tab.id} filePath={tab.filePath!} active={true}
           defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} />
       )
     }
