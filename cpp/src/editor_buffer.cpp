@@ -43,6 +43,7 @@ const TSLanguage* tree_sitter_yaml(void);
 const TSLanguage* tree_sitter_css(void);
 const TSLanguage* tree_sitter_scss(void);
 const TSLanguage* tree_sitter_markdown(void);
+const TSLanguage* tree_sitter_html(void);
 }
 
 using json = nlohmann::json;
@@ -1453,6 +1454,40 @@ const char* kCompletionQueryMarkdown = R"TSQ(
 (info_string) @type
 )TSQ";
 
+// HTML — adapted from tree-sitter-html's own highlights.scm. `@tag`/
+// `@tag.error` (no kStyles slot) remapped to `@type`; `@attribute`
+// remapped to `@property`; `(entity) @escape` added for character
+// references like `&amp;`. v1: embedded `<script>`/`<style>` contents
+// are plain `raw_text` with no query match, so render unstyled (no
+// grammar injection support in this engine).
+const char* kQueryHtml = R"TSQ(
+(doctype) @constant
+
+(tag_name) @type
+(erroneous_end_tag_name) @type
+
+(attribute_name) @property
+(attribute_value) @string
+
+(entity) @escape
+
+(comment) @comment
+
+[
+  "<"
+  ">"
+  "</"
+  "/>"
+  "<!"
+  "="
+] @punctuation.bracket
+)TSQ";
+
+const char* kCompletionQueryHtml = R"TSQ(
+(tag_name) @type
+(attribute_name) @property
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1641,6 +1676,7 @@ const LanguageDef kLanguages[] = {
     {"css",        tree_sitter_css,        kQueryCss,                kCompletionQueryCss},
     {"scss",       tree_sitter_scss,       kQueryScss,               kCompletionQueryScss},
     {"markdown",   tree_sitter_markdown,   kQueryMarkdown,           kCompletionQueryMarkdown},
+    {"html",       tree_sitter_html,       kQueryHtml,               kCompletionQueryHtml},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1681,6 +1717,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "css")                                   return &kLanguages[17];
     if (ext == "scss")                                  return &kLanguages[18];
     if (ext == "md" || ext == "markdown")               return &kLanguages[19];
+    if (ext == "html" || ext == "htm")                  return &kLanguages[20];
     return nullptr;
 }
 
