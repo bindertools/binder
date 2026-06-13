@@ -31,6 +31,7 @@ const TSLanguage* tree_sitter_c(void);
 const TSLanguage* tree_sitter_cpp(void);
 const TSLanguage* tree_sitter_c_sharp(void);
 const TSLanguage* tree_sitter_rust(void);
+const TSLanguage* tree_sitter_go(void);
 }
 
 using json = nlohmann::json;
@@ -461,6 +462,52 @@ const char* kCompletionQueryRust = R"TSQ(
 (enum_variant name: (identifier) @property)
 )TSQ";
 
+// Go — adapted from tree-sitter-go's highlights.scm with the
+// `#match?`-predicated builtin-function pattern dropped.
+const char* kQueryGo = R"TSQ(
+(call_expression function: (identifier) @function)
+(call_expression function: (selector_expression field: (field_identifier) @function))
+
+(function_declaration name: (identifier) @function)
+(method_declaration name: (field_identifier) @function)
+
+(type_identifier) @type
+(field_identifier) @property
+(identifier) @variable
+
+[
+ "--" "-" "-=" ":=" "!" "!=" "..." "*" "*=" "/" "/=" "&" "&&" "&=" "%" "%=" "^"
+ "^=" "+" "++" "+=" "<-" "<" "<<" "<<=" "<=" "=" "==" ">" ">=" ">>" ">>=" "|"
+ "|=" "||" "~"
+] @operator
+
+[
+ "break" "case" "chan" "const" "continue" "default" "defer" "else" "fallthrough"
+ "for" "func" "go" "goto" "if" "import" "interface" "map" "package" "range"
+ "return" "select" "struct" "switch" "type" "var"
+] @keyword
+
+[(interpreted_string_literal) (raw_string_literal) (rune_literal)] @string
+(escape_sequence) @escape
+
+[(int_literal) (float_literal) (imaginary_literal)] @number
+
+[(true) (false) (nil) (iota)] @constant
+
+(comment) @comment
+)TSQ";
+
+const char* kCompletionQueryGo = R"TSQ(
+(function_declaration name: (identifier) @function)
+(method_declaration name: (field_identifier) @function)
+(type_spec name: (type_identifier) @class)
+(const_spec name: (identifier) @constant)
+(var_spec name: (identifier) @variable)
+(parameter_declaration name: (identifier) @variable)
+(field_declaration name: (field_identifier) @property)
+(import_spec name: (package_identifier) @type)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -533,6 +580,17 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64",
         "true", "false", "Some", "None", "Ok", "Err", "Vec", "String", "Box", "Option", "Result",
     }},
+    {"go", {
+        "break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough",
+        "for", "func", "go", "goto", "if", "import", "interface", "map", "package", "range",
+        "return", "select", "struct", "switch", "type", "var",
+        "true", "false", "nil", "iota",
+        "bool", "byte", "complex64", "complex128", "error", "float32", "float64",
+        "int", "int8", "int16", "int32", "int64", "rune", "string",
+        "uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+        "append", "cap", "close", "complex", "copy", "delete", "imag", "len", "make", "new",
+        "panic", "print", "println", "real", "recover",
+    }},
 };
 
 struct LanguageDef {
@@ -554,6 +612,7 @@ const LanguageDef kLanguages[] = {
     {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp},
     {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp},
     {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust},
+    {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -572,6 +631,7 @@ const LanguageDef* language_for_path(const std::string& path) {
         ext == "ino" || ext == "tpp")                   return &kLanguages[5];
     if (ext == "cs")                                    return &kLanguages[6];
     if (ext == "rs")                                    return &kLanguages[7];
+    if (ext == "go")                                    return &kLanguages[8];
     return nullptr;
 }
 
