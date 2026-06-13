@@ -40,6 +40,7 @@ const TSLanguage* tree_sitter_zig(void);
 const TSLanguage* tree_sitter_toml(void);
 const TSLanguage* tree_sitter_dockerfile(void);
 const TSLanguage* tree_sitter_yaml(void);
+const TSLanguage* tree_sitter_css(void);
 }
 
 using json = nlohmann::json;
@@ -1220,6 +1221,68 @@ const char* kCompletionQueryYaml = R"TSQ(
 (alias_name) @variable
 )TSQ";
 
+// CSS — adapted from tree-sitter-css's highlights.scm with the two
+// `#match?` custom-property heuristics dropped, `@tag` remapped to `@type`
+// and `@attribute` remapped to `@property` (kStyles has no dedicated slots
+// for those).
+const char* kQueryCss = R"TSQ(
+(comment) @comment
+
+[
+  (tag_name)
+  (nesting_selector)
+  (universal_selector)
+] @type
+
+[
+  "~" ">" "+" "-" "*" "/" "=" "^=" "|=" "~=" "$=" "*="
+  "and" "or" "not" "only"
+] @operator
+
+(attribute_selector (plain_value) @string)
+(pseudo_element_selector (tag_name) @property)
+(pseudo_class_selector (class_name) @property)
+
+[
+  (class_name)
+  (id_name)
+  (namespace_name)
+  (property_name)
+  (feature_name)
+] @property
+
+(attribute_name) @property
+
+(function_name) @function
+
+[
+  "@media" "@import" "@charset" "@namespace" "@supports" "@keyframes"
+  (at_keyword)
+  (to)
+  (from)
+  (important)
+] @keyword
+
+(string_value) @string
+(color_value) @string.special
+
+(integer_value) @number
+(float_value) @number
+(unit) @type
+
+[
+  "#" "," ":"
+] @punctuation.delimiter
+)TSQ";
+
+const char* kCompletionQueryCss = R"TSQ(
+(class_name) @property
+(id_name) @property
+(property_name) @property
+(function_name) @function
+(tag_name) @type
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1364,6 +1427,10 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
     {"yaml", {
         "true", "false", "null", "yes", "no", "on", "off",
     }},
+    {"css", {
+        "and", "or", "not", "only", "to", "from", "important",
+        "inherit", "initial", "unset", "revert", "none", "auto",
+    }},
 };
 
 struct LanguageDef {
@@ -1394,6 +1461,7 @@ const LanguageDef kLanguages[] = {
     {"toml",       tree_sitter_toml,       kQueryToml,               kCompletionQueryToml},
     {"dockerfile", tree_sitter_dockerfile, kQueryDockerfile,         kCompletionQueryDockerfile},
     {"yaml",       tree_sitter_yaml,       kQueryYaml,               kCompletionQueryYaml},
+    {"css",        tree_sitter_css,        kQueryCss,                kCompletionQueryCss},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1431,6 +1499,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "zig" || ext == "zon")                   return &kLanguages[13];
     if (ext == "toml")                                  return &kLanguages[14];
     if (ext == "yaml" || ext == "yml")                  return &kLanguages[16];
+    if (ext == "css")                                   return &kLanguages[17];
     return nullptr;
 }
 
