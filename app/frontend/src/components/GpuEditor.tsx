@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { invoke } from '../lib/ipc'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
+import type { GpuEditorColors } from '../themes'
 
 interface LineData { text: string; spans: [number, number, number][] }
 
@@ -23,29 +24,58 @@ interface ViewState {
 interface Props {
   filePath: string
   fontSize?: number
+  colors?: GpuEditorColors
 }
 
-// Fixed scope palette — index matches the backend's kStyles table.
-const STYLE_COLORS = [
-  '#cccccc', // default
-  '#c586c0', // keyword
-  '#ce9178', // string
-  '#b5cea8', // number
-  '#6a9955', // comment
-  '#dcdcaa', // function
-  '#4ec9b0', // type
-  '#9cdcfe', // property
-  '#569cd6', // constant
-  '#d4d4d4', // operator
-  '#d4d4d4', // punctuation
-  '#9cdcfe', // variable
-  '#d16969', // regexp
-  '#d7ba7d', // escape
-]
+// Fallback palette used until a theme-derived `colors` prop arrives —
+// indices match the backend's kStyles table.
+const DEFAULT_GPU_COLORS: GpuEditorColors = {
+  styles: [
+    '#cccccc', // default
+    '#c586c0', // keyword
+    '#ce9178', // string
+    '#b5cea8', // number
+    '#6a9955', // comment
+    '#dcdcaa', // function
+    '#4ec9b0', // type
+    '#9cdcfe', // property
+    '#569cd6', // constant
+    '#d4d4d4', // operator
+    '#d4d4d4', // punctuation
+    '#9cdcfe', // variable
+    '#d16969', // regexp
+    '#d7ba7d', // escape
+  ],
+  bg: '#0d0d0d',
+  gutter: '#555555',
+  currentLine: '#1a1a1a',
+  cursor: '#cccccc',
+  selection: '#264f78',
+}
+
+interface PaintColors {
+  bg: RGBA
+  gutter: RGBA
+  currentLine: RGBA
+  cursor: RGBA
+  selection: RGBA
+  styles: RGBA[]
+}
+
+function buildPaintColors(c: GpuEditorColors): PaintColors {
+  return {
+    bg: hexToRgba(c.bg),
+    gutter: hexToRgba(c.gutter),
+    currentLine: hexToRgba(c.currentLine),
+    cursor: hexToRgba(c.cursor),
+    selection: hexToRgba(c.selection, 0.55),
+    styles: c.styles.map(hex => hexToRgba(hex)),
+  }
+}
 
 const OVERSCAN = 10
 
-export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
+export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -68,13 +98,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState('')
 
-  const colors = useRef<{ bg: RGBA; gutter: RGBA; currentLine: RGBA; cursor: RGBA; selection: RGBA }>({
-    bg: hexToRgba('#0d0d0d'),
-    gutter: hexToRgba('#555555'),
-    currentLine: hexToRgba('#1a1a1a'),
-    cursor: hexToRgba('#cccccc'),
-    selection: hexToRgba('#264f78', 0.55),
-  })
+  const paintRef = useRef<PaintColors>(buildPaintColors(colors ?? DEFAULT_GPU_COLORS))
 
   // ── Drawing ─────────────────────────────────────────────────────────────────
 
@@ -89,7 +113,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
     const gutterDigits = Math.max(3, String(Math.max(1, lineCount)).length)
     const gutterWidth = (gutterDigits + 1) * cw
 
-    renderer.beginFrame(colors.current.bg)
+    renderer.beginFrame(paintRef.current.bg)
 
     const top = topLineRef.current
     const rows = visibleRowsRef.current
@@ -101,7 +125,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
     // Current-line highlight (full width, behind text)
     if (curLine >= top && curLine < top + rows) {
       const y = (curLine - top) * ch
-      renderer.drawRect(0, y, canvas.clientWidth, ch, colors.current.currentLine)
+      renderer.drawRect(0, y, canvas.clientWidth, ch, paintRef.current.currentLine)
     }
 
     for (let row = 0; row < rows; row++) {
@@ -113,7 +137,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
       // Line number (right-aligned in gutter)
       const numStr = String(ln + 1)
       const numX = gutterWidth - (numStr.length + 1) * cw
-      renderer.drawText(numX, y, numStr, colors.current.gutter)
+      renderer.drawText(numX, y, numStr, paintRef.current.gutter)
 
       if (!data) continue
 
@@ -125,7 +149,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
           const to = ln === eLine ? eCol : data.text.length + 1
           const x0 = gutterWidth + (from - left) * cw
           const x1 = gutterWidth + (to - left) * cw
-          renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, colors.current.selection)
+          renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, paintRef.current.selection)
         }
       }
 
@@ -146,7 +170,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
           const skip = visStart - col
           const segment = text.slice(i + skip, i + skip + Math.min(j - i - skip, cols - visStart))
           const x = gutterWidth + visStart * cw
-          renderer.drawText(x, y, segment, hexToRgba(STYLE_COLORS[st] ?? STYLE_COLORS[0]))
+          renderer.drawText(x, y, segment, paintRef.current.styles[st] ?? paintRef.current.styles[0])
         }
         i = j
       }
@@ -157,7 +181,7 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
       const x = gutterWidth + (curCol - left) * cw
       const y = (curLine - top) * ch
       if (curCol - left >= 0 && curCol - left <= cols) {
-        renderer.drawRect(x, y, 2, ch, colors.current.cursor)
+        renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
       }
     }
 
@@ -388,12 +412,6 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
       renderer.setFont("'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace", fontSize)
       rendererRef.current = renderer
 
-      const root = getComputedStyle(document.documentElement)
-      colors.current.bg = hexToRgba(root.getPropertyValue('--app-bg').trim() || '#0d0d0d')
-      colors.current.gutter = hexToRgba(root.getPropertyValue('--info-bar-color').trim() || '#555555')
-      colors.current.currentLine = hexToRgba(root.getPropertyValue('--color-surface-raised').trim().startsWith('#')
-        ? root.getPropertyValue('--color-surface-raised').trim() : '#1a1a1a')
-
       const open = await invoke<OpenResp>('editor.open', { path: filePath })
       if (disposed) return
       bufferIdRef.current = open.bufferId
@@ -446,6 +464,13 @@ export default function GpuEditor({ filePath, fontSize = 13 }: Props) {
     ro.observe(container)
     return () => ro.disconnect()
   }, [recomputeViewport])
+
+  // Re-derive paint colors whenever the theme-supplied palette changes
+  // (e.g. live preview in the theme editor).
+  useEffect(() => {
+    paintRef.current = buildPaintColors(colors ?? DEFAULT_GPU_COLORS)
+    draw()
+  }, [colors, draw])
 
   // ── Input handlers ──────────────────────────────────────────────────────────
 

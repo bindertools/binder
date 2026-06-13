@@ -236,6 +236,51 @@ export function themeToCustomColors(theme: AppTheme): Record<string, string> {
 }
 
 /**
+ * Per-style-ID syntax color palette plus UI colors for the GPU-rendered
+ * editor. `styles` indices match the backend's `kStyles` order: default,
+ * keyword, string, number, comment, function, type, property, constant,
+ * operator, punctuation, variable, regexp, escape.
+ */
+export interface GpuEditorColors {
+  styles: string[]
+  bg: string
+  gutter: string
+  currentLine: string
+  cursor: string
+  selection: string
+}
+
+export function themeToGpuColors(theme: AppTheme): GpuEditorColors {
+  const rules = theme.monacoThemeDef?.rules  ?? []
+  const mc    = theme.monacoThemeDef?.colors ?? {}
+  const tok = (token: string, fallback: string) => tokenColor(rules, token, fallback)
+
+  return {
+    styles: [
+      tok('',         '#cccccc'), // default
+      tok('keyword',  '#c586c0'), // keyword
+      tok('string',   '#ce9178'), // string
+      tok('number',   '#b5cea8'), // number
+      tok('comment',  '#6a9955'), // comment
+      tok('function', '#dcdcaa'), // function
+      tok('type',     '#4ec9b0'), // type
+      tok('variable', '#9cdcfe'), // property (no dedicated rule — mirror variable)
+      tok('keyword',  '#569cd6'), // constant (no dedicated rule — mirror keyword)
+      tok('operator', '#d4d4d4'), // operator
+      tok('operator', '#d4d4d4'), // punctuation (no dedicated rule — mirror operator)
+      tok('variable', '#9cdcfe'), // variable
+      '#d16969',                  // regexp (no rule tracked)
+      '#d7ba7d',                  // escape (no rule tracked)
+    ],
+    bg:          mc['editor.background']              ?? theme.appBg,
+    gutter:      mc['editorLineNumber.foreground']    ?? theme.infoBarColor,
+    currentLine: mc['editor.lineHighlightBackground'] ?? '#1a1a1a',
+    cursor:      mc['editorCursor.foreground']        ?? '#cccccc',
+    selection:   mc['editor.selectionBackground']     ?? '#264f78',
+  }
+}
+
+/**
  * Build a full AppTheme from a flat color-key map.
  * Used when applying / live-previewing a custom theme.
  */

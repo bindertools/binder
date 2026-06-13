@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import MonacoEditor, { OnMount, BeforeMount } from '@monaco-editor/react'
 import { WriteFile } from '../../wailsjs/go/main/App'
-import { THEMES } from '../themes'
+import { THEMES, type GpuEditorColors } from '../themes'
 import GpuEditor from './GpuEditor'
 import type * as Monaco from 'monaco-editor'
 
@@ -17,6 +17,7 @@ interface Props {
   minimap:         boolean
   defaultZoom?:    number
   gotoLine?:       number
+  gpuColors?:      GpuEditorColors
 }
 
 // Module-level Monaco API reference so external callers can push theme updates
@@ -34,7 +35,7 @@ export function pushMonacoTheme(
 export default function Editor({
   tabId: _tabId, filePath, content, language, active: _active,
   indentGuides, monacoTheme, monacoThemeDef, minimap,
-  defaultZoom = 1, gotoLine,
+  defaultZoom = 1, gotoLine, gpuColors,
 }: Props) {
   const editorRef    = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const saveTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -190,7 +191,7 @@ export default function Editor({
         >
           GPU editor (beta) — switch back
         </button>
-        <GpuEditor filePath={filePath} fontSize={fontSize} />
+        <GpuEditor filePath={filePath} fontSize={fontSize} colors={gpuColors} />
       </div>
     )
   }

@@ -37,7 +37,7 @@ import {
 } from '../wailsjs/go/main/App'
 import { useDragRegions } from './lib/useDragRegions'
 import { useShortcuts, loadKeybindings, saveKeybindings, type ShortcutHandlers } from './lib/useShortcuts'
-import { getTheme, customColorsToTheme } from './themes'
+import { getTheme, customColorsToTheme, themeToGpuColors } from './themes'
 import './App.css'
 
 // ── Pane layout math (mirrors SplitPaneView constants) ───────────────────────
@@ -541,6 +541,8 @@ export default function App() {
     }
     return getTheme(appConfig.theme)
   }, [liveColors, appConfig.theme, appConfig.custom_theme])
+
+  const gpuColors = useMemo(() => themeToGpuColors(resolvedTheme), [resolvedTheme])
 
   // ── Derived: focused pane ────────────────────────────────────────────────────
   const focusedPane = useMemo(() => findLeaf(activeLayout.root, activeLayout.focusedPaneId), [activeLayout])
@@ -1152,7 +1154,7 @@ export default function App() {
           language={tab.language ?? 'plaintext'} active={true}
           indentGuides={appConfig.indent_guides} monacoTheme={resolvedTheme.monacoThemeId}
           monacoThemeDef={resolvedTheme.monacoThemeDef} minimap={appConfig.minimap}
-          defaultZoom={currentZoom} gotoLine={tab.gotoLine} />
+          defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} />
       )
     }
     if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />
