@@ -106,4 +106,8 @@ export function StopPerfMonitor(arg1:string):Promise<void>;
 
 export function TerminalInput(arg1:string,arg2:string):Promise<void>;
 
+export function UnwatchDir():Promise<void>;
+
+export function WatchDir(arg1:string):Promise<void>;
+
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
+import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile, WatchDir, UnwatchDir } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
@@ -196,6 +196,29 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
   }, [cwd])
 
   useEffect(() => { refreshGitStatus() }, [refreshGitStatus])
+
+  // (Re)start the native recursive file watcher whenever cwd changes, and
+  // stop it on unmount. The watcher emits 'fs:changed' below.
+  useEffect(() => {
+    if (!cwd) return
+    void WatchDir(cwd)
+    return () => { void UnwatchDir() }
+  }, [cwd])
+
+  // External filesystem changes (from the native watcher) — debounce a git
+  // status refresh. Per-directory explorer cache invalidation is handled by
+  // FileExplorer itself (it owns dirCache).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsub = EventsOn('fs:changed', () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(refreshGitStatus, 300)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsub()
+    }
+  }, [refreshGitStatus])
 
   // Fetch and convert one directory's children for the lazy explorer.
   const loadDir = useCallback(async (path: string): Promise<FileNode[]> => {

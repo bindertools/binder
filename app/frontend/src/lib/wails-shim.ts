@@ -67,6 +67,13 @@ function textToB64(text: string): string {
       ExplorerReaddir: (path: string) =>
         invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path }),
 
+      // ── File watcher ──────────────────────────────────────────────────────
+      WatchDir: (path: string) =>
+        invoke('fs.watch', { path }),
+
+      UnwatchDir: () =>
+        invoke('fs.unwatch'),
+
       ExplorerGetFile: async (path: string) => {
         const r = await invoke<{ content: string }>('fs.readfile', { path })
         return b64ToText(r.content)

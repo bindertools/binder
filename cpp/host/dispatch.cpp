@@ -13,6 +13,7 @@
 #include "../src/git.hpp"
 #include "../src/workflows.hpp"
 #include "../src/workflow_runner.hpp"
+#include "../src/file_watcher.hpp"
 #include "../src/base64.hpp"
 #include "../src/editor_buffer.hpp"
 
@@ -64,6 +65,8 @@ Dispatcher::Dispatcher(webview::webview& wv) : wv_(wv) {
 }
 
 Dispatcher::~Dispatcher() {
+    file_watcher::stop();
+
     // Stop all terminal sessions before shutdown
     std::vector<std::unique_ptr<Terminal>> to_stop;
     {
@@ -865,6 +868,21 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     if (type == "workflows.stop") {
         std::string runId = args.value("runId", std::string{});
         workflow_runner::stop_workflow(runId);
+        resolve_ok(seq, true);
+        return;
+    }
+
+    // ── File watcher: native recursive directory watch, restarted on cwd change ─
+    if (type == "fs.watch") {
+        std::string path = args.value("path", std::string{});
+        file_watcher::start(path,
+            [this](const std::string& event, const json& data) { emit(event, data); });
+        resolve_ok(seq, true);
+        return;
+    }
+
+    if (type == "fs.unwatch") {
+        file_watcher::stop();
         resolve_ok(seq, true);
         return;
     }

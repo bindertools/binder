@@ -194,6 +194,14 @@ export function TerminalInput(arg1, arg2) {
   return window['go']['main']['App']['TerminalInput'](arg1, arg2);
 }
 
+export function UnwatchDir() {
+  return window['go']['main']['App']['UnwatchDir']();
+}
+
+export function WatchDir(arg1) {
+  return window['go']['main']['App']['WatchDir'](arg1);
+}
+
 export function WriteFile(arg1, arg2) {
   return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }

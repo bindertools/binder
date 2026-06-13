@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
 import DeleteConfirmDialog from './DeleteConfirmDialog'
@@ -109,6 +110,21 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     void loadDir(root.path)
     for (const path of expanded) void loadDir(path)
   }, [root, expanded, loadDir])
+
+  // Native file-watcher push ('fs:changed' {dirs:[...]}) — re-fetch any
+  // directory that's currently cached (i.e. visible/expanded).
+  const dirCacheRef = useRef(dirCache)
+  useEffect(() => { dirCacheRef.current = dirCache }, [dirCache])
+
+  useEffect(() => {
+    const unsub = EventsOn('fs:changed', (data: unknown) => {
+      const dirs = (data as { dirs?: string[] })?.dirs ?? []
+      for (const dir of dirs) {
+        if (dirCacheRef.current.has(dir)) void loadDir(dir)
+      }
+    })
+    return () => unsub()
+  }, [loadDir])
 
   // ── flatten the cached tree for rendering ───────────────────────────────────
   const flatRows = useMemo(() => {
