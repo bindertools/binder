@@ -23,6 +23,8 @@
 extern "C" {
 const TSLanguage* tree_sitter_json(void);
 const TSLanguage* tree_sitter_javascript(void);
+const TSLanguage* tree_sitter_typescript(void);
+const TSLanguage* tree_sitter_tsx(void);
 }
 
 using json = nlohmann::json;
@@ -121,6 +123,26 @@ const char* kQueryJavascript = R"TSQ(
 (comment) @comment
 )TSQ";
 
+// TypeScript/TSX-specific additions on top of the JavaScript query. The
+// upstream tree-sitter-typescript highlights.scm "inherits" the javascript
+// one via an editor convention; since our query engine has no such
+// mechanism, concatenate them. Predicate-based rules (e.g. `#match?`) are
+// omitted since matches aren't filtered by predicates here.
+const char* kQueryTypescriptExtra = R"TSQ(
+(type_identifier) @type
+(predefined_type) @type.builtin
+(type_arguments
+  "<" @punctuation.bracket
+  ">" @punctuation.bracket)
+(required_parameter (identifier) @variable.parameter)
+(optional_parameter (identifier) @variable.parameter)
+[ "abstract" "declare" "enum" "implements" "interface" "keyof" "namespace"
+  "private" "protected" "public" "type" "readonly" "override" "satisfies"
+] @keyword
+)TSQ";
+
+const std::string kQueryTypescript = std::string(kQueryJavascript) + kQueryTypescriptExtra;
+
 struct LanguageDef {
     const char* name;
     const TSLanguage* (*fn)(void);
@@ -130,6 +152,8 @@ struct LanguageDef {
 const LanguageDef kLanguages[] = {
     {"json",       tree_sitter_json,       kQueryJson},
     {"javascript", tree_sitter_javascript, kQueryJavascript},
+    {"typescript", tree_sitter_typescript, kQueryTypescript.c_str()},
+    {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str()},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -140,6 +164,8 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "json" || ext == "jsonc")                return &kLanguages[0];
     if (ext == "js" || ext == "mjs" || ext == "cjs" ||
         ext == "jsx")                                   return &kLanguages[1];
+    if (ext == "ts" || ext == "mts" || ext == "cts")    return &kLanguages[2];
+    if (ext == "tsx")                                   return &kLanguages[3];
     return nullptr;
 }
 
