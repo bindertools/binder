@@ -30,6 +30,7 @@ const TSLanguage* tree_sitter_tsx(void);
 const TSLanguage* tree_sitter_c(void);
 const TSLanguage* tree_sitter_cpp(void);
 const TSLanguage* tree_sitter_c_sharp(void);
+const TSLanguage* tree_sitter_rust(void);
 }
 
 using json = nlohmann::json;
@@ -383,6 +384,83 @@ const char* kCompletionQueryCSharp = R"TSQ(
 (property_declaration name: (identifier) @property)
 )TSQ";
 
+// Rust — adapted from tree-sitter-rust's highlights.scm with `#match?`
+// predicates dropped (the all-caps-constant / uppercase-type / enum-constructor
+// heuristics) and `primitive_type`/`doc_comment` removed (not present in this
+// grammar version).
+const char* kQueryRust = R"TSQ(
+(identifier) @variable
+
+(type_identifier) @type
+(field_identifier) @property
+
+(call_expression function: (identifier) @function)
+(call_expression function: (field_expression field: (field_identifier) @function))
+(call_expression function: (scoped_identifier "::" name: (identifier) @function))
+
+(generic_function function: (identifier) @function)
+(generic_function function: (scoped_identifier name: (identifier) @function))
+(generic_function function: (field_expression field: (field_identifier) @function))
+
+(macro_invocation macro: (identifier) @function)
+
+(function_item (identifier) @function)
+(function_signature_item (identifier) @function)
+
+(struct_pattern type: (scoped_type_identifier name: (type_identifier) @function))
+
+(line_comment) @comment
+(block_comment) @comment
+
+["(" ")" "[" "]" "{" "}"] @punctuation.bracket
+(type_arguments "<" @punctuation.bracket ">" @punctuation.bracket)
+(type_parameters "<" @punctuation.bracket ">" @punctuation.bracket)
+
+["::" ":" "." "," ";"] @punctuation.delimiter
+
+(parameter (identifier) @variable)
+(lifetime (identifier) @variable)
+
+["as" "async" "await" "break" "const" "continue" "default" "dyn" "else" "enum" "extern" "fn"
+ "for" "if" "impl" "in" "let" "loop" "macro_rules!" "match" "mod" "move" "pub" "ref" "return"
+ "static" "struct" "trait" "type" "union" "unsafe" "use" "where" "while" "yield"] @keyword
+(crate) @keyword
+(mutable_specifier) @keyword
+(use_list (self) @keyword)
+(scoped_use_list (self) @keyword)
+(scoped_identifier (self) @keyword)
+(super) @keyword
+
+(self) @variable.builtin
+
+[(char_literal) (string_literal) (raw_string_literal)] @string
+(escape_sequence) @escape
+
+(boolean_literal) @constant
+[(integer_literal) (float_literal)] @number
+
+(attribute_item) @property
+(inner_attribute_item) @property
+
+["*" "&" "!" "'"] @operator
+)TSQ";
+
+const char* kCompletionQueryRust = R"TSQ(
+(function_item name: (identifier) @function)
+(function_signature_item name: (identifier) @function)
+(struct_item name: (type_identifier) @class)
+(enum_item name: (type_identifier) @class)
+(trait_item name: (type_identifier) @class)
+(mod_item name: (identifier) @type)
+(type_item name: (type_identifier) @type)
+(const_item name: (identifier) @constant)
+(static_item name: (identifier) @variable)
+(let_declaration pattern: (identifier) @variable)
+(parameter pattern: (identifier) @variable)
+(field_declaration name: (field_identifier) @property)
+(enum_variant name: (identifier) @property)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -446,6 +524,15 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "on", "orderby", "partial", "record", "remove", "select", "set", "value", "var", "when",
         "where", "with", "yield",
     }},
+    {"rust", {
+        "as", "async", "await", "break", "const", "continue", "default", "dyn", "else", "enum",
+        "extern", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "pub",
+        "ref", "return", "static", "struct", "trait", "type", "union", "unsafe", "use", "where",
+        "while", "yield", "crate", "self", "Self", "super",
+        "bool", "char", "str", "i8", "i16", "i32", "i64", "i128", "isize",
+        "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64",
+        "true", "false", "Some", "None", "Ok", "Err", "Vec", "String", "Box", "Option", "Result",
+    }},
 };
 
 struct LanguageDef {
@@ -466,6 +553,7 @@ const LanguageDef kLanguages[] = {
     {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC},
     {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp},
     {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp},
+    {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -483,6 +571,7 @@ const LanguageDef* language_for_path(const std::string& path) {
         ext == "hpp" || ext == "hh" || ext == "hxx" || ext == "h++" ||
         ext == "ino" || ext == "tpp")                   return &kLanguages[5];
     if (ext == "cs")                                    return &kLanguages[6];
+    if (ext == "rs")                                    return &kLanguages[7];
     return nullptr;
 }
 
