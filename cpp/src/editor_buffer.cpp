@@ -27,6 +27,7 @@ const TSLanguage* tree_sitter_json(void);
 const TSLanguage* tree_sitter_javascript(void);
 const TSLanguage* tree_sitter_typescript(void);
 const TSLanguage* tree_sitter_tsx(void);
+const TSLanguage* tree_sitter_c(void);
 }
 
 using json = nlohmann::json;
@@ -159,6 +160,46 @@ const char* kQueryTypescriptExtra = R"TSQ(
 
 const std::string kQueryTypescript = std::string(kQueryJavascriptCore) + kQueryTypescriptExtra;
 
+// C — adapted from tree-sitter-c's highlights.scm with the `#match?`
+// all-caps-identifier rule dropped (predicates aren't supported here).
+const char* kQueryC = R"TSQ(
+(identifier) @variable
+
+["break" "case" "const" "continue" "default" "do" "else" "enum" "extern" "for"
+ "goto" "if" "inline" "register" "restrict" "return" "sizeof" "static"
+ "struct" "switch" "typedef" "union" "volatile" "while" "_Atomic"] @keyword
+
+(preproc_directive) @keyword
+["#define" "#elif" "#else" "#endif" "#if" "#ifdef" "#ifndef" "#include"] @keyword
+
+["--" "-" "-=" "->" "=" "!=" "*" "&" "&&" "+" "++" "+=" "<" "<=" "==" ">" ">="
+ "||" "/" "/=" "%" "%=" "*=" "&=" "|=" "^=" "<<" ">>" "<<=" ">>=" "!" "~" "?"
+] @operator
+
+["." ";" ","] @punctuation.delimiter
+["(" ")" "{" "}" "[" "]"] @punctuation.bracket
+
+(string_literal) @string
+(system_lib_string) @string
+(char_literal) @string
+(escape_sequence) @escape
+
+(null) @constant
+(number_literal) @number
+
+(field_identifier) @property
+(type_identifier) @type
+(primitive_type) @type
+(sized_type_specifier) @type
+
+(call_expression function: (identifier) @function)
+(call_expression function: (field_expression field: (field_identifier) @function))
+(function_declarator declarator: (identifier) @function)
+(preproc_function_def name: (identifier) @function)
+
+(comment) @comment
+)TSQ";
+
 // ── Completion queries ────────────────────────────────────────────────────────
 // Symbol-extraction queries for editor.completions: capture names classify
 // each captured identifier into a completion "kind" (returned to the
@@ -198,6 +239,21 @@ const char* kCompletionQueryTypescript = R"TSQ(
 (shorthand_property_identifier) @property
 )TSQ";
 
+const char* kCompletionQueryC = R"TSQ(
+(function_definition declarator: (function_declarator declarator: (identifier) @function))
+(declaration declarator: (function_declarator declarator: (identifier) @function))
+(struct_specifier name: (type_identifier) @class)
+(union_specifier name: (type_identifier) @class)
+(enum_specifier name: (type_identifier) @class)
+(type_definition declarator: (type_identifier) @type)
+(preproc_def name: (identifier) @constant)
+(preproc_function_def name: (identifier) @function)
+(declaration declarator: (identifier) @variable)
+(init_declarator declarator: (identifier) @variable)
+(parameter_declaration declarator: (identifier) @variable)
+(field_identifier) @property
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -227,6 +283,13 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "abstract", "declare", "enum", "implements", "interface", "keyof", "namespace",
         "private", "protected", "public", "type", "readonly", "override", "satisfies",
     }},
+    {"c", {
+        "break", "case", "const", "continue", "default", "do", "else", "enum", "extern", "for",
+        "goto", "if", "inline", "register", "restrict", "return", "sizeof", "static",
+        "struct", "switch", "typedef", "union", "volatile", "while", "_Atomic",
+        "auto", "char", "double", "float", "int", "long", "short", "signed", "unsigned", "void",
+        "true", "false", "NULL",
+    }},
 };
 
 struct LanguageDef {
@@ -244,6 +307,7 @@ const LanguageDef kLanguages[] = {
     {"javascript", tree_sitter_javascript, kQueryJavascript.c_str(), kCompletionQueryJavascript},
     {"typescript", tree_sitter_typescript, kQueryTypescript.c_str(), kCompletionQueryTypescript},
     {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript},
+    {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -256,6 +320,7 @@ const LanguageDef* language_for_path(const std::string& path) {
         ext == "jsx")                                   return &kLanguages[1];
     if (ext == "ts" || ext == "mts" || ext == "cts")    return &kLanguages[2];
     if (ext == "tsx")                                   return &kLanguages[3];
+    if (ext == "c" || ext == "h")                       return &kLanguages[4];
     return nullptr;
 }
 
