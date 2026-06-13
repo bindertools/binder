@@ -46,7 +46,7 @@ export async function invoke<T = unknown>(type: string, args: object = {}): Prom
   const reqId = crypto.randomUUID()
   // webview resolves the promise with the already-parsed result object
   const result = await window.__cmdide_invoke(type, JSON.stringify(args), reqId) as IpcResult<T>
-  if (!result.ok) throw new Error((result as { ok: false; error: string }).error)
+  if (!result.ok) throw new Error((result).error)
   return result.data
 }
 

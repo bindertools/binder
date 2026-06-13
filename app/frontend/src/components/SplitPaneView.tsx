@@ -93,7 +93,7 @@ export default function SplitPaneView({
   }
 
   // ── Leaf pane ──────────────────────────────────────────────────────────────
-  const pane = node as LeafPane
+  const pane = node
   const focused = pane.id === focusedPaneId
 
   return (

@@ -166,7 +166,7 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
   }, [saveCfg])
 
   const handleToggle = useCallback((key: keyof AppConfig) => {
-    const next = { ...cfgRef.current, [key]: !cfgRef.current[key as keyof AppConfig] }
+    const next = { ...cfgRef.current, [key]: !cfgRef.current[key] }
     cfgRef.current = next
     setCfg(next)
     saveCfg(next)

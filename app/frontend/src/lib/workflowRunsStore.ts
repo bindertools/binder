@@ -120,7 +120,7 @@ export function startWorkflowRun(cwd: string, file: string, name: string): strin
 
 export function stopWorkflowRun(runId: string): void {
   const cur = runs.get(runId)
-  if (!cur || cur.status !== 'running') return
+  if (cur?.status !== 'running') return
   workflows.stop(runId).catch(() => {})
 }
 
@@ -131,7 +131,7 @@ export function dismissWorkflowRun(runId: string): void {
 /** Download the run's accumulated output as a .log file. */
 export async function downloadWorkflowRunLog(runId: string): Promise<void> {
   const cur = runs.get(runId)
-  if (!cur || cur.downloadState !== 'idle') return
+  if (cur?.downloadState !== 'idle') return
   update(runId, { downloadState: 'downloading' })
 
   try {

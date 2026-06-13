@@ -172,7 +172,7 @@ export default function Terminal({
       barPromptRef.current = data
       const list = blocksRef.current
       const last = list[list.length - 1]
-      if (last && last.status === 'running') {
+      if (last?.status === 'running') {
         const exitCode = data.exitCode ?? 0
         last.exitCode = exitCode
         last.status = deriveStatus(exitCode, isBackgroundCommand(last.command))
@@ -338,7 +338,7 @@ export default function Terminal({
       if (!e.ctrlKey) return
 
       // Use the xterm screen element as the coordinate reference
-      const screen = container.querySelector('.xterm-screen') as HTMLElement | null
+      const screen = container.querySelector('.xterm-screen')
       if (!screen) return
 
       // Cell dimensions via xterm's internal render service
@@ -458,7 +458,7 @@ export default function Terminal({
       }
       const list = blocksRef.current
       const last = list[list.length - 1]
-      if (last && last.status === 'running') {
+      if (last?.status === 'running') {
         last.outputRaw += data
         scheduleBlocksUpdate()
       }
@@ -699,7 +699,7 @@ export default function Terminal({
       const el = containerRef.current
       if (el && el.offsetWidth > 0 && el.offsetHeight > 0) fitAddon.fit()
     })
-    ro.observe(containerRef.current!)
+    ro.observe(containerRef.current)
 
     return () => {
       ro.disconnect()

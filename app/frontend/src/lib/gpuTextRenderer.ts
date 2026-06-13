@@ -66,7 +66,7 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
 }
 
 function link(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string): WebGLProgram {
-  const prog = gl.createProgram()!
+  const prog = gl.createProgram()
   const vs = compile(gl, gl.VERTEX_SHADER, vsSrc)
   const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc)
   gl.attachShader(prog, vs)
@@ -172,7 +172,7 @@ export class GpuTextRenderer {
 
   private setupVao(instBuf: WebGLBuffer, fields: { loc: number; size: number }[]): WebGLVertexArrayObject {
     const gl = this.gl
-    const vao = gl.createVertexArray()!
+    const vao = gl.createVertexArray()
     gl.bindVertexArray(vao)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf)

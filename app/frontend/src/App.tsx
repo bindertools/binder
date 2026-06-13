@@ -256,7 +256,7 @@ function tabReducer(state: TabState, action: TabAction): TabState {
         if (existing) return { ...state, activeId: existing.id }
       }
       const tab: Tab = {
-        id: nextId(), type: action.tabType as Tab['type'], title: action.title,
+        id: nextId(), type: action.tabType, title: action.title,
         parentId: action.terminalId,
         ...(action.cwd ? { meta: { cwd: action.cwd } } : {}),
       }
@@ -703,7 +703,7 @@ export default function App() {
         if (restoredActiveId) dispatch({ type: 'select', id: restoredActiveId })
       }
     }).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [appConfig.soft_close])
 
   // ── Theme CSS vars ───────────────────────────────────────────────────────────
@@ -918,7 +918,7 @@ export default function App() {
 
   const handleDuplicateTab = useCallback(async (tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
-    if (!tab || tab.type !== 'terminal') return
+    if (tab?.type !== 'terminal') return
     const cwd = await GetTerminalCwd(tabId).catch(() => '')
     const newId = nextId()
     const workspaceId = workspaceIdOf(tabId, tabs)
@@ -1265,7 +1265,7 @@ export default function App() {
         <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
       </button>
     </div>
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   ), [updateTag, handleQuit])
 
   return (
@@ -1373,7 +1373,7 @@ export default function App() {
             const owningLeaf = allLeaves.find(l => l.tabIds.includes(tab.id))
             let leaf: LeafPane | undefined
             let visible = false
-            if (owningLeaf && owningLeaf.activePage === 'terminal') {
+            if (owningLeaf?.activePage === 'terminal') {
               const leafTabs = owningLeaf.tabIds.map(id => tabs.find(t => t.id === id)).filter((t): t is Tab => t !== undefined)
               const activeTab = leafTabs.find(t => t.id === owningLeaf.activeTabId)
               const showTerminalPage = !activeTab || activeTab.type === 'terminal'
@@ -1407,7 +1407,7 @@ export default function App() {
                   xtermTheme={resolvedTheme.xtermTheme}
                   initialCwd={tab.initialCwd}
                   defaultZoom={currentZoom}
-                  commandAlignment={(appConfig.command_alignment as 'default' | 'top' | 'bottom') ?? 'default'}
+                  commandAlignment={(appConfig.command_alignment) ?? 'default'}
                   pluginCommands={pluginCommands}
                   onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
                 />

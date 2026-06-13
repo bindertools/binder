@@ -185,7 +185,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
   const loadTree = useCallback(async () => {
     if (!cwd) return
     // Render the tree immediately — never block on git status
-    setTree(await ExplorerOpen(cwd) as FileNode)
+    setTree(await ExplorerOpen(cwd))
     // Fetch git badges in the background; they paint in once ready
     if (isInstalled('git')) void fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
@@ -255,7 +255,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
       setFocusedPanel(panel)
       setSelectedPaths(new Set())
     } catch { /* permission error */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [openFiles, switchActiveFile])
 
   // ── close files ───────────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
         return next
       })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [openFiles, selectedPaths])
 
   // ── activate tab ─────────────────────────────────────────────────────────────

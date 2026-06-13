@@ -168,7 +168,7 @@ function SidebarBtn({ active, label, onClick, onMouseDown, children }: BtnProps)
   const tooltipEl = tooltipVisible && btnRef.current
     ? ReactDOM.createPortal(
         (() => {
-          const rect = btnRef.current!.getBoundingClientRect()
+          const rect = btnRef.current.getBoundingClientRect()
           return (
             <div
               className="fixed z-[9999] px-2.5 py-1 rounded-md bg-[var(--info-bar-bg)] border border-sep text-[11.5px] font-ui text-[var(--info-bar-hover-color)] shadow-overlay select-none pointer-events-none whitespace-nowrap"
@@ -277,7 +277,7 @@ function MoreMenu({ active, onOpenNotepad, recentPaths, onSelectRecentPath }: Mo
   const menuEl = open && btnRef.current
     ? ReactDOM.createPortal(
         (() => {
-          const rect = btnRef.current!.getBoundingClientRect()
+          const rect = btnRef.current.getBoundingClientRect()
           return (
             <div
               ref={menuRef}
