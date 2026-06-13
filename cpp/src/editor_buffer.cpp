@@ -41,6 +41,7 @@ const TSLanguage* tree_sitter_toml(void);
 const TSLanguage* tree_sitter_dockerfile(void);
 const TSLanguage* tree_sitter_yaml(void);
 const TSLanguage* tree_sitter_css(void);
+const TSLanguage* tree_sitter_scss(void);
 }
 
 using json = nlohmann::json;
@@ -1283,6 +1284,98 @@ const char* kCompletionQueryCss = R"TSQ(
 (tag_name) @type
 )TSQ";
 
+// SCSS — tree-sitter-scss's own highlights.scm assumes it's layered on top of
+// the CSS highlights via nvim-treesitter's `; inherits: css` mechanism, which
+// this single-query-per-language engine doesn't support. Rewritten as a
+// self-contained query combining CSS-equivalent base rules (selectors,
+// properties, values) with SCSS additions (`$variables`, `#{interpolation}`,
+// `%placeholders`, `@mixin`/`@include`/`@function`/control-flow at-rules).
+// `@variable.parameter` capture on parameters/arguments dropped as redundant
+// (their `(variable)` children are already covered by the generic
+// `(variable) @variable` capture). `@spell` tag dropped.
+const char* kQueryScss = R"TSQ(
+[
+  (comment)
+  (js_comment)
+] @comment
+
+(identifier) @variable
+
+(variable) @variable
+
+[
+  (tag_name)
+  (nesting_selector)
+  (universal_selector)
+  (placeholder)
+] @type
+
+[
+  "~" ">" "+" "-" "*" "/" "=" "^=" "|=" "~=" "$=" "*=" "==" "!=" "<" ">=" "<="
+  "and" "or" "not" "only"
+] @operator
+
+(attribute_selector (plain_value) @string)
+(pseudo_element_selector (tag_name) @property)
+(pseudo_class_selector (class_name) @property)
+
+[
+  (class_name)
+  (id_name)
+  (namespace_name)
+  (property_name)
+  (feature_name)
+  (keyframes_name)
+] @property
+
+(attribute_name) @property
+
+[
+  (function_name)
+  (keyword_query)
+] @function
+
+(mixin_statement name: (identifier) @function)
+(function_statement name: (identifier) @function)
+(include_statement (identifier) @function)
+
+[
+  "@media" "@import" "@charset" "@namespace" "@supports" "@keyframes"
+  "@at-root" "@debug" "@error" "@extend" "@forward" "@mixin" "@use" "@warn"
+  "@function" "@return" "@include" "@while" "@each" "@for" "@if" "@else"
+  "from" "through" "in"
+  (at_keyword)
+  (to)
+  (important)
+] @keyword
+
+(string_value) @string
+(color_value) @string.special
+(plain_value) @string
+
+(integer_value) @number
+(float_value) @number
+(unit) @type
+
+[
+  "#" "," ":"
+] @punctuation.delimiter
+
+[
+  "[" "]" "(" ")" "{" "}" "#{"
+] @punctuation.bracket
+)TSQ";
+
+const char* kCompletionQueryScss = R"TSQ(
+(mixin_statement name: (identifier) @function)
+(function_statement name: (identifier) @function)
+(variable) @variable
+(class_name) @property
+(id_name) @property
+(property_name) @property
+(placeholder) @type
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1431,6 +1524,13 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "and", "or", "not", "only", "to", "from", "important",
         "inherit", "initial", "unset", "revert", "none", "auto",
     }},
+    {"scss", {
+        "mixin", "include", "extend", "function", "return", "while", "each", "for",
+        "if", "else", "from", "through", "in", "and", "or", "not", "only",
+        "media", "import", "supports", "keyframes", "important", "to",
+        "debug", "warn", "error", "forward", "use",
+        "inherit", "initial", "unset", "revert", "none", "auto",
+    }},
 };
 
 struct LanguageDef {
@@ -1462,6 +1562,7 @@ const LanguageDef kLanguages[] = {
     {"dockerfile", tree_sitter_dockerfile, kQueryDockerfile,         kCompletionQueryDockerfile},
     {"yaml",       tree_sitter_yaml,       kQueryYaml,               kCompletionQueryYaml},
     {"css",        tree_sitter_css,        kQueryCss,                kCompletionQueryCss},
+    {"scss",       tree_sitter_scss,       kQueryScss,               kCompletionQueryScss},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1500,6 +1601,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "toml")                                  return &kLanguages[14];
     if (ext == "yaml" || ext == "yml")                  return &kLanguages[16];
     if (ext == "css")                                   return &kLanguages[17];
+    if (ext == "scss")                                  return &kLanguages[18];
     return nullptr;
 }
 
