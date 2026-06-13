@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -90,7 +91,13 @@ const char* kQueryJson = R"TSQ((string) @string
 (pair key: (string) @property)
 )TSQ";
 
-const char* kQueryJavascript = R"TSQ(
+// Core JS query, shared with TypeScript/TSX. Patterns here must compile
+// against all of tree_sitter_javascript/typescript/tsx — fields whose node
+// type differs between grammars (e.g. class_declaration's `name`, which is
+// `identifier` in JS but `type_identifier` in TS) belong in the per-language
+// extras below instead, since a single incompatible pattern fails the whole
+// query (ts_query_new rejects the entire string on any structure error).
+const char* kQueryJavascriptCore = R"TSQ(
 (identifier) @variable
 ["{" "}" "(" ")" "[" "]" ";" "," "."] @punctuation
 ["=" "+" "-" "*" "/" "%" "==" "===" "!=" "!==" "<" ">" "<=" ">=" "&&" "||" "!"
@@ -111,7 +118,6 @@ const char* kQueryJavascript = R"TSQ(
 (generator_function_declaration name: (identifier) @function)
 (method_definition name: (property_identifier) @function)
 (arrow_function parameter: (identifier) @variable)
-(class_declaration name: (identifier) @type)
 (new_expression constructor: (identifier) @type)
 (number) @number
 [(true) (false) (null) (undefined)] @constant
@@ -123,7 +129,16 @@ const char* kQueryJavascript = R"TSQ(
 (comment) @comment
 )TSQ";
 
-// TypeScript/TSX-specific additions on top of the JavaScript query. The
+// JavaScript-only addition: class_declaration's `name` field is `identifier`
+// in the JS grammar but `type_identifier` in TS/TSX (already covered there by
+// the generic `(type_identifier) @type` in kQueryTypescriptExtra).
+const char* kQueryJavascriptExtra = R"TSQ(
+(class_declaration name: (identifier) @type)
+)TSQ";
+
+const std::string kQueryJavascript = std::string(kQueryJavascriptCore) + kQueryJavascriptExtra;
+
+// TypeScript/TSX-specific additions on top of the JavaScript core query. The
 // upstream tree-sitter-typescript highlights.scm "inherits" the javascript
 // one via an editor convention; since our query engine has no such
 // mechanism, concatenate them. Predicate-based rules (e.g. `#match?`) are
@@ -141,7 +156,7 @@ const char* kQueryTypescriptExtra = R"TSQ(
 ] @keyword
 )TSQ";
 
-const std::string kQueryTypescript = std::string(kQueryJavascript) + kQueryTypescriptExtra;
+const std::string kQueryTypescript = std::string(kQueryJavascriptCore) + kQueryTypescriptExtra;
 
 struct LanguageDef {
     const char* name;
@@ -151,7 +166,7 @@ struct LanguageDef {
 
 const LanguageDef kLanguages[] = {
     {"json",       tree_sitter_json,       kQueryJson},
-    {"javascript", tree_sitter_javascript, kQueryJavascript},
+    {"javascript", tree_sitter_javascript, kQueryJavascript.c_str()},
     {"typescript", tree_sitter_typescript, kQueryTypescript.c_str()},
     {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str()},
 };
@@ -189,8 +204,12 @@ CompiledQuery* compiled_query_for(const LanguageDef* lang) {
                               &err_offset, &err_type);
     auto cq = std::make_unique<CompiledQuery>();
     if (!q) {
-        spdlog::error("editor: highlight query failed for {} at offset {} (err {})",
-                      lang->name, err_offset, (int)err_type);
+        size_t len = strlen(lang->query_src);
+        size_t s = err_offset > 20 ? err_offset - 20 : 0;
+        size_t e = std::min(len, (size_t)err_offset + 30);
+        spdlog::error("editor: highlight query failed for {} at offset {} (err {}): ...{}...",
+                      lang->name, err_offset, (int)err_type,
+                      std::string(lang->query_src + s, e - s));
     } else {
         cq->query = q;
         uint32_t n = ts_query_capture_count(q);
@@ -330,25 +349,44 @@ json compute_lines(Buffer& buf, uint32_t first, uint32_t last) {
         ts_query_cursor_set_byte_range(cursor, range_start, range_end);
         ts_query_cursor_exec(cursor, cq->query, ts_tree_root_node(buf.tree));
 
+        // Collect all captures first: tree-sitter doesn't emit matches in
+        // pattern-declaration order (overlapping captures for the same node
+        // can arrive in either order), so painting as matches stream in would
+        // make the override outcome order-dependent. Instead paint afterwards
+        // in pattern-declaration order, so later patterns reliably override
+        // earlier ones as documented above.
+        struct PaintEntry { uint32_t pattern_index, ns, ne; uint8_t style; };
+        std::vector<PaintEntry> entries;
+
         TSQueryMatch match;
         while (ts_query_cursor_next_match(cursor, &match)) {
             for (uint16_t ci = 0; ci < match.capture_count; ci++) {
                 const TSQueryCapture& cap = match.captures[ci];
                 int style = cq->capture_styles[cap.index];
                 if (style == 0) continue;
-                uint32_t ns = ts_node_start_byte(cap.node);
-                uint32_t ne = ts_node_end_byte(cap.node);
-                for (uint32_t ln = first; ln <= last; ln++) {
-                    auto [ls, le] = bounds[ln - first];
-                    uint32_t s = std::max(ns, ls), e = std::min(ne, le);
-                    if (s >= e) continue;
-                    std::fill(paint[ln - first].begin() + (s - ls),
-                              paint[ln - first].begin() + (e - ls),
-                              (uint8_t)style);
-                }
+                entries.push_back({match.pattern_index,
+                                    ts_node_start_byte(cap.node),
+                                    ts_node_end_byte(cap.node),
+                                    (uint8_t)style});
             }
         }
         ts_query_cursor_delete(cursor);
+
+        std::stable_sort(entries.begin(), entries.end(),
+                          [](const PaintEntry& a, const PaintEntry& b) {
+                              return a.pattern_index < b.pattern_index;
+                          });
+
+        for (const auto& ent : entries) {
+            for (uint32_t ln = first; ln <= last; ln++) {
+                auto [ls, le] = bounds[ln - first];
+                uint32_t s = std::max(ent.ns, ls), e = std::min(ent.ne, le);
+                if (s >= e) continue;
+                std::fill(paint[ln - first].begin() + (s - ls),
+                          paint[ln - first].begin() + (e - ls),
+                          ent.style);
+            }
+        }
     }
 
     // RLE-pack the paint arrays into spans, converting columns to UTF-16.
