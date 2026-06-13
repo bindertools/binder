@@ -64,6 +64,9 @@ function textToB64(text: string): string {
       ExplorerOpen: (path: string) =>
         invoke('fs.tree', { path }),
 
+      ExplorerReaddir: (path: string) =>
+        invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path }),
+
       ExplorerGetFile: async (path: string) => {
         const r = await invoke<{ content: string }>('fs.readfile', { path })
         return b64ToText(r.content)

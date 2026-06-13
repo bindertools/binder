@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerOpen, ExplorerGetFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
+import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import IDETabBar, { OpenFile } from './IDETabBar'
@@ -113,7 +113,6 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
   const [splitRatio,   setSplitRatio]   = useState(0.5)
 
   // ── explorer state ────────────────────────────────────────────────────────────
-  const [tree,          setTree]          = useState<FileNode | null>(null)
   const [gitStatusMap,  setGitStatusMap]  = useState<Record<string, string>>({})
   const [explorerW,   setExplorerW]   = useState(220)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
@@ -182,19 +181,30 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
   }, [defaultZoom])
 
   // ── tree loading ──────────────────────────────────────────────────────────────
-  const loadTree = useCallback(async () => {
+  // The explorer loads its own directory contents lazily (see `loadDir` below);
+  // here we only need a root node (name + path) and the git status overlay.
+  const treeRoot = useMemo<FileNode | null>(() => {
+    if (!cwd) return null
+    const path = cwd.replace(/\\/g, '/').replace(/\/$/, '')
+    const parts = path.split('/').filter(Boolean)
+    return { name: parts[parts.length - 1] ?? path, path, isDir: true, ext: '' }
+  }, [cwd])
+
+  const refreshGitStatus = useCallback(() => {
     if (!cwd) return
-    // Render the tree immediately — never block on git status
-    setTree(await ExplorerOpen(cwd))
-    // Fetch git badges in the background; they paint in once ready
     if (isInstalled('git')) void fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
 
-  useEffect(() => { void loadTree() }, [loadTree])
+  useEffect(() => { refreshGitStatus() }, [refreshGitStatus])
 
-  useEffect(() => {
-    EventsOn('fullscreen:tree', (node: FileNode) => setTree(node))
-    return () => EventsOff('fullscreen:tree')
+  // Fetch and convert one directory's children for the lazy explorer.
+  const loadDir = useCallback(async (path: string): Promise<FileNode[]> => {
+    const { entries } = await ExplorerReaddir(path)
+    return entries.map(e => {
+      const dot = !e.isDir ? e.name.lastIndexOf('.') : -1
+      const ext = dot > 0 ? e.name.slice(dot + 1) : ''
+      return { name: e.name, path: `${path}/${e.name}`, isDir: e.isDir, ext }
+    })
   }, [])
 
   // Live-reload open file content when the file changes on disk externally.
@@ -496,10 +506,11 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
             </div>
           </div>
           <FileExplorer
-            root={tree}
+            root={treeRoot}
             selectedPath={activeFile ?? ''}
             onSelect={node => openFile(node)}
-            onRefresh={loadTree}
+            onRefresh={refreshGitStatus}
+            onLoadDir={loadDir}
             gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
             onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
           />

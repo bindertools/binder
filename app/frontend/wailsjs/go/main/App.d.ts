@@ -38,6 +38,8 @@ export function ExplorerMove(arg1:string,arg2:string):Promise<void>;
 
 export function ExplorerOpen(arg1:string):Promise<fullscreen.FileNode>;
 
+export function ExplorerReaddir(arg1:string):Promise<{entries: {name: string; isDir: boolean; size: number; mtime: number}[]}>;
+
 export function ExplorerRename(arg1:string,arg2:string):Promise<void>;
 
 export function ExplorerReveal(arg1:string):Promise<void>;

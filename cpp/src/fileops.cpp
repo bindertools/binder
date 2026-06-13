@@ -157,19 +157,34 @@ std::string detect_language(const std::string& path) {
 json readdir(const std::string& path) {
     auto p = from_u8(path);
     std::error_code ec;
-    json entries = json::array();
+    std::vector<fs::directory_entry> entries;
     for (auto& e : fs::directory_iterator(p, ec)) {
         if (ec) { ec.clear(); continue; }
+        entries.push_back(e);
+        ec.clear();
+    }
+
+    // Dirs first, then files; both sorted case-insensitively — matches tree().
+    std::sort(entries.begin(), entries.end(),
+              [](const fs::directory_entry& a, const fs::directory_entry& b) {
+                  bool da = a.is_directory(), db = b.is_directory();
+                  if (da != db) return da;
+                  return lower(a.path().filename().u8string()) <
+                         lower(b.path().filename().u8string());
+              });
+
+    json out = json::array();
+    for (auto& e : entries) {
         int64_t sz = e.is_regular_file(ec) ? static_cast<int64_t>(e.file_size(ec)) : 0;
-        entries.push_back({
+        ec.clear();
+        out.push_back({
             {"name",  e.path().filename().u8string()},
             {"isDir", e.is_directory()},
             {"size",  sz},
             {"mtime", get_mtime(e.path())},
         });
-        ec.clear();
     }
-    return entries;
+    return out;
 }
 
 json tree(const std::string& path) {

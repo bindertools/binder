@@ -58,6 +58,10 @@ export function ExplorerOpen(arg1) {
   return window['go']['main']['App']['ExplorerOpen'](arg1);
 }
 
+export function ExplorerReaddir(arg1) {
+  return window['go']['main']['App']['ExplorerReaddir'](arg1);
+}
+
 export function ExplorerRename(arg1, arg2) {
   return window['go']['main']['App']['ExplorerRename'](arg1, arg2);
 }
