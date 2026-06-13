@@ -14,6 +14,7 @@
 #include "../src/workflows.hpp"
 #include "../src/workflow_runner.hpp"
 #include "../src/base64.hpp"
+#include "../src/editor_buffer.hpp"
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -113,7 +114,8 @@ json Dispatcher::old_to_new(const std::string& type,
         pack_ops::dispatch(type, msg, req_id, resp)  ||
         updater_ops::dispatch(type, msg, req_id, resp)||
         git_ops::dispatch(type, msg, req_id, resp)  ||
-        workflows_ops::dispatch(type, msg, req_id, resp);
+        workflows_ops::dispatch(type, msg, req_id, resp)||
+        editor_ops::dispatch(type, msg, req_id, resp);
 
     if (!handled) {
         return {{"ok", false}, {"error", "not yet implemented: " + type}};
