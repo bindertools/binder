@@ -32,6 +32,7 @@ const TSLanguage* tree_sitter_cpp(void);
 const TSLanguage* tree_sitter_c_sharp(void);
 const TSLanguage* tree_sitter_rust(void);
 const TSLanguage* tree_sitter_go(void);
+const TSLanguage* tree_sitter_java(void);
 }
 
 using json = nlohmann::json;
@@ -508,6 +509,65 @@ const char* kCompletionQueryGo = R"TSQ(
 (import_spec name: (package_identifier) @type)
 )TSQ";
 
+// Java — adapted from tree-sitter-java's highlights.scm with `#match?`
+// predicates dropped (field/scoped-identifier/method "looks like a type"
+// heuristics and the all-caps-constant heuristic).
+const char* kQueryJava = R"TSQ(
+(identifier) @variable
+
+(method_declaration name: (identifier) @function)
+(method_invocation name: (identifier) @function)
+(super) @function.builtin
+
+(annotation name: (identifier) @property)
+(marker_annotation name: (identifier) @property)
+"@" @operator
+
+(type_identifier) @type
+
+(interface_declaration name: (identifier) @type)
+(class_declaration name: (identifier) @type)
+(enum_declaration name: (identifier) @type)
+(constructor_declaration name: (identifier) @type)
+
+[(boolean_type) (integral_type) (floating_point_type) (void_type)] @type
+
+(this) @variable.builtin
+
+[(hex_integer_literal) (decimal_integer_literal) (octal_integer_literal)
+ (decimal_floating_point_literal) (hex_floating_point_literal)] @number
+
+[(character_literal) (string_literal)] @string
+(escape_sequence) @escape
+
+[(true) (false) (null_literal)] @constant
+
+[(line_comment) (block_comment)] @comment
+
+[
+ "abstract" "assert" "break" "case" "catch" "class" "continue" "default" "do"
+ "else" "enum" "exports" "extends" "final" "finally" "for" "if" "implements"
+ "import" "instanceof" "interface" "module" "native" "new" "non-sealed" "open"
+ "opens" "package" "private" "protected" "provides" "public" "requires" "record"
+ "return" "sealed" "static" "strictfp" "switch" "synchronized" "throw" "throws"
+ "to" "transient" "transitive" "try" "uses" "volatile" "while" "with"
+] @keyword
+)TSQ";
+
+const char* kCompletionQueryJava = R"TSQ(
+(method_declaration name: (identifier) @function)
+(constructor_declaration name: (identifier) @function)
+(class_declaration name: (identifier) @class)
+(interface_declaration name: (identifier) @class)
+(enum_declaration name: (identifier) @class)
+(record_declaration name: (identifier) @class)
+(annotation_type_declaration name: (identifier) @class)
+(enum_constant name: (identifier) @property)
+(formal_parameter name: (identifier) @variable)
+(local_variable_declaration declarator: (variable_declarator name: (identifier) @variable))
+(field_declaration declarator: (variable_declarator name: (identifier) @property))
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -591,6 +651,18 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "append", "cap", "close", "complex", "copy", "delete", "imag", "len", "make", "new",
         "panic", "print", "println", "real", "recover",
     }},
+    {"java", {
+        "abstract", "assert", "break", "case", "catch", "class", "continue", "default", "do",
+        "else", "enum", "exports", "extends", "final", "finally", "for", "if", "implements",
+        "import", "instanceof", "interface", "module", "native", "new", "open", "opens",
+        "package", "private", "protected", "provides", "public", "requires", "record",
+        "return", "sealed", "static", "strictfp", "switch", "synchronized", "throw", "throws",
+        "to", "transient", "transitive", "try", "uses", "volatile", "while", "with",
+        "boolean", "byte", "char", "double", "float", "int", "long", "short", "void",
+        "true", "false", "null", "this", "super",
+        "String", "Integer", "Long", "Double", "Float", "Boolean", "Character", "Object",
+        "List", "Map", "Set", "ArrayList", "HashMap", "HashSet", "System",
+    }},
 };
 
 struct LanguageDef {
@@ -613,6 +685,7 @@ const LanguageDef kLanguages[] = {
     {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp},
     {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust},
     {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo},
+    {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -632,6 +705,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "cs")                                    return &kLanguages[6];
     if (ext == "rs")                                    return &kLanguages[7];
     if (ext == "go")                                    return &kLanguages[8];
+    if (ext == "java")                                  return &kLanguages[9];
     return nullptr;
 }
 
