@@ -114,6 +114,18 @@ inline std::string GetFrontendUrl(webview::webview& wv, const std::string& extra
         auto* controller = static_cast<ICoreWebView2Controller*>(ctrl_res.value());
         ICoreWebView2* wv2 = nullptr;
         if (SUCCEEDED(controller->get_CoreWebView2(&wv2)) && wv2) {
+            // Disable WebView2's built-in browser shortcuts (Ctrl+F find,
+            // Ctrl+P print, F5/Ctrl+R reload, etc.) so the IDE's own
+            // keybindings (find/replace, save, ...) receive these keys.
+            ICoreWebView2Settings* settings = nullptr;
+            if (SUCCEEDED(wv2->get_Settings(&settings)) && settings) {
+                ICoreWebView2Settings3* settings3 = nullptr;
+                if (SUCCEEDED(settings->QueryInterface(IID_PPV_ARGS(&settings3))) && settings3) {
+                    settings3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+                    settings3->Release();
+                }
+                settings->Release();
+            }
             ICoreWebView2_3* wv2_3 = nullptr;
             if (SUCCEEDED(wv2->QueryInterface(IID_PPV_ARGS(&wv2_3))) && wv2_3) {
                 std::wstring wdir(extractedRoot.begin(), extractedRoot.end());
