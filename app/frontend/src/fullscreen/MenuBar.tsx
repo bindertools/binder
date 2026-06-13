@@ -33,7 +33,8 @@ export default function MenuBar({
   // Run a menu action then close the dropdown
   const exec = useCallback((fn: Act) => { setOpen(null); fn() }, [])
 
-  // Trigger a Monaco editor command by ID
+  // Trigger an editor command by ID (Monaco-style command names, mapped
+  // onto GpuEditor operations in FullscreenIDE's getEditor()).
   const trigger = useCallback((cmd: string) => {
     setOpen(null)
     const ed = getEditor()

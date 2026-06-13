@@ -12,14 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.6.0",
     "@tanstack/react-virtual": "^3.14.2",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^5.5.0",
-    "monaco-editor": "^0.52.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

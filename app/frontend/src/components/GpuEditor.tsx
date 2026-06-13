@@ -33,6 +33,8 @@ export interface GpuEditorHandle {
   save: () => Promise<void>
   undo: () => void
   redo: () => void
+  selectAll: () => void
+  openFind: (mode: 'find' | 'replace') => void
 }
 
 interface Props {
@@ -1009,6 +1011,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void updateBracketMatch()
   }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
+  const selectAll = useCallback(async () => {
+    closeCompletions()
+    const lastLine = lineCountRef.current - 1
+    const data = await ensureLine(lastLine)
+    cursorsRef.current = [{ line: lastLine, col: data?.text.length ?? 0, anchorLine: 0, anchorCol: 0 }]
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
     closeCompletions()
@@ -1355,7 +1370,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     save,
     undo: () => { void undo() },
     redo: () => { void redo() },
-  }), [save, undo, redo])
+    selectAll: () => { void selectAll() },
+    openFind,
+  }), [save, undo, redo, selectAll, openFind])
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">

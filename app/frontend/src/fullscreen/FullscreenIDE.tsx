@@ -633,12 +633,17 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
     if (!handle) return null
     return {
       focus: handle.focus,
-      // Monaco-command compatibility shim for MenuBar: only undo/redo map
-      // onto the GPU editor today. Find/replace, format, minimap toggle,
-      // smart selection, go-to-symbol, etc. are addressed in later phases.
+      // Maps MenuBar's Monaco-style command IDs onto GpuEditor operations.
+      // Cut/copy/paste work via the browser's native clipboard shortcuts on
+      // the editor's hidden textarea. Comment/format/smart-select/go-to-
+      // symbol/definition/references and history navigation have no
+      // equivalent in the in-house editor and remain no-ops.
       trigger: (_source: string, cmd: string) => {
         if (cmd === 'undo') handle.undo()
         else if (cmd === 'redo') handle.redo()
+        else if (cmd === 'editor.action.selectAll') handle.selectAll()
+        else if (cmd === 'actions.find') handle.openFind('find')
+        else if (cmd === 'editor.action.startFindReplaceAction') handle.openFind('replace')
       },
     }
   }, [])

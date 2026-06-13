@@ -476,14 +476,13 @@
 .ide-tab--active .ide-tab__close { color: var(--ide-text-mid); }
 .ide-tab__close:hover { background: var(--ide-border-lo); color: var(--ide-fg) !important; }
 
-/* ── Monaco wrapper ───────────────────────────────────────────────────────────── */
+/* ── Editor pane ──────────────────────────────────────────────────────────────── */
 .ide-editor {
   flex: 1;
   overflow: hidden;
   position: relative;
   background: var(--ide-editor-bg);
 }
-.ide-editor .monaco-editor { padding-top: 4px; }
 
 .ide-editor__empty {
   width: 100%;
