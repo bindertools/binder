@@ -39,6 +39,7 @@ const TSLanguage* tree_sitter_bash(void);
 const TSLanguage* tree_sitter_zig(void);
 const TSLanguage* tree_sitter_toml(void);
 const TSLanguage* tree_sitter_dockerfile(void);
+const TSLanguage* tree_sitter_yaml(void);
 }
 
 using json = nlohmann::json;
@@ -1123,6 +1124,102 @@ const char* kCompletionQueryDockerfile = R"TSQ(
 (variable) @property
 )TSQ";
 
+// YAML — adapted directly from tree-sitter-yaml's highlights.scm (no
+// predicates to drop). `@constant.builtin` -> `@constant`, `@label` ->
+// `@variable`, and `@attribute` (document directives) -> `@keyword`, since
+// kStyles has no dedicated slots for those.
+const char* kQueryYaml = R"TSQ(
+(boolean_scalar) @constant
+
+(null_scalar) @constant
+
+[
+  (double_quote_scalar)
+  (single_quote_scalar)
+  (block_scalar)
+  (string_scalar)
+] @string
+
+[
+  (integer_scalar)
+  (float_scalar)
+] @number
+
+(comment) @comment
+
+[
+  (anchor_name)
+  (alias_name)
+] @variable
+
+(tag) @type
+
+[
+  (yaml_directive)
+  (tag_directive)
+  (reserved_directive)
+] @keyword
+
+(block_mapping_pair
+  key: (flow_node
+    [
+      (double_quote_scalar)
+      (single_quote_scalar)
+    ] @property))
+
+(block_mapping_pair
+  key: (flow_node
+    (plain_scalar
+      (string_scalar) @property)))
+
+(flow_mapping
+  (_
+    key: (flow_node
+      [
+        (double_quote_scalar)
+        (single_quote_scalar)
+      ] @property)))
+
+(flow_mapping
+  (_
+    key: (flow_node
+      (plain_scalar
+        (string_scalar) @property))))
+
+[
+  ","
+  "-"
+  ":"
+  ">"
+  "?"
+  "|"
+] @punctuation.delimiter
+
+[
+  "["
+  "]"
+  "{"
+  "}"
+] @punctuation.bracket
+
+[
+  "*"
+  "&"
+  "---"
+  "..."
+] @punctuation.special
+)TSQ";
+
+const char* kCompletionQueryYaml = R"TSQ(
+(block_mapping_pair
+  key: (flow_node
+    (plain_scalar
+      (string_scalar) @property)))
+
+(anchor_name) @variable
+(alias_name) @variable
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1264,6 +1361,9 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "ENTRYPOINT", "VOLUME", "USER", "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL",
         "HEALTHCHECK", "SHELL", "MAINTAINER", "CROSS_BUILD",
     }},
+    {"yaml", {
+        "true", "false", "null", "yes", "no", "on", "off",
+    }},
 };
 
 struct LanguageDef {
@@ -1293,6 +1393,7 @@ const LanguageDef kLanguages[] = {
     {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig},
     {"toml",       tree_sitter_toml,       kQueryToml,               kCompletionQueryToml},
     {"dockerfile", tree_sitter_dockerfile, kQueryDockerfile,         kCompletionQueryDockerfile},
+    {"yaml",       tree_sitter_yaml,       kQueryYaml,               kCompletionQueryYaml},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1329,6 +1430,7 @@ const LanguageDef* language_for_path(const std::string& path) {
                                                          return &kLanguages[12];
     if (ext == "zig" || ext == "zon")                   return &kLanguages[13];
     if (ext == "toml")                                  return &kLanguages[14];
+    if (ext == "yaml" || ext == "yml")                  return &kLanguages[16];
     return nullptr;
 }
 
