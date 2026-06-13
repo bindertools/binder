@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import MonacoEditor from '@monaco-editor/react'
-import type * as Monaco from 'monaco-editor'
 import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
   type WorkflowRunRecord,
 } from '../lib/workflowRunsStore'
 import { Skeleton } from './Skeleton'
+import GpuEditor from './GpuEditor'
 import WorkflowEventsMap from './WorkflowEventsMap'
+import type { GpuEditorColors } from '../themes'
 import './WorkflowsPanel.scss'
 
 interface Props {
-  cwd:             string
-  active:          boolean
-  monacoTheme?:    string
-  monacoThemeDef?: Monaco.editor.IStandaloneThemeData
+  cwd:        string
+  active:     boolean
+  gpuColors?: GpuEditorColors
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -399,7 +398,7 @@ interface SelectionState {
 // from the global workflow-runs store rather than this panel's own state).
 const lastSelection = new Map<string, SelectionState>()
 
-export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDef }: Props) {
+export default function WorkflowsPanel({ cwd, active, gpuColors }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [checking, setChecking] = useState(false)
@@ -476,14 +475,6 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
     const id = window.setInterval(() => { void refresh({ background: true }) }, 60000)
     return () => window.clearInterval(id)
   }, [active, cwd, refresh])
-
-  // Re-apply a custom theme definition if it changes while this panel is mounted.
-  useEffect(() => {
-    if (!monacoThemeDef || !monacoTheme) return
-    const api = (window as any).monaco as typeof Monaco | undefined
-    if (!api) return
-    api.editor.defineTheme(monacoTheme, monacoThemeDef)
-  }, [monacoTheme, monacoThemeDef])
 
   const selected = useMemo(
     () => (selectedFile ? list.find(w => w.file === selectedFile) ?? null : null),
@@ -619,20 +610,10 @@ export default function WorkflowsPanel({ cwd, active, monacoTheme, monacoThemeDe
                       {contentLoading ? (
                         <CodeSkeleton />
                       ) : (
-                        <MonacoEditor
-                          height="100%"
-                          language="yaml"
-                          value={content}
-                          theme={monacoTheme}
-                          options={{
-                            readOnly: true,
-                            minimap: { enabled: false },
-                            fontSize: 13,
-                            lineHeight: 22,
-                            scrollBeyondLastLine: false,
-                            wordWrap: 'on',
-                            padding: { top: 12, bottom: 12 },
-                          }}
+                        <GpuEditor
+                          filePath={`${cwd.replace(/\\/g, '/')}/${selected.path}`}
+                          colors={gpuColors}
+                          readOnly
                         />
                       )}
                     </div>

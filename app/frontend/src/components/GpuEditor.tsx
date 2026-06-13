@@ -25,6 +25,7 @@ interface Props {
   filePath: string
   fontSize?: number
   colors?: GpuEditorColors
+  readOnly?: boolean
 }
 
 // Fallback palette used until a theme-derived `colors` prop arrives —
@@ -119,7 +120,7 @@ const AUTO_CLOSE_CLOSERS = new Set([')', ']', '}', '"', "'", '`'])
 
 const OVERSCAN = 10
 
-export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
+export default function GpuEditor({ filePath, fontSize = 13, colors, readOnly = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -138,6 +139,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   const visibleColsRef = useRef<number>(1)
   const cursorVisibleRef = useRef<boolean>(true)
   const dprRef = useRef<number>(1)
+  const readOnlyRef = useRef<boolean>(readOnly)
+  readOnlyRef.current = readOnly
 
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState('')
@@ -358,7 +361,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     // added to the edit's start line; `col` is an absolute column on that line.
     cursor?: { lineOffset: number; col: number }
   }[]) => {
-    if (ops.length === 0) return
+    if (ops.length === 0 || readOnlyRef.current) return
     const sorted = [...ops].sort((a, b) => b.range[0] - a.range[0] || b.range[1] - a.range[1])
     const edits = sorted.map(({ range: [sl, sc, el, ec], text }) => ({ startLine: sl, startCol: sc, endLine: el, endCol: ec, text }))
     const resp = await invoke<{ version: number; lineCount: number; dirtyStart: number; dirtyEnd: number }>('editor.edit', {
@@ -389,6 +392,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   }, [draw, ensureCursorVisible, fetchVisible, updateBracketMatch])
 
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
+    if (readOnlyRef.current) return
     const resp = await invoke<{
       applied: boolean; version: number; lineCount: number
       dirtyStart?: number; dirtyEnd?: number
@@ -756,7 +760,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
       case 'Enter':      e.preventDefault(); void handleEnter(); return
       case 'Tab':        e.preventDefault(); void insertText('  '); return
       case 's':
-        if (e.ctrlKey || e.metaKey) {
+        if ((e.ctrlKey || e.metaKey) && !readOnlyRef.current) {
           e.preventDefault()
           void invoke('editor.save', { bufferId: bufferIdRef.current }).then(() => setStatus(''))
         }
@@ -860,6 +864,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
           ref={textareaRef}
           onKeyDown={onKeyDown}
           onInput={onInput}
+          readOnly={readOnly}
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"

@@ -1467,8 +1467,7 @@ export default function App() {
                   display: visible && rect ? 'block' : 'none',
                 }}
               >
-                <WorkflowsPanel cwd={paneCwd} active={visible}
-                  monacoTheme={resolvedTheme.monacoThemeId} monacoThemeDef={resolvedTheme.monacoThemeDef} />
+                <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors} />
               </div>
             )
           })}
