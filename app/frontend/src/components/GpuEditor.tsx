@@ -73,6 +73,40 @@ function buildPaintColors(c: GpuEditorColors): PaintColors {
   }
 }
 
+// A single caret + its optional selection anchor. Index 0 is the primary
+// cursor (drives the current-line highlight, viewport scrolling, etc.).
+interface Cursor {
+  line: number
+  col: number
+  anchorLine?: number
+  anchorCol?: number
+}
+
+// Normalized [startLine, startCol, endLine, endCol] selection for a cursor,
+// or null if it has no active selection.
+function rangeOf(c: Cursor): [number, number, number, number] | null {
+  if (c.anchorLine === undefined || c.anchorCol === undefined) return null
+  if (c.anchorLine === c.line && c.anchorCol === c.col) return null
+  if (c.anchorLine < c.line || (c.anchorLine === c.line && c.anchorCol < c.col)) {
+    return [c.anchorLine, c.anchorCol, c.line, c.col]
+  }
+  return [c.line, c.col, c.anchorLine, c.anchorCol]
+}
+
+// Drop cursors that have landed on the same position (e.g. after a
+// multi-cursor edit merges two carets together).
+function dedupeCursors(cursors: Cursor[]): Cursor[] {
+  const seen = new Set<string>()
+  const result: Cursor[] = []
+  for (const c of cursors) {
+    const key = `${c.line}:${c.col}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(c)
+  }
+  return result
+}
+
 const OVERSCAN = 10
 
 export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
@@ -88,8 +122,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
 
   const topLineRef = useRef<number>(0)
   const leftColRef = useRef<number>(0)
-  const cursorRef = useRef<{ line: number; col: number }>({ line: 0, col: 0 })
-  const selAnchorRef = useRef<{ line: number; col: number } | null>(null)
+  const cursorsRef = useRef<Cursor[]>([{ line: 0, col: 0 }])
   const visibleRowsRef = useRef<number>(1)
   const visibleColsRef = useRef<number>(1)
   const cursorVisibleRef = useRef<boolean>(true)
@@ -119,8 +152,9 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     const rows = visibleRowsRef.current
     const left = leftColRef.current
     const cols = visibleColsRef.current
-    const { line: curLine, col: curCol } = cursorRef.current
-    const sel = selectionRange()
+    const cursors = cursorsRef.current
+    const { line: curLine } = cursors[0]
+    const ranges = cursors.map(rangeOf).filter((r): r is [number, number, number, number] => r !== null)
 
     // Current-line highlight (full width, behind text)
     if (curLine >= top && curLine < top + rows) {
@@ -141,9 +175,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
 
       if (!data) continue
 
-      // Selection background
-      if (sel) {
-        const [sLine, sCol, eLine, eCol] = sel
+      // Selection backgrounds (one per cursor with an active selection)
+      for (const [sLine, sCol, eLine, eCol] of ranges) {
         if (ln >= sLine && ln <= eLine) {
           const from = ln === sLine ? sCol : 0
           const to = ln === eLine ? eCol : data.text.length + 1
@@ -176,28 +209,20 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
       }
     }
 
-    // Cursor
-    if (cursorVisibleRef.current && curLine >= top && curLine < top + rows) {
-      const x = gutterWidth + (curCol - left) * cw
-      const y = (curLine - top) * ch
-      if (curCol - left >= 0 && curCol - left <= cols) {
-        renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
+    // Carets — one per cursor
+    if (cursorVisibleRef.current) {
+      for (const c of cursors) {
+        if (c.line < top || c.line >= top + rows) continue
+        const x = gutterWidth + (c.col - left) * cw
+        const y = (c.line - top) * ch
+        if (c.col - left >= 0 && c.col - left <= cols) {
+          renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
+        }
       }
     }
 
     renderer.endFrame()
   }, [])
-
-  function selectionRange(): [number, number, number, number] | null {
-    const anchor = selAnchorRef.current
-    if (!anchor) return null
-    const cur = cursorRef.current
-    if (anchor.line === cur.line && anchor.col === cur.col) return null
-    if (anchor.line < cur.line || (anchor.line === cur.line && anchor.col < cur.col)) {
-      return [anchor.line, anchor.col, cur.line, cur.col]
-    }
-    return [cur.line, cur.col, anchor.line, anchor.col]
-  }
 
   // ── Data fetching ───────────────────────────────────────────────────────────
 
@@ -262,7 +287,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   }, [])
 
   const ensureCursorVisible = useCallback(() => {
-    const { line, col } = cursorRef.current
+    const { line, col } = cursorsRef.current[0]
     const rows = visibleRowsRef.current
     const cols = visibleColsRef.current
     if (line < topLineRef.current) topLineRef.current = line
@@ -274,18 +299,38 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
 
   // ── Editing ─────────────────────────────────────────────────────────────────
 
-  const applyEdit = useCallback(async (sl: number, sc: number, el: number, ec: number, text: string) => {
+  // Apply one edit per cursor (some cursors may be skipped — e.g. a no-op
+  // backspace at the start of the document). `ops[].idx` indexes into
+  // `cursorsRef.current`; edits are sent to the backend in reverse document
+  // order so earlier entries' coordinates aren't invalidated by later ones,
+  // and each cursor's new position is then computed purely from its own
+  // edit (safe because reverse order means no edit shifts a not-yet-applied
+  // cursor's coordinates).
+  const applyMultiEdit = useCallback(async (ops: { idx: number; range: [number, number, number, number]; text: string }[]) => {
+    if (ops.length === 0) return
+    const sorted = [...ops].sort((a, b) => b.range[0] - a.range[0] || b.range[1] - a.range[1])
+    const edits = sorted.map(({ range: [sl, sc, el, ec], text }) => ({ startLine: sl, startCol: sc, endLine: el, endCol: ec, text }))
     const resp = await invoke<{ version: number; lineCount: number; dirtyStart: number; dirtyEnd: number }>('editor.edit', {
-      bufferId: bufferIdRef.current,
-      edits: [{ startLine: sl, startCol: sc, endLine: el, endCol: ec, text }],
+      bufferId: bufferIdRef.current, edits,
     })
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     lineCacheRef.current.clear()
+
+    const cursors = cursorsRef.current.slice()
+    for (const { idx, range: [sl, sc], text } of ops) {
+      const lines = text.split('\n')
+      cursors[idx] = lines.length === 1
+        ? { line: sl, col: sc + text.length }
+        : { line: sl + lines.length - 1, col: lines[lines.length - 1].length }
+    }
+    cursorsRef.current = dedupeCursors(cursors)
+
     setStatus('●')
+    ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, fetchVisible])
+  }, [draw, ensureCursorVisible, fetchVisible])
 
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
     const resp = await invoke<{
@@ -297,10 +342,11 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     lineCacheRef.current.clear()
-    selAnchorRef.current = null
-    if (resp.cursorLine !== undefined && resp.cursorCol !== undefined) {
-      cursorRef.current = { line: resp.cursorLine, col: resp.cursorCol }
-    }
+    const primary = cursorsRef.current[0]
+    cursorsRef.current = [{
+      line: resp.cursorLine ?? primary.line,
+      col: resp.cursorCol ?? primary.col,
+    }]
     cursorVisibleRef.current = true
     setStatus('●')
     ensureCursorVisible()
@@ -312,112 +358,148 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
 
   const insertText = useCallback(async (text: string) => {
-    const sel = selectionRange()
-    let sl: number, sc: number, el: number, ec: number
-    if (sel) {
-      [sl, sc, el, ec] = sel
-      selAnchorRef.current = null
-    } else {
-      sl = el = cursorRef.current.line
-      sc = ec = cursorRef.current.col
-    }
-    const lines = text.split('\n')
-    if (lines.length === 1) {
-      cursorRef.current = { line: sl, col: sc + text.length }
-    } else {
-      cursorRef.current = { line: sl + lines.length - 1, col: lines[lines.length - 1].length }
-    }
-    ensureCursorVisible()
-    await applyEdit(sl, sc, el, ec, text)
-  }, [applyEdit, ensureCursorVisible])
+    const ops = cursorsRef.current.map((c, idx) => {
+      const range = rangeOf(c) ?? [c.line, c.col, c.line, c.col] as [number, number, number, number]
+      return { idx, range, text }
+    })
+    await applyMultiEdit(ops)
+  }, [applyMultiEdit])
 
   const deleteBackward = useCallback(async () => {
-    const sel = selectionRange()
-    if (sel) {
-      const [sl, sc, el, ec] = sel
-      selAnchorRef.current = null
-      cursorRef.current = { line: sl, col: sc }
-      ensureCursorVisible()
-      await applyEdit(sl, sc, el, ec, '')
-      return
+    const cursors = cursorsRef.current
+    const ops: { idx: number; range: [number, number, number, number]; text: string }[] = []
+    for (let idx = 0; idx < cursors.length; idx++) {
+      const c = cursors[idx]
+      const sel = rangeOf(c)
+      if (sel) { ops.push({ idx, range: sel, text: '' }); continue }
+      if (c.col > 0) {
+        ops.push({ idx, range: [c.line, c.col - 1, c.line, c.col], text: '' })
+      } else if (c.line > 0) {
+        const prev = await ensureLine(c.line - 1)
+        const prevLen = prev?.text.length ?? 0
+        ops.push({ idx, range: [c.line - 1, prevLen, c.line, 0], text: '' })
+      }
     }
-    const { line, col } = cursorRef.current
-    if (col > 0) {
-      cursorRef.current = { line, col: col - 1 }
-      ensureCursorVisible()
-      await applyEdit(line, col - 1, line, col, '')
-    } else if (line > 0) {
-      const prev = await ensureLine(line - 1)
-      const prevLen = prev?.text.length ?? 0
-      cursorRef.current = { line: line - 1, col: prevLen }
-      ensureCursorVisible()
-      await applyEdit(line - 1, prevLen, line, 0, '')
-    }
-  }, [applyEdit, ensureCursorVisible, ensureLine])
+    await applyMultiEdit(ops)
+  }, [applyMultiEdit, ensureLine])
 
   const deleteForward = useCallback(async () => {
-    const sel = selectionRange()
-    if (sel) {
-      const [sl, sc, el, ec] = sel
-      selAnchorRef.current = null
-      cursorRef.current = { line: sl, col: sc }
-      ensureCursorVisible()
-      await applyEdit(sl, sc, el, ec, '')
-      return
+    const cursors = cursorsRef.current
+    const ops: { idx: number; range: [number, number, number, number]; text: string }[] = []
+    for (let idx = 0; idx < cursors.length; idx++) {
+      const c = cursors[idx]
+      const sel = rangeOf(c)
+      if (sel) { ops.push({ idx, range: sel, text: '' }); continue }
+      const data = await ensureLine(c.line)
+      const len = data?.text.length ?? 0
+      if (c.col < len) {
+        ops.push({ idx, range: [c.line, c.col, c.line, c.col + 1], text: '' })
+      } else if (c.line < lineCountRef.current - 1) {
+        ops.push({ idx, range: [c.line, c.col, c.line + 1, 0], text: '' })
+      }
     }
-    const { line, col } = cursorRef.current
-    const data = await ensureLine(line)
-    const len = data?.text.length ?? 0
-    if (col < len) {
-      await applyEdit(line, col, line, col + 1, '')
-    } else if (line < lineCountRef.current - 1) {
-      await applyEdit(line, col, line + 1, 0, '')
-    }
-  }, [applyEdit, ensureCursorVisible, ensureLine])
+    await applyMultiEdit(ops)
+  }, [applyMultiEdit, ensureLine])
 
   // ── Cursor navigation ──────────────────────────────────────────────────────
 
   const moveCursor = useCallback(async (dl: number, dc: number, extend: boolean) => {
-    if (!extend) selAnchorRef.current = null
-    else if (!selAnchorRef.current) selAnchorRef.current = { ...cursorRef.current }
+    const cursors = cursorsRef.current
+    const next: Cursor[] = []
+    for (const c of cursors) {
+      let anchorLine = c.anchorLine, anchorCol = c.anchorCol
+      if (!extend) { anchorLine = undefined; anchorCol = undefined }
+      else if (anchorLine === undefined) { anchorLine = c.line; anchorCol = c.col }
 
-    let { line, col } = cursorRef.current
-    if (dl !== 0) {
-      line = Math.max(0, Math.min(lineCountRef.current - 1, line + dl))
-      const data = await ensureLine(line)
-      col = Math.min(col, data?.text.length ?? 0)
-    }
-    if (dc !== 0) {
-      col += dc
-      if (col < 0) {
-        if (line > 0) {
-          line--
-          const data = await ensureLine(line)
-          col = data?.text.length ?? 0
-        } else col = 0
-      } else {
+      let { line, col } = c
+      if (dl !== 0) {
+        line = Math.max(0, Math.min(lineCountRef.current - 1, line + dl))
         const data = await ensureLine(line)
-        const len = data?.text.length ?? 0
-        if (col > len) {
-          if (line < lineCountRef.current - 1) { line++; col = 0 }
-          else col = len
+        col = Math.min(col, data?.text.length ?? 0)
+      }
+      if (dc !== 0) {
+        col += dc
+        if (col < 0) {
+          if (line > 0) {
+            line--
+            const data = await ensureLine(line)
+            col = data?.text.length ?? 0
+          } else col = 0
+        } else {
+          const data = await ensureLine(line)
+          const len = data?.text.length ?? 0
+          if (col > len) {
+            if (line < lineCountRef.current - 1) { line++; col = 0 }
+            else col = len
+          }
         }
       }
+      next.push({ line, col, anchorLine, anchorCol })
     }
-    cursorRef.current = { line, col }
+    cursorsRef.current = dedupeCursors(next)
     cursorVisibleRef.current = true
     ensureCursorVisible()
     fetchVisible()
     draw()
   }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
 
+  // Move every cursor to a position derived from its own current position
+  // (used for Home/End, which apply per-line).
+  const moveCursorsTo = useCallback(async (transform: (c: Cursor) => { line: number; col: number }, extend: boolean) => {
+    const cursors = cursorsRef.current
+    const next: Cursor[] = []
+    for (const c of cursors) {
+      let anchorLine = c.anchorLine, anchorCol = c.anchorCol
+      if (!extend) { anchorLine = undefined; anchorCol = undefined }
+      else if (anchorLine === undefined) { anchorLine = c.line; anchorCol = c.col }
+
+      const pos = transform(c)
+      const line = Math.max(0, Math.min(lineCountRef.current - 1, pos.line))
+      const data = await ensureLine(line)
+      const col = Math.max(0, Math.min(data?.text.length ?? 0, pos.col))
+      next.push({ line, col, anchorLine, anchorCol })
+    }
+    cursorsRef.current = dedupeCursors(next)
+    cursorVisibleRef.current = true
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+
+  // Collapse to a single cursor at (line, col) — used for plain clicks/drags.
   const setCursorTo = useCallback(async (line: number, col: number, extend: boolean) => {
-    if (!extend) selAnchorRef.current = null
-    else if (!selAnchorRef.current) selAnchorRef.current = { ...cursorRef.current }
+    const primary = cursorsRef.current[0]
+    let anchorLine = primary.anchorLine, anchorCol = primary.anchorCol
+    if (!extend) { anchorLine = undefined; anchorCol = undefined }
+    else if (anchorLine === undefined) { anchorLine = primary.line; anchorCol = primary.col }
     line = Math.max(0, Math.min(lineCountRef.current - 1, line))
     const data = await ensureLine(line)
     col = Math.max(0, Math.min(data?.text.length ?? 0, col))
-    cursorRef.current = { line, col }
+    cursorsRef.current = [{ line, col, anchorLine, anchorCol }]
+    cursorVisibleRef.current = true
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+
+  // Alt+Click — add a new (unselected) cursor at the clicked position.
+  const addCursorAt = useCallback(async (line: number, col: number) => {
+    line = Math.max(0, Math.min(lineCountRef.current - 1, line))
+    const data = await ensureLine(line)
+    col = Math.max(0, Math.min(data?.text.length ?? 0, col))
+    cursorsRef.current = dedupeCursors([...cursorsRef.current, { line, col }])
+    cursorVisibleRef.current = true
+    draw()
+  }, [draw, ensureLine])
+
+  // Ctrl+Alt+Up/Down — add a cursor directly above/below the primary cursor.
+  const addCursorVertical = useCallback(async (delta: number) => {
+    const primary = cursorsRef.current[0]
+    const line = primary.line + delta
+    if (line < 0 || line >= lineCountRef.current) return
+    const data = await ensureLine(line)
+    const col = Math.min(primary.col, data?.text.length ?? 0)
+    cursorsRef.current = dedupeCursors([...cursorsRef.current, { line, col }])
     cursorVisibleRef.current = true
     ensureCursorVisible()
     fetchVisible()
@@ -449,7 +531,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
       } catch { /* no saved state */ }
       topLineRef.current = vs.topLine ?? 0
       leftColRef.current = vs.leftCol ?? 0
-      cursorRef.current = { line: vs.cursorLine ?? 0, col: vs.cursorCol ?? 0 }
+      cursorsRef.current = [{ line: vs.cursorLine ?? 0, col: vs.cursorCol ?? 0 }]
 
       recomputeViewport()
       setReady(true)
@@ -468,11 +550,12 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
       clearInterval(blink)
       const bufferId = bufferIdRef.current
       if (bufferId) {
+        const primary = cursorsRef.current[0]
         void invoke('editor.viewstate.set', {
           bufferId,
           state: {
             topLine: topLineRef.current, leftCol: leftColRef.current,
-            cursorLine: cursorRef.current.line, cursorCol: cursorRef.current.col,
+            cursorLine: primary.line, cursorCol: primary.col,
           },
         }).catch(() => {})
       }
@@ -501,14 +584,25 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const shift = e.shiftKey
     switch (e.key) {
-      case 'ArrowUp':    e.preventDefault(); void moveCursor(-1, 0, shift); return
-      case 'ArrowDown':  e.preventDefault(); void moveCursor(1, 0, shift); return
+      case 'ArrowUp':
+        if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(-1); return }
+        e.preventDefault(); void moveCursor(-1, 0, shift); return
+      case 'ArrowDown':
+        if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(1); return }
+        e.preventDefault(); void moveCursor(1, 0, shift); return
       case 'ArrowLeft':  e.preventDefault(); void moveCursor(0, -1, shift); return
       case 'ArrowRight': e.preventDefault(); void moveCursor(0, 1, shift); return
       case 'PageUp':     e.preventDefault(); void moveCursor(-visibleRowsRef.current, 0, shift); return
       case 'PageDown':   e.preventDefault(); void moveCursor(visibleRowsRef.current, 0, shift); return
-      case 'Home':       e.preventDefault(); void setCursorTo(cursorRef.current.line, 0, shift); return
-      case 'End':        e.preventDefault(); void setCursorTo(cursorRef.current.line, Infinity, shift); return
+      case 'Home':       e.preventDefault(); void moveCursorsTo(c => ({ line: c.line, col: 0 }), shift); return
+      case 'End':        e.preventDefault(); void moveCursorsTo(c => ({ line: c.line, col: Infinity }), shift); return
+      case 'Escape':
+        if (cursorsRef.current.length > 1) {
+          e.preventDefault()
+          cursorsRef.current = [cursorsRef.current[0]]
+          draw()
+        }
+        return
       case 'Backspace':  e.preventDefault(); void deleteBackward(); return
       case 'Delete':     e.preventDefault(); void deleteForward(); return
       case 'Tab':        e.preventDefault(); void insertText('  '); return
@@ -533,7 +627,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
         return
       default: return
     }
-  }, [deleteBackward, deleteForward, insertText, moveCursor, redo, setCursorTo, undo])
+  }, [addCursorVertical, deleteBackward, deleteForward, draw, insertText, moveCursor, moveCursorsTo, redo, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -561,9 +655,13 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
     textareaRef.current?.focus()
+    if (e.altKey) {
+      void addCursorAt(pos.line, pos.col)
+      return
+    }
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
-  }, [pixelToPos, setCursorTo])
+  }, [addCursorAt, pixelToPos, setCursorTo])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
