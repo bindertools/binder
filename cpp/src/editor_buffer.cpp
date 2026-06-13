@@ -37,6 +37,7 @@ const TSLanguage* tree_sitter_lua(void);
 const TSLanguage* tree_sitter_python(void);
 const TSLanguage* tree_sitter_bash(void);
 const TSLanguage* tree_sitter_zig(void);
+const TSLanguage* tree_sitter_toml(void);
 }
 
 using json = nlohmann::json;
@@ -997,6 +998,64 @@ const char* kCompletionQueryZig = R"TSQ(
 (container_field name: (identifier) @property)
 )TSQ";
 
+// TOML — adapted directly from tree-sitter-toml's highlights.scm (no
+// predicates to drop).
+const char* kQueryToml = R"TSQ(
+(bare_key) @type
+
+(quoted_key) @string
+
+(pair
+  (bare_key)) @property
+
+(pair
+  (dotted_key
+    (bare_key) @property))
+
+(boolean) @constant
+
+(comment) @comment
+
+(string) @string
+
+[
+  (integer)
+  (float)
+] @number
+
+[
+  (offset_date_time)
+  (local_date_time)
+  (local_date)
+  (local_time)
+] @string
+
+[
+  "."
+  ","
+] @punctuation.delimiter
+
+"=" @operator
+
+[
+  "["
+  "]"
+  "[["
+  "]]"
+  "{"
+  "}"
+] @punctuation.bracket
+)TSQ";
+
+const char* kCompletionQueryToml = R"TSQ(
+(pair (bare_key) @property)
+(pair (dotted_key (bare_key) @property))
+(table (bare_key) @type)
+(table (dotted_key (bare_key) @type))
+(table_array_element (bare_key) @type)
+(table_array_element (dotted_key (bare_key) @type))
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1130,6 +1189,9 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "c_short", "c_ushort", "c_int", "c_uint", "c_long", "c_ulong", "c_longlong",
         "c_ulonglong", "c_longdouble",
     }},
+    {"toml", {
+        "true", "false",
+    }},
 };
 
 struct LanguageDef {
@@ -1157,6 +1219,7 @@ const LanguageDef kLanguages[] = {
     {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython},
     {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash},
     {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig},
+    {"toml",       tree_sitter_toml,       kQueryToml,               kCompletionQueryToml},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1183,6 +1246,7 @@ const LanguageDef* language_for_path(const std::string& path) {
         ext == "bashrc" || ext == "bash_profile" || ext == "profile")
                                                          return &kLanguages[12];
     if (ext == "zig" || ext == "zon")                   return &kLanguages[13];
+    if (ext == "toml")                                  return &kLanguages[14];
     return nullptr;
 }
 
