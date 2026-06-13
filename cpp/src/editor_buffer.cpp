@@ -747,6 +747,81 @@ json op_redo(const json& msg) {
             {"cursorLine", cur_line}, {"cursorCol", cur_col}};
 }
 
+// ── Bracket matching ──────────────────────────────────────────────────────────
+// Plain stack-based scan over the byte text — no tree-sitter, so brackets
+// inside strings/comments are matched the same as code (acceptable v1
+// approximation; the result is purely cosmetic highlighting).
+
+json op_match_bracket(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
+
+    uint32_t line = msg.value("line", 0u);
+    uint32_t col = msg.value("col", 0u);
+    if (line >= b->line_count()) return {{"found", false}};
+
+    const std::string& text = b->text;
+    uint32_t ls, le;
+    b->line_bytes(line, ls, le);
+    uint32_t pos = u16_col_to_byte(text, ls, le, col);
+
+    static const std::string kOpen  = "([{";
+    static const std::string kClose = ")]}";
+
+    auto bracket_at = [&](uint32_t p) -> int {
+        if (p >= text.size()) return -1;
+        size_t o = kOpen.find(text[p]);
+        if (o != std::string::npos) return (int)o;
+        size_t c = kClose.find(text[p]);
+        if (c != std::string::npos) return -(int)c - 2; // encode close as -2-idx
+        return -1;
+    };
+
+    // Prefer the character to the right of the cursor, then to the left.
+    uint32_t anchor = UINT32_MAX;
+    int kind = -1;
+    if ((kind = bracket_at(pos)) != -1) {
+        anchor = pos;
+    } else if (pos > 0 && (kind = bracket_at(pos - 1)) != -1) {
+        anchor = pos - 1;
+    }
+    if (anchor == UINT32_MAX) return {{"found", false}};
+
+    uint32_t match = UINT32_MAX;
+    if (kind >= 0) {
+        // Opening bracket — scan forward.
+        char open = kOpen[(size_t)kind], close = kClose[(size_t)kind];
+        int depth = 0;
+        for (uint32_t i = anchor; i < text.size(); i++) {
+            if (text[i] == open) depth++;
+            else if (text[i] == close) { if (--depth == 0) { match = i; break; } }
+        }
+    } else {
+        // Closing bracket — scan backward.
+        size_t idx = (size_t)(-kind - 2);
+        char open = kOpen[idx], close = kClose[idx];
+        int depth = 0;
+        for (uint32_t i = anchor + 1; i-- > 0; ) {
+            if (text[i] == close) depth++;
+            else if (text[i] == open) { if (--depth == 0) { match = i; break; } }
+        }
+    }
+    if (match == UINT32_MAX) return {{"found", false}};
+
+    auto to_pos = [&](uint32_t byte_off) -> std::pair<uint32_t, uint32_t> {
+        TSPoint p = point_for_byte(*b, byte_off);
+        uint32_t line_start = b->line_offsets[p.row];
+        return {p.row, byte_to_u16_col(text, line_start, byte_off)};
+    };
+    auto [aLine, aCol] = to_pos(anchor);
+    auto [mLine, mCol] = to_pos(match);
+    return {{"found", true},
+            {"anchorLine", aLine}, {"anchorCol", aCol},
+            {"matchLine", mLine}, {"matchCol", mCol}};
+}
+
 json op_save(const json& msg) {
     int id = msg.value("bufferId", 0);
     std::lock_guard<std::mutex> lk(g_mu);
@@ -809,6 +884,7 @@ bool dispatch(const std::string& type, const json& msg,
     else if (type == "editor.edit")          resp = op_edit(msg);
     else if (type == "editor.undo")          resp = op_undo(msg);
     else if (type == "editor.redo")          resp = op_redo(msg);
+    else if (type == "editor.matchBracket")  resp = op_match_bracket(msg);
     else if (type == "editor.save")          resp = op_save(msg);
     else if (type == "editor.close")         resp = op_close(msg);
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);

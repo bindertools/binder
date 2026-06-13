@@ -107,6 +107,10 @@ function dedupeCursors(cursors: Cursor[]): Cursor[] {
   return result
 }
 
+// Highlight color for matched bracket pairs — a subtle neutral box that
+// works against any theme (not theme-derived, unlike the other paint colors).
+const BRACKET_MATCH_COLOR: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.4 }
+
 const OVERSCAN = 10
 
 export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
@@ -123,6 +127,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   const topLineRef = useRef<number>(0)
   const leftColRef = useRef<number>(0)
   const cursorsRef = useRef<Cursor[]>([{ line: 0, col: 0 }])
+  const bracketMatchRef = useRef<[[number, number], [number, number]] | null>(null)
   const visibleRowsRef = useRef<number>(1)
   const visibleColsRef = useRef<number>(1)
   const cursorVisibleRef = useRef<boolean>(true)
@@ -206,6 +211,18 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
           renderer.drawText(x, y, segment, paintRef.current.styles[st] ?? paintRef.current.styles[0])
         }
         i = j
+      }
+    }
+
+    // Matched bracket pair highlight
+    if (bracketMatchRef.current) {
+      for (const [bLine, bCol] of bracketMatchRef.current) {
+        if (bLine < top || bLine >= top + rows) continue
+        const x = gutterWidth + (bCol - left) * cw
+        const y = (bLine - top) * ch
+        if (bCol - left >= 0 && bCol - left < cols) {
+          renderer.drawRect(x, y, cw, ch, BRACKET_MATCH_COLOR)
+        }
       }
     }
 
@@ -297,6 +314,25 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     clampScroll()
   }, [clampScroll])
 
+  // Re-query the bracket pair surrounding the primary cursor and redraw.
+  // Fire-and-forget: called after every cursor move / edit.
+  const updateBracketMatch = useCallback(async () => {
+    const { line, col } = cursorsRef.current[0]
+    try {
+      const resp = await invoke<{
+        found: boolean
+        anchorLine?: number; anchorCol?: number
+        matchLine?: number; matchCol?: number
+      }>('editor.matchBracket', { bufferId: bufferIdRef.current, line, col })
+      bracketMatchRef.current = resp.found
+        ? [[resp.anchorLine!, resp.anchorCol!], [resp.matchLine!, resp.matchCol!]]
+        : null
+    } catch {
+      bracketMatchRef.current = null
+    }
+    draw()
+  }, [draw])
+
   // ── Editing ─────────────────────────────────────────────────────────────────
 
   // Apply one edit per cursor (some cursors may be skipped — e.g. a no-op
@@ -330,7 +366,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, fetchVisible])
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, fetchVisible, updateBracketMatch])
 
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
     const resp = await invoke<{
@@ -352,7 +389,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, fetchVisible])
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, fetchVisible, updateBracketMatch])
 
   const undo = useCallback(() => applyUndoRedo('editor.undo'), [applyUndoRedo])
   const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
@@ -441,7 +479,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
 
   // Move every cursor to a position derived from its own current position
   // (used for Home/End, which apply per-line).
@@ -464,7 +503,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
 
   // Collapse to a single cursor at (line, col) — used for plain clicks/drags.
   const setCursorTo = useCallback(async (line: number, col: number, extend: boolean) => {
@@ -480,7 +520,8 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     ensureCursorVisible()
     fetchVisible()
     draw()
-  }, [draw, ensureCursorVisible, ensureLine, fetchVisible])
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, ensureLine, fetchVisible, updateBracketMatch])
 
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
@@ -536,6 +577,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
       recomputeViewport()
       setReady(true)
       textareaRef.current?.focus()
+      void updateBracketMatch()
     }
 
     void init()

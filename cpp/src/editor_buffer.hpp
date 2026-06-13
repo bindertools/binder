@@ -16,6 +16,8 @@
 //                                                        dirtyStart, dirtyEnd, cursorLine, cursorCol}
 //   editor.redo      {bufferId}                      → {applied, version, lineCount,
 //                                                        dirtyStart, dirtyEnd, cursorLine, cursorCol}
+//   editor.matchBracket {bufferId, line, col}        → {found, anchorLine, anchorCol,
+//                                                        matchLine, matchCol} | {found: false}
 //   editor.save      {bufferId}                      → {saved}
 //   editor.close     {bufferId}                      → {closed}
 //   editor.viewstate.set {bufferId, state}           → {}
