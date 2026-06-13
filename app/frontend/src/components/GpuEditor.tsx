@@ -111,6 +111,12 @@ function dedupeCursors(cursors: Cursor[]): Cursor[] {
 // works against any theme (not theme-derived, unlike the other paint colors).
 const BRACKET_MATCH_COLOR: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.4 }
 
+// Auto-closing pairs: typing the opening character inserts both and places
+// the cursor between them; typing the closing character "types over" an
+// already-inserted closer instead of inserting a duplicate.
+const AUTO_CLOSE_PAIRS: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`' }
+const AUTO_CLOSE_CLOSERS = new Set([')', ']', '}', '"', "'", '`'])
+
 const OVERSCAN = 10
 
 export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
@@ -342,7 +348,16 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
   // and each cursor's new position is then computed purely from its own
   // edit (safe because reverse order means no edit shifts a not-yet-applied
   // cursor's coordinates).
-  const applyMultiEdit = useCallback(async (ops: { idx: number; range: [number, number, number, number]; text: string }[]) => {
+  const applyMultiEdit = useCallback(async (ops: {
+    idx: number
+    range: [number, number, number, number]
+    text: string
+    // Override the default "end of inserted text" cursor placement — used
+    // when the caret should land inside the inserted text (auto-close pairs,
+    // auto-indent between a freshly-split bracket pair). `lineOffset` is
+    // added to the edit's start line; `col` is an absolute column on that line.
+    cursor?: { lineOffset: number; col: number }
+  }[]) => {
     if (ops.length === 0) return
     const sorted = [...ops].sort((a, b) => b.range[0] - a.range[0] || b.range[1] - a.range[1])
     const edits = sorted.map(({ range: [sl, sc, el, ec], text }) => ({ startLine: sl, startCol: sc, endLine: el, endCol: ec, text }))
@@ -354,7 +369,11 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     lineCacheRef.current.clear()
 
     const cursors = cursorsRef.current.slice()
-    for (const { idx, range: [sl, sc], text } of ops) {
+    for (const { idx, range: [sl, sc], text, cursor } of ops) {
+      if (cursor) {
+        cursors[idx] = { line: sl + cursor.lineOffset, col: cursor.col }
+        continue
+      }
       const lines = text.split('\n')
       cursors[idx] = lines.length === 1
         ? { line: sl, col: sc + text.length }
@@ -438,6 +457,93 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     }
     await applyMultiEdit(ops)
   }, [applyMultiEdit, ensureLine])
+
+  // Enter: copy the current line's leading whitespace onto the new line,
+  // adding one indent level if the cursor sits right after an opening
+  // bracket. If it also sits right before that bracket's matching closer,
+  // split into a blank indented line with the closer pushed to its own line,
+  // cursor left on the blank line.
+  const handleEnter = useCallback(async () => {
+    const cursors = cursorsRef.current
+    const ops: Parameters<typeof applyMultiEdit>[0] = []
+    for (let idx = 0; idx < cursors.length; idx++) {
+      const c = cursors[idx]
+      const sel = rangeOf(c)
+      if (sel) { ops.push({ idx, range: sel, text: '\n' }); continue }
+
+      const data = await ensureLine(c.line)
+      const lineText = data?.text ?? ''
+      const indent = lineText.match(/^[ \t]*/)?.[0] ?? ''
+      const unit = indent.includes('\t') ? '\t' : '  '
+      const prevChar = lineText[c.col - 1]
+      const nextChar = lineText[c.col]
+      const opensBlock = prevChar === '{' || prevChar === '[' || prevChar === '('
+      const closesBlock =
+        (prevChar === '{' && nextChar === '}') ||
+        (prevChar === '[' && nextChar === ']') ||
+        (prevChar === '(' && nextChar === ')')
+
+      const range: [number, number, number, number] = [c.line, c.col, c.line, c.col]
+      if (closesBlock) {
+        const inner = indent + unit
+        ops.push({ idx, range, text: '\n' + inner + '\n' + indent, cursor: { lineOffset: 1, col: inner.length } })
+      } else {
+        const newIndent = opensBlock ? indent + unit : indent
+        ops.push({ idx, range, text: '\n' + newIndent })
+      }
+    }
+    await applyMultiEdit(ops)
+  }, [applyMultiEdit, ensureLine])
+
+  // Handle a single typed character that may participate in an auto-close
+  // pair: typing an opener inserts both halves with the cursor between them
+  // (wrapping the selection instead, if one is active); typing a closer that
+  // already sits immediately to the right of every cursor "types over" it.
+  const handleTypedChar = useCallback(async (ch: string) => {
+    const cursors = cursorsRef.current
+
+    if (AUTO_CLOSE_CLOSERS.has(ch)) {
+      let allTypeOver = true
+      for (const c of cursors) {
+        if (rangeOf(c)) { allTypeOver = false; break }
+        const data = await ensureLine(c.line)
+        if (data?.text[c.col] !== ch) { allTypeOver = false; break }
+      }
+      if (allTypeOver) {
+        cursorsRef.current = cursors.map(c => ({ line: c.line, col: c.col + 1 }))
+        cursorVisibleRef.current = true
+        ensureCursorVisible()
+        draw()
+        void updateBracketMatch()
+        return
+      }
+    }
+
+    const close = AUTO_CLOSE_PAIRS[ch]
+    if (close !== undefined) {
+      const ops: Parameters<typeof applyMultiEdit>[0] = []
+      for (let idx = 0; idx < cursors.length; idx++) {
+        const c = cursors[idx]
+        const sel = rangeOf(c)
+        if (sel) {
+          const [sl, sc, el, ec] = sel
+          if (sl === el) {
+            const data = await ensureLine(sl)
+            const inner = data?.text.slice(sc, ec) ?? ''
+            ops.push({ idx, range: sel, text: ch + inner + close })
+          } else {
+            ops.push({ idx, range: sel, text: ch })
+          }
+          continue
+        }
+        ops.push({ idx, range: [c.line, c.col, c.line, c.col], text: ch + close, cursor: { lineOffset: 0, col: c.col + 1 } })
+      }
+      await applyMultiEdit(ops)
+      return
+    }
+
+    await insertText(ch)
+  }, [applyMultiEdit, draw, ensureCursorVisible, ensureLine, insertText, updateBracketMatch])
 
   // ── Cursor navigation ──────────────────────────────────────────────────────
 
@@ -647,6 +753,7 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
         return
       case 'Backspace':  e.preventDefault(); void deleteBackward(); return
       case 'Delete':     e.preventDefault(); void deleteForward(); return
+      case 'Enter':      e.preventDefault(); void handleEnter(); return
       case 'Tab':        e.preventDefault(); void insertText('  '); return
       case 's':
         if (e.ctrlKey || e.metaKey) {
@@ -667,9 +774,14 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
           void redo()
         }
         return
-      default: return
+      default:
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && (AUTO_CLOSE_PAIRS[e.key] !== undefined || AUTO_CLOSE_CLOSERS.has(e.key))) {
+          e.preventDefault()
+          void handleTypedChar(e.key)
+        }
+        return
     }
-  }, [addCursorVertical, deleteBackward, deleteForward, draw, insertText, moveCursor, moveCursorsTo, redo, undo])
+  }, [addCursorVertical, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, redo, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
