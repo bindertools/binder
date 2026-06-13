@@ -36,6 +36,7 @@ const TSLanguage* tree_sitter_java(void);
 const TSLanguage* tree_sitter_lua(void);
 const TSLanguage* tree_sitter_python(void);
 const TSLanguage* tree_sitter_bash(void);
+const TSLanguage* tree_sitter_zig(void);
 }
 
 using json = nlohmann::json;
@@ -775,6 +776,227 @@ const char* kCompletionQueryBash = R"TSQ(
 (for_statement variable: (variable_name) @variable)
 )TSQ";
 
+// Zig — adapted from tree-sitter-zig's highlights.scm with `#lua-match?`/
+// `#eq?`/`#any-of?` predicates dropped (the type-name, all-caps-constant,
+// `_` builtin-variable, and `@import`/`@cImport` module heuristics) and the
+// `#set!` priority directive on the string pattern removed.
+const char* kQueryZig = R"TSQ(
+(identifier) @variable
+
+(parameter
+  name: (identifier) @variable)
+
+(parameter
+  type: (identifier) @type)
+
+[
+  (builtin_type)
+  "anyframe"
+] @type
+
+[
+  "null"
+  "unreachable"
+  "undefined"
+] @constant
+
+(field_expression
+  .
+  member: (identifier) @constant)
+
+(enum_declaration
+  (container_field
+    type: (identifier) @constant))
+
+(block_label (identifier) @variable)
+
+(break_label (identifier) @variable)
+
+(field_initializer
+  .
+  (identifier) @property)
+
+(field_expression
+  (_)
+  member: (identifier) @property)
+
+(container_field
+  name: (identifier) @property)
+
+(initializer_list
+  (assignment_expression
+      left: (field_expression
+              .
+              member: (identifier) @property)))
+
+(builtin_identifier) @function
+
+(call_expression
+  function: (identifier) @function)
+
+(call_expression
+  function: (field_expression
+    member: (identifier) @function))
+
+(function_declaration
+  name: (identifier) @function)
+
+[
+  "c"
+  "..."
+] @variable
+
+(calling_convention
+  (identifier) @variable)
+
+[
+  "asm"
+  "defer"
+  "errdefer"
+  "test"
+  "error"
+  "const"
+  "var"
+  "struct"
+  "union"
+  "enum"
+  "opaque"
+  "async"
+  "await"
+  "suspend"
+  "nosuspend"
+  "resume"
+  "fn"
+  "and"
+  "or"
+  "orelse"
+  "return"
+  "if"
+  "else"
+  "switch"
+  "for"
+  "while"
+  "break"
+  "continue"
+  "usingnamespace"
+  "export"
+  "try"
+  "catch"
+  "volatile"
+  "allowzero"
+  "noalias"
+  "addrspace"
+  "align"
+  "callconv"
+  "linksection"
+  "pub"
+  "inline"
+  "noinline"
+  "extern"
+  "comptime"
+  "packed"
+  "threadlocal"
+] @keyword
+
+[
+  "="
+  "*="
+  "*%="
+  "*|="
+  "/="
+  "%="
+  "+="
+  "+%="
+  "+|="
+  "-="
+  "-%="
+  "-|="
+  "<<="
+  "<<|="
+  ">>="
+  "&="
+  "^="
+  "|="
+  "!"
+  "~"
+  "-"
+  "-%"
+  "&"
+  "=="
+  "!="
+  ">"
+  ">="
+  "<="
+  "<"
+  "^"
+  "|"
+  "<<"
+  ">>"
+  "<<|"
+  "+"
+  "++"
+  "+%"
+  "-%"
+  "+|"
+  "-|"
+  "*"
+  "/"
+  "%"
+  "**"
+  "*%"
+  "*|"
+  "||"
+  ".*"
+  ".?"
+  "?"
+  ".."
+] @operator
+
+(character) @string
+
+[
+  (string)
+  (multiline_string)
+] @string
+
+(integer) @number
+
+(float) @number
+
+(boolean) @constant
+
+(escape_sequence) @escape
+
+[
+  "["
+  "]"
+  "("
+  ")"
+  "{"
+  "}"
+] @punctuation.bracket
+
+[
+  ";"
+  "."
+  ","
+  ":"
+  "=>"
+  "->"
+] @punctuation.delimiter
+
+(payload "|" @punctuation.bracket)
+
+(comment) @comment
+)TSQ";
+
+const char* kCompletionQueryZig = R"TSQ(
+(function_declaration name: (identifier) @function)
+(variable_declaration (identifier) @variable)
+(parameter name: (identifier) @variable)
+(container_field name: (identifier) @property)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -893,6 +1115,21 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "in", "select", "then", "unset", "until", "while", "local", "return", "break", "continue",
         "echo", "printf", "read", "cd", "exit", "source", "alias", "shift", "test",
     }},
+    {"zig", {
+        "align", "allowzero", "and", "anyframe", "anytype", "asm", "async", "await", "break",
+        "callconv", "catch", "comptime", "const", "continue", "defer", "else", "enum", "errdefer",
+        "error", "export", "extern", "fn", "for", "if", "inline", "noalias", "noinline",
+        "nosuspend", "opaque", "or", "orelse", "packed", "pub", "resume", "return", "linksection",
+        "struct", "suspend", "switch", "test", "threadlocal", "try", "union", "unreachable",
+        "usingnamespace", "var", "volatile", "while", "addrspace",
+        "true", "false", "null", "undefined",
+        "bool", "void", "noreturn", "type", "anyerror", "anyframe",
+        "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "i128", "u128", "isize", "usize",
+        "f16", "f32", "f64", "f80", "f128",
+        "comptime_int", "comptime_float",
+        "c_short", "c_ushort", "c_int", "c_uint", "c_long", "c_ulong", "c_longlong",
+        "c_ulonglong", "c_longdouble",
+    }},
 };
 
 struct LanguageDef {
@@ -919,6 +1156,7 @@ const LanguageDef kLanguages[] = {
     {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua},
     {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython},
     {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash},
+    {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -944,6 +1182,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "sh" || ext == "bash" || ext == "zsh" ||
         ext == "bashrc" || ext == "bash_profile" || ext == "profile")
                                                          return &kLanguages[12];
+    if (ext == "zig" || ext == "zon")                   return &kLanguages[13];
     return nullptr;
 }
 

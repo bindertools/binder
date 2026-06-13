@@ -49,6 +49,7 @@ add_library(cmdide-grammars STATIC
     third_party/grammars/tree-sitter-python/src/scanner.c
     third_party/grammars/tree-sitter-bash/src/parser.c
     third_party/grammars/tree-sitter-bash/src/scanner.c
+    third_party/grammars/tree-sitter-zig/src/parser.c
 )
 set_target_properties(cmdide-grammars PROPERTIES LINKER_LANGUAGE C)
 target_include_directories(cmdide-grammars PRIVATE
@@ -65,6 +66,7 @@ target_include_directories(cmdide-grammars PRIVATE
     third_party/grammars/tree-sitter-lua/src
     third_party/grammars/tree-sitter-python/src
     third_party/grammars/tree-sitter-bash/src
+    third_party/grammars/tree-sitter-zig/src
 )
 
 # ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────
