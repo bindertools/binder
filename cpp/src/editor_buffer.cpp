@@ -38,6 +38,7 @@ const TSLanguage* tree_sitter_python(void);
 const TSLanguage* tree_sitter_bash(void);
 const TSLanguage* tree_sitter_zig(void);
 const TSLanguage* tree_sitter_toml(void);
+const TSLanguage* tree_sitter_dockerfile(void);
 }
 
 using json = nlohmann::json;
@@ -1056,6 +1057,72 @@ const char* kCompletionQueryToml = R"TSQ(
 (table_array_element (dotted_key (bare_key) @type))
 )TSQ";
 
+// Dockerfile — adapted from tree-sitter-dockerfile's highlights.scm with the
+// `#match?` predicate dropped (the all-caps `$VAR` heuristic) and the `@none`
+// capture on the `expansion` node removed (no corresponding kStyles slot).
+const char* kQueryDockerfile = R"TSQ(
+[
+	"FROM"
+	"AS"
+	"RUN"
+	"CMD"
+	"LABEL"
+	"EXPOSE"
+	"ENV"
+	"ADD"
+	"COPY"
+	"ENTRYPOINT"
+	"VOLUME"
+	"USER"
+	"WORKDIR"
+	"ARG"
+	"ONBUILD"
+	"STOPSIGNAL"
+	"HEALTHCHECK"
+	"SHELL"
+	"MAINTAINER"
+	"CROSS_BUILD"
+	(heredoc_marker)
+	(heredoc_end)
+] @keyword
+
+[
+	":"
+	"@"
+] @operator
+
+(comment) @comment
+
+(image_spec
+	(image_tag
+		":" @punctuation.special)
+	(image_digest
+		"@" @punctuation.special))
+
+[
+	(double_quoted_string)
+	(single_quoted_string)
+	(json_string)
+	(heredoc_line)
+] @string
+
+(expansion
+  [
+	"$"
+	"{"
+	"}"
+  ] @punctuation.special
+)
+
+(variable) @property
+)TSQ";
+
+const char* kCompletionQueryDockerfile = R"TSQ(
+(env_pair name: (unquoted_string) @property)
+(arg_instruction name: (unquoted_string) @property)
+(variable) @property
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1192,6 +1259,11 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
     {"toml", {
         "true", "false",
     }},
+    {"dockerfile", {
+        "FROM", "AS", "RUN", "CMD", "LABEL", "EXPOSE", "ENV", "ADD", "COPY",
+        "ENTRYPOINT", "VOLUME", "USER", "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL",
+        "HEALTHCHECK", "SHELL", "MAINTAINER", "CROSS_BUILD",
+    }},
 };
 
 struct LanguageDef {
@@ -1220,9 +1292,19 @@ const LanguageDef kLanguages[] = {
     {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash},
     {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig},
     {"toml",       tree_sitter_toml,       kQueryToml,               kCompletionQueryToml},
+    {"dockerfile", tree_sitter_dockerfile, kQueryDockerfile,         kCompletionQueryDockerfile},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
+    auto slash = path.find_last_of("/\\");
+    std::string base = slash == std::string::npos ? path : path.substr(slash + 1);
+    std::string base_lower = base;
+    std::transform(base_lower.begin(), base_lower.end(), base_lower.begin(), ::tolower);
+    if (base_lower == "dockerfile" ||
+        base_lower.rfind("dockerfile.", 0) == 0 ||
+        (base_lower.size() > 11 && base_lower.compare(base_lower.size() - 11, 11, ".dockerfile") == 0))
+                                                         return &kLanguages[15];
+
     auto dot = path.find_last_of('.');
     if (dot == std::string::npos) return nullptr;
     std::string ext = path.substr(dot + 1);
