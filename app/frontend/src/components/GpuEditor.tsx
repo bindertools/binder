@@ -287,6 +287,30 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
     draw()
   }, [draw, fetchVisible])
 
+  const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
+    const resp = await invoke<{
+      applied: boolean; version: number; lineCount: number
+      dirtyStart?: number; dirtyEnd?: number
+      cursorLine?: number; cursorCol?: number
+    }>(op, { bufferId: bufferIdRef.current })
+    if (!resp.applied) return
+    versionRef.current = resp.version
+    lineCountRef.current = resp.lineCount
+    lineCacheRef.current.clear()
+    selAnchorRef.current = null
+    if (resp.cursorLine !== undefined && resp.cursorCol !== undefined) {
+      cursorRef.current = { line: resp.cursorLine, col: resp.cursorCol }
+    }
+    cursorVisibleRef.current = true
+    setStatus('●')
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+  }, [draw, ensureCursorVisible, fetchVisible])
+
+  const undo = useCallback(() => applyUndoRedo('editor.undo'), [applyUndoRedo])
+  const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
+
   const insertText = useCallback(async (text: string) => {
     const sel = selectionRange()
     let sl: number, sc: number, el: number, ec: number
@@ -494,9 +518,22 @@ export default function GpuEditor({ filePath, fontSize = 13, colors }: Props) {
           void invoke('editor.save', { bufferId: bufferIdRef.current }).then(() => setStatus(''))
         }
         return
+      case 'z':
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault()
+          if (shift) void redo()
+          else void undo()
+        }
+        return
+      case 'y':
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault()
+          void redo()
+        }
+        return
       default: return
     }
-  }, [deleteBackward, deleteForward, insertText, moveCursor, setCursorTo])
+  }, [deleteBackward, deleteForward, insertText, moveCursor, redo, setCursorTo, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget

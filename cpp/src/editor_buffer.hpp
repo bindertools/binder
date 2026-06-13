@@ -10,8 +10,12 @@
 // IPC surface (all editor.*):
 //   editor.open      {path}                          → {bufferId, lineCount, language, version, styles}
 //   editor.lines     {bufferId, start, end}          → {version, lines: [{text, spans: [[s,e,style],…]}]}
-//   editor.edit      {bufferId, edits: [{startLine,startCol,endLine,endCol,text}]}
-//                                                    → {version, lineCount, dirtyStart, dirtyEnd}
+//   editor.edit      {bufferId, edits: [{startLine,startCol,endLine,endCol,text}],
+//                      cursorLine?, cursorCol?}      → {version, lineCount, dirtyStart, dirtyEnd}
+//   editor.undo      {bufferId}                      → {applied, version, lineCount,
+//                                                        dirtyStart, dirtyEnd, cursorLine, cursorCol}
+//   editor.redo      {bufferId}                      → {applied, version, lineCount,
+//                                                        dirtyStart, dirtyEnd, cursorLine, cursorCol}
 //   editor.save      {bufferId}                      → {saved}
 //   editor.close     {bufferId}                      → {closed}
 //   editor.viewstate.set {bufferId, state}           → {}

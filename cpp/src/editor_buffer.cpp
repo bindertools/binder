@@ -225,6 +225,27 @@ CompiledQuery* compiled_query_for(const LanguageDef* lang) {
     return raw;
 }
 
+// ── Undo/redo ─────────────────────────────────────────────────────────────────
+// Each EditEntry records one applied edit in its pre-edit (forward) form:
+// replacing [sl,sc, el,ec) with new_text, where old_text is what was removed.
+// Undo replays the inverse (the range new_text now occupies, restoring
+// old_text); redo replays the original [sl,sc,el,ec) -> new_text edit.
+
+enum class EditKind : uint8_t { Other, Insert, Whitespace, Delete };
+
+struct EditEntry {
+    uint32_t sl, sc, el, ec;
+    std::string old_text;
+    std::string new_text;
+};
+
+struct EditGroup {
+    std::vector<EditEntry> entries;
+    EditKind kind = EditKind::Other;
+    uint32_t cur_before_line = 0, cur_before_col = 0;
+    uint32_t cur_after_line = 0,  cur_after_col = 0;
+};
+
 // ── Buffer ────────────────────────────────────────────────────────────────────
 
 struct Buffer {
@@ -239,6 +260,8 @@ struct Buffer {
     int refcount = 1;
     bool dirty = false;
     json view_state;                     // opaque frontend state (cursor/scroll)
+    std::vector<EditGroup> undo_stack;
+    std::vector<EditGroup> redo_stack;
 
     ~Buffer() {
         if (tree) ts_tree_delete(tree);
@@ -317,6 +340,61 @@ bool line_is_ascii(const std::string& text, uint32_t start, uint32_t end) {
     for (uint32_t i = start; i < end; i++)
         if ((unsigned char)text[i] >= 0x80) return false;
     return true;
+}
+
+// Length of a UTF-8 string in UTF-16 code units.
+uint32_t utf16_length(const std::string& s) {
+    uint32_t len = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = (unsigned char)s[i];
+        if (c < 0x80)      { i += 1; len += 1; }
+        else if (c < 0xE0) { i += 2; len += 1; }
+        else if (c < 0xF0) { i += 3; len += 1; }
+        else               { i += 4; len += 2; } // astral plane -> surrogate pair
+    }
+    return len;
+}
+
+// Position immediately after inserting `text` at (line, col).
+std::pair<uint32_t, uint32_t> end_of_insertion(uint32_t line, uint32_t col,
+                                               const std::string& text) {
+    uint32_t extra_lines = 0;
+    size_t last_nl = std::string::npos;
+    for (size_t i = 0; i < text.size(); i++) {
+        if (text[i] == '\n') { extra_lines++; last_nl = i; }
+    }
+    if (extra_lines == 0) return {line, col + utf16_length(text)};
+    return {line + extra_lines, utf16_length(text.substr(last_nl + 1))};
+}
+
+// Classify a single edit for undo-group coalescing ("typing"/"deleting"
+// runs collapse into one undo step, VS Code-style).
+EditKind classify_edit(const EditEntry& e) {
+    bool pure_insert = e.old_text.empty() && !e.new_text.empty();
+    bool pure_delete = e.new_text.empty() && !e.old_text.empty();
+    if (pure_insert && e.sl == e.el && e.sc == e.ec && utf16_length(e.new_text) == 1) {
+        return (e.new_text == " " || e.new_text == "\t" || e.new_text == "\n")
+                   ? EditKind::Whitespace : EditKind::Insert;
+    }
+    if (pure_delete && e.sl == e.el && utf16_length(e.old_text) == 1) {
+        return EditKind::Delete;
+    }
+    return EditKind::Other;
+}
+
+// Whether `cur` continues the same typing/deleting motion as `prev` (the
+// last entry of the current undo group), so they can share one undo step.
+bool coalesce_check(const EditEntry& prev, EditKind kind, const EditEntry& cur) {
+    if (kind == EditKind::Insert || kind == EditKind::Whitespace) {
+        auto [pel, pec] = end_of_insertion(prev.sl, prev.sc, prev.new_text);
+        return cur.sl == pel && cur.sc == pec;
+    }
+    if (kind == EditKind::Delete) {
+        bool backward = (cur.el == prev.sl && cur.ec == prev.sc); // Backspace chain
+        bool forward  = (cur.sl == prev.sl && cur.sc == prev.sc); // Delete chain
+        return backward || forward;
+    }
+    return false;
 }
 
 // ── Highlight span computation ───────────────────────────────────────────────
@@ -492,9 +570,10 @@ json op_lines(const json& msg) {
 }
 
 // Apply one edit: replace [startLine:startCol, endLine:endCol) with text.
-// Columns are UTF-16; converted to bytes here.
-void apply_edit(Buffer& b, uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec,
-                const std::string& ins) {
+// Columns are UTF-16; converted to bytes here. Returns the text removed, so
+// callers can build the inverse edit for undo.
+std::string apply_edit(Buffer& b, uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec,
+                       const std::string& ins) {
     uint32_t nlines = b.line_count();
     sl = std::min(sl, nlines - 1);
     el = std::min(el, nlines - 1);
@@ -504,6 +583,8 @@ void apply_edit(Buffer& b, uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec,
     b.line_bytes(el, ls, le);
     uint32_t end_byte = u16_col_to_byte(b.text, ls, le, ec);
     if (end_byte < start_byte) std::swap(start_byte, end_byte);
+
+    std::string old_text = b.text.substr(start_byte, end_byte - start_byte);
 
     TSInputEdit edit;
     edit.start_byte = start_byte;
@@ -517,6 +598,35 @@ void apply_edit(Buffer& b, uint32_t sl, uint32_t sc, uint32_t el, uint32_t ec,
     edit.new_end_point = point_for_byte(b, edit.new_end_byte);
 
     if (b.tree) ts_tree_edit(b.tree, &edit);
+    return old_text;
+}
+
+// Incrementally re-parse after one or more apply_edit() calls and refine
+// [dirty_start, dirty_end] (initially the conservative range from the edits
+// themselves) using the parser's changed-ranges, which can extend dirtiness
+// beyond the edited text (e.g. opening a block comment).
+std::pair<uint32_t, uint32_t> reparse_and_dirty(Buffer& b, uint32_t dirty_start, uint32_t dirty_end) {
+    if (b.parser) {
+        TSTree* old_tree = b.tree;
+        b.tree = nullptr;
+        TSTree* nt = ts_parser_parse_string(b.parser, old_tree, b.text.data(),
+                                            (uint32_t)b.text.size());
+        if (old_tree) {
+            uint32_t nranges = 0;
+            TSRange* ranges = ts_tree_get_changed_ranges(old_tree, nt, &nranges);
+            for (uint32_t i = 0; i < nranges; i++) {
+                dirty_start = std::min(dirty_start, ranges[i].start_point.row);
+                dirty_end = std::max(dirty_end == b.line_count() - 1 ? 0 : dirty_end,
+                                     ranges[i].end_point.row);
+            }
+            if (nranges > 0) free(ranges);
+            ts_tree_delete(old_tree);
+        }
+        b.tree = nt;
+    }
+    if (dirty_start == UINT32_MAX) dirty_start = 0;
+    dirty_end = std::min(std::max(dirty_end, dirty_start), b.line_count() - 1);
+    return {dirty_start, dirty_end};
 }
 
 json op_edit(const json& msg) {
@@ -528,43 +638,113 @@ json op_edit(const json& msg) {
         return {{"ok", false}, {"error", "edits array required"}};
 
     uint32_t dirty_start = UINT32_MAX, dirty_end = 0;
+    std::vector<EditEntry> new_entries;
     for (const auto& e : msg["edits"]) {
         uint32_t sl = e.value("startLine", 0u), sc = e.value("startCol", 0u);
         uint32_t el = e.value("endLine", 0u),   ec = e.value("endCol", 0u);
         std::string text = e.value("text", "");
-        apply_edit(*b, sl, sc, el, ec, text);
+        uint32_t nlines = b->line_count();
+        sl = std::min(sl, nlines - 1);
+        el = std::min(el, nlines - 1);
+        if (el < sl || (el == sl && ec < sc)) { std::swap(sl, el); std::swap(sc, ec); }
+        std::string old_text = apply_edit(*b, sl, sc, el, ec, text);
+        new_entries.push_back({sl, sc, el, ec, old_text, text});
         dirty_start = std::min(dirty_start, sl);
         dirty_end = b->line_count() - 1; // conservative; refined below via tree
     }
 
-    if (b->parser) {
-        TSTree* old_tree = b->tree;
-        b->tree = nullptr;
-        TSTree* nt = ts_parser_parse_string(b->parser, old_tree, b->text.data(),
-                                            (uint32_t)b->text.size());
-        if (old_tree) {
-            uint32_t nranges = 0;
-            TSRange* ranges = ts_tree_get_changed_ranges(old_tree, nt, &nranges);
-            // Use the tree's changed ranges to bound re-highlighting precisely;
-            // structural changes (e.g. opening a block comment) can dirty lines
-            // far beyond the text edit itself.
-            for (uint32_t i = 0; i < nranges; i++) {
-                dirty_start = std::min(dirty_start, ranges[i].start_point.row);
-                dirty_end = std::max(dirty_end == b->line_count() - 1 ? 0 : dirty_end,
-                                     ranges[i].end_point.row);
+    auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
+
+    if (!new_entries.empty()) {
+        EditKind kind = new_entries.size() == 1 ? classify_edit(new_entries[0]) : EditKind::Other;
+        auto [ca_line, ca_col] = end_of_insertion(new_entries.back().sl, new_entries.back().sc,
+                                                   new_entries.back().new_text);
+        bool coalesced = false;
+        if (kind != EditKind::Other && !b->undo_stack.empty()) {
+            EditGroup& top = b->undo_stack.back();
+            if (top.kind == kind && coalesce_check(top.entries.back(), kind, new_entries[0])) {
+                top.entries.push_back(new_entries[0]);
+                top.cur_after_line = ca_line;
+                top.cur_after_col = ca_col;
+                coalesced = true;
             }
-            if (nranges > 0) free(ranges);
-            ts_tree_delete(old_tree);
         }
-        b->tree = nt;
+        if (!coalesced) {
+            EditGroup g;
+            g.kind = kind;
+            g.cur_before_line = msg.value("cursorLine", new_entries[0].sl);
+            g.cur_before_col  = msg.value("cursorCol",  new_entries[0].sc);
+            g.cur_after_line = ca_line;
+            g.cur_after_col  = ca_col;
+            g.entries = std::move(new_entries);
+            b->undo_stack.push_back(std::move(g));
+        }
+        b->redo_stack.clear();
     }
 
     b->version++;
     b->dirty = true;
-    if (dirty_start == UINT32_MAX) dirty_start = 0;
-    dirty_end = std::min(std::max(dirty_end, dirty_start), b->line_count() - 1);
     return {{"version", b->version}, {"lineCount", b->line_count()},
-            {"dirtyStart", dirty_start}, {"dirtyEnd", dirty_end}};
+            {"dirtyStart", ds}, {"dirtyEnd", de}};
+}
+
+json op_undo(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
+    if (b->undo_stack.empty())
+        return {{"applied", false}, {"version", b->version}, {"lineCount", b->line_count()}};
+
+    EditGroup g = std::move(b->undo_stack.back());
+    b->undo_stack.pop_back();
+
+    uint32_t dirty_start = UINT32_MAX, dirty_end = 0;
+    for (auto it = g.entries.rbegin(); it != g.entries.rend(); ++it) {
+        auto [iel, iec] = end_of_insertion(it->sl, it->sc, it->new_text);
+        apply_edit(*b, it->sl, it->sc, iel, iec, it->old_text);
+        dirty_start = std::min(dirty_start, it->sl);
+        dirty_end = b->line_count() - 1;
+    }
+    auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
+
+    uint32_t cur_line = g.cur_before_line, cur_col = g.cur_before_col;
+    b->redo_stack.push_back(std::move(g));
+
+    b->version++;
+    b->dirty = true;
+    return {{"applied", true}, {"version", b->version}, {"lineCount", b->line_count()},
+            {"dirtyStart", ds}, {"dirtyEnd", de},
+            {"cursorLine", cur_line}, {"cursorCol", cur_col}};
+}
+
+json op_redo(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
+    if (b->redo_stack.empty())
+        return {{"applied", false}, {"version", b->version}, {"lineCount", b->line_count()}};
+
+    EditGroup g = std::move(b->redo_stack.back());
+    b->redo_stack.pop_back();
+
+    uint32_t dirty_start = UINT32_MAX, dirty_end = 0;
+    for (auto& e : g.entries) {
+        apply_edit(*b, e.sl, e.sc, e.el, e.ec, e.new_text);
+        dirty_start = std::min(dirty_start, e.sl);
+        dirty_end = b->line_count() - 1;
+    }
+    auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
+
+    uint32_t cur_line = g.cur_after_line, cur_col = g.cur_after_col;
+    b->undo_stack.push_back(std::move(g));
+
+    b->version++;
+    b->dirty = true;
+    return {{"applied", true}, {"version", b->version}, {"lineCount", b->line_count()},
+            {"dirtyStart", ds}, {"dirtyEnd", de},
+            {"cursorLine", cur_line}, {"cursorCol", cur_col}};
 }
 
 json op_save(const json& msg) {
@@ -627,6 +807,8 @@ bool dispatch(const std::string& type, const json& msg,
     if      (type == "editor.open")          resp = op_open(msg);
     else if (type == "editor.lines")         resp = op_lines(msg);
     else if (type == "editor.edit")          resp = op_edit(msg);
+    else if (type == "editor.undo")          resp = op_undo(msg);
+    else if (type == "editor.redo")          resp = op_redo(msg);
     else if (type == "editor.save")          resp = op_save(msg);
     else if (type == "editor.close")         resp = op_close(msg);
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);
