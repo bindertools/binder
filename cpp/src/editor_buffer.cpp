@@ -34,6 +34,7 @@ const TSLanguage* tree_sitter_rust(void);
 const TSLanguage* tree_sitter_go(void);
 const TSLanguage* tree_sitter_java(void);
 const TSLanguage* tree_sitter_lua(void);
+const TSLanguage* tree_sitter_python(void);
 }
 
 using json = nlohmann::json;
@@ -684,6 +685,64 @@ const char* kCompletionQueryLua = R"TSQ(
 (field name: (identifier) @property)
 )TSQ";
 
+// Python — adapted from tree-sitter-python's highlights.scm with `#match?`
+// predicates dropped (the class-name, all-caps-constant, and builtin-function
+// heuristics); added an explicit class-name capture as a predicate-free
+// substitute for the dropped class-name heuristic.
+const char* kQueryPython = R"TSQ(
+(identifier) @variable
+
+(decorator) @function
+
+(call
+  function: (attribute attribute: (identifier) @function))
+(call
+  function: (identifier) @function)
+
+(function_definition
+  name: (identifier) @function)
+
+(class_definition
+  name: (identifier) @type)
+
+(attribute attribute: (identifier) @property)
+(type (identifier) @type)
+
+[(none) (true) (false)] @constant
+
+[(integer) (float)] @number
+
+(comment) @comment
+(string) @string
+(escape_sequence) @escape
+
+(interpolation
+  "{" @punctuation.special
+  "}" @punctuation.special)
+
+[
+  "-" "-=" "!=" "*" "**" "**=" "*=" "/" "//" "//=" "/=" "&" "&=" "%" "%=" "^" "^="
+  "+" "->" "+=" "<" "<<" "<<=" "<=" "<>" "=" ":=" "==" ">" ">=" ">>" ">>=" "|" "|="
+  "~" "@=" "and" "in" "is" "not" "or"
+] @operator
+
+[
+  "as" "assert" "async" "await" "break" "class" "continue" "def" "del" "elif" "else"
+  "except" "exec" "finally" "for" "from" "global" "if" "import" "lambda" "nonlocal"
+  "pass" "print" "raise" "return" "try" "while" "with" "yield" "match" "case"
+] @keyword
+)TSQ";
+
+const char* kCompletionQueryPython = R"TSQ(
+(function_definition name: (identifier) @function)
+(class_definition name: (identifier) @class)
+(assignment left: (identifier) @variable)
+(parameters (identifier) @variable)
+(default_parameter name: (identifier) @variable)
+(typed_parameter (identifier) @variable)
+(keyword_argument name: (identifier) @property)
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -788,6 +847,15 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
         "require", "select", "setmetatable", "tonumber", "tostring", "type", "xpcall",
         "string", "table", "math", "io", "os", "coroutine",
     }},
+    {"python", {
+        "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif",
+        "else", "except", "finally", "for", "from", "global", "if", "import", "lambda",
+        "nonlocal", "pass", "raise", "return", "try", "while", "with", "yield",
+        "and", "in", "is", "not", "or", "match", "case",
+        "True", "False", "None", "self",
+        "print", "len", "range", "int", "str", "float", "bool", "list", "dict", "set", "tuple",
+        "type", "isinstance", "super", "object", "enumerate", "zip", "map", "filter", "open",
+    }},
 };
 
 struct LanguageDef {
@@ -812,6 +880,7 @@ const LanguageDef kLanguages[] = {
     {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo},
     {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava},
     {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua},
+    {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -833,6 +902,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "go")                                    return &kLanguages[8];
     if (ext == "java")                                  return &kLanguages[9];
     if (ext == "lua")                                   return &kLanguages[10];
+    if (ext == "py" || ext == "pyw" || ext == "pyi")    return &kLanguages[11];
     return nullptr;
 }
 
