@@ -42,6 +42,7 @@ const TSLanguage* tree_sitter_dockerfile(void);
 const TSLanguage* tree_sitter_yaml(void);
 const TSLanguage* tree_sitter_css(void);
 const TSLanguage* tree_sitter_scss(void);
+const TSLanguage* tree_sitter_markdown(void);
 }
 
 using json = nlohmann::json;
@@ -1376,6 +1377,82 @@ const char* kCompletionQueryScss = R"TSQ(
 (placeholder) @type
 )TSQ";
 
+// Markdown — vendors only the block grammar (tree-sitter-markdown), not the
+// inline grammar. Upstream nvim-treesitter highlighting layers a second,
+// inline-parsed tree over the contents of `(inline)` nodes via injection,
+// which this single-tree-per-buffer engine doesn't support. v1: block-level
+// structure only (headings, code blocks, lists, block quotes, tables,
+// thematic breaks, link reference definitions); inline emphasis/links/code
+// spans within paragraph text render as plain text. `@text.*` captures (no
+// kStyles slots) remapped: `@text.title`->`@keyword`, `@text.literal`->
+// `@string`, `@text.uri`->`@string`, `@text.reference`->`@property`. `@none`
+// on `code_fence_content` dropped (whole `fenced_code_block` is captured as
+// `@string` instead, giving code blocks a distinct color). Extended with
+// GFM pipe-table delimiters/alignment markers, task-list checkboxes,
+// frontmatter delimiters and fenced-code-block language (`info_string`),
+// none of which are in the upstream query.
+const char* kQueryMarkdown = R"TSQ(
+(atx_heading (inline) @keyword)
+(setext_heading (paragraph) @keyword)
+
+[
+  (atx_h1_marker)
+  (atx_h2_marker)
+  (atx_h3_marker)
+  (atx_h4_marker)
+  (atx_h5_marker)
+  (atx_h6_marker)
+  (setext_h1_underline)
+  (setext_h2_underline)
+] @punctuation.special
+
+[
+  (link_title)
+  (indented_code_block)
+  (fenced_code_block)
+] @string
+
+(fenced_code_block_delimiter) @punctuation.delimiter
+
+(info_string) @type
+
+(link_destination) @string
+
+(link_label) @property
+
+[
+  (list_marker_plus)
+  (list_marker_minus)
+  (list_marker_star)
+  (list_marker_dot)
+  (list_marker_parenthesis)
+  (thematic_break)
+  (block_continuation)
+  (block_quote_marker)
+  (pipe_table_delimiter_row)
+  (pipe_table_align_left)
+  (pipe_table_align_right)
+  "|"
+] @punctuation.special
+
+[
+  (task_list_marker_checked)
+  (task_list_marker_unchecked)
+] @constant
+
+[
+  (minus_metadata)
+  (plus_metadata)
+] @comment
+
+(backslash_escape) @escape
+)TSQ";
+
+const char* kCompletionQueryMarkdown = R"TSQ(
+(link_label) @property
+(info_string) @type
+)TSQ";
+
 // Per-language static keyword tables (mirrors the keyword lists in the
 // highlight queries above).
 const std::map<std::string, std::vector<std::string>> kKeywords = {
@@ -1563,6 +1640,7 @@ const LanguageDef kLanguages[] = {
     {"yaml",       tree_sitter_yaml,       kQueryYaml,               kCompletionQueryYaml},
     {"css",        tree_sitter_css,        kQueryCss,                kCompletionQueryCss},
     {"scss",       tree_sitter_scss,       kQueryScss,               kCompletionQueryScss},
+    {"markdown",   tree_sitter_markdown,   kQueryMarkdown,           kCompletionQueryMarkdown},
 };
 
 const LanguageDef* language_for_path(const std::string& path) {
@@ -1602,6 +1680,7 @@ const LanguageDef* language_for_path(const std::string& path) {
     if (ext == "yaml" || ext == "yml")                  return &kLanguages[16];
     if (ext == "css")                                   return &kLanguages[17];
     if (ext == "scss")                                  return &kLanguages[18];
+    if (ext == "md" || ext == "markdown")               return &kLanguages[19];
     return nullptr;
 }
 
