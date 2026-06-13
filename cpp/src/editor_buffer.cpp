@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <vector>
 
 #ifdef _WIN32
@@ -831,6 +832,70 @@ json op_match_bracket(const json& msg) {
             {"matchLine", mLine}, {"matchCol", mCol}};
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+// Literal queries are escaped into an ECMAScript regex so wholeWord (\b...\b)
+// is handled the same way for both modes. Runs over the whole (CRLF-normalized)
+// buffer text, so multi-line regex matches work; capped to avoid huge results
+// on accidental whole-file matches.
+
+json op_search(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    std::string query = msg.value("query", "");
+    bool is_regex = msg.value("regex", false);
+    bool case_sensitive = msg.value("caseSensitive", false);
+    bool whole_word = msg.value("wholeWord", false);
+
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b) return {{"ok", false}, {"error", "unknown buffer"}};
+    if (query.empty()) return {{"matches", json::array()}};
+
+    std::string pattern;
+    if (is_regex) {
+        pattern = query;
+    } else {
+        static const std::string special = "\\^$.|?*+()[]{}";
+        pattern.reserve(query.size());
+        for (char c : query) {
+            if (special.find(c) != std::string::npos) pattern.push_back('\\');
+            pattern.push_back(c);
+        }
+    }
+    if (whole_word) pattern = "\\b(?:" + pattern + ")\\b";
+
+    auto flags = std::regex::ECMAScript;
+    if (!case_sensitive) flags |= std::regex::icase;
+
+    std::regex re;
+    try {
+        re = std::regex(pattern, flags);
+    } catch (const std::regex_error&) {
+        return {{"ok", false}, {"error", "invalid pattern"}};
+    }
+
+    auto to_pos = [&](uint32_t byte_off) -> std::pair<uint32_t, uint32_t> {
+        TSPoint p = point_for_byte(*b, byte_off);
+        uint32_t line_start = b->line_offsets[p.row];
+        return {p.row, byte_to_u16_col(b->text, line_start, byte_off)};
+    };
+
+    const std::string& text = b->text;
+    json matches = json::array();
+    const size_t kMaxMatches = 10000;
+    auto it = std::sregex_iterator(text.begin(), text.end(), re);
+    auto end = std::sregex_iterator();
+    for (; it != end; ++it) {
+        uint32_t s = (uint32_t)it->position(0);
+        uint32_t e = s + (uint32_t)it->length(0);
+        auto [sl, sc] = to_pos(s);
+        auto [el, ec] = to_pos(e);
+        matches.push_back({{"startLine", sl}, {"startCol", sc},
+                           {"endLine", el}, {"endCol", ec}});
+        if (matches.size() >= kMaxMatches) break;
+    }
+    return {{"matches", matches}};
+}
+
 json op_save(const json& msg) {
     int id = msg.value("bufferId", 0);
     std::lock_guard<std::mutex> lk(g_mu);
@@ -897,6 +962,7 @@ bool dispatch(const std::string& type, const json& msg,
     else if (type == "editor.undo")          resp = op_undo(msg);
     else if (type == "editor.redo")          resp = op_redo(msg);
     else if (type == "editor.matchBracket")  resp = op_match_bracket(msg);
+    else if (type == "editor.search")        resp = op_search(msg);
     else if (type == "editor.save")          resp = op_save(msg);
     else if (type == "editor.close")         resp = op_close(msg);
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);

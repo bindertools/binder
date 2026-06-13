@@ -19,6 +19,9 @@
 //                                                        dirtyStart, dirtyEnd, cursorLine, cursorCol}
 //   editor.matchBracket {bufferId, line, col}        → {found, anchorLine, anchorCol,
 //                                                        matchLine, matchCol} | {found: false}
+//   editor.search    {bufferId, query, regex?, caseSensitive?, wholeWord?}
+//                                                     → {matches: [{startLine, startCol,
+//                                                        endLine, endCol}]} (capped at 10000)
 //   editor.save      {bufferId}                      → {saved}
 //   editor.close     {bufferId}                      → {closed}
 //   editor.viewstate.set {bufferId, viewKey?, state} → {}
