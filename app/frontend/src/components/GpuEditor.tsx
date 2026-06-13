@@ -2,8 +2,11 @@ import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperat
 import { invoke } from '../lib/ipc'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
 import type { GpuEditorColors } from '../themes'
+import FindReplaceBar from './FindReplaceBar'
 
 interface LineData { text: string; spans: [number, number, number][] }
+
+interface SearchMatch { startLine: number; startCol: number; endLine: number; endCol: number }
 
 interface OpenResp {
   bufferId: number
@@ -73,6 +76,8 @@ const DEFAULT_GPU_COLORS: GpuEditorColors = {
   currentLine: '#1a1a1a',
   cursor: '#cccccc',
   selection: '#264f78',
+  findMatch: '#623315',
+  findMatchActive: '#a8741a',
 }
 
 interface PaintColors {
@@ -81,6 +86,8 @@ interface PaintColors {
   currentLine: RGBA
   cursor: RGBA
   selection: RGBA
+  findMatch: RGBA
+  findMatchActive: RGBA
   styles: RGBA[]
 }
 
@@ -91,6 +98,8 @@ function buildPaintColors(c: GpuEditorColors): PaintColors {
     currentLine: hexToRgba(c.currentLine),
     cursor: hexToRgba(c.cursor),
     selection: hexToRgba(c.selection, 0.55),
+    findMatch: hexToRgba(c.findMatch, 0.55),
+    findMatchActive: hexToRgba(c.findMatchActive, 0.75),
     styles: c.styles.map(hex => hexToRgba(hex)),
   }
 }
@@ -188,6 +197,32 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const [status, setStatus] = useState('')
 
   const paintRef = useRef<PaintColors>(buildPaintColors(colors ?? DEFAULT_GPU_COLORS))
+
+  // ── Find / replace state ─────────────────────────────────────────────────────
+  const [findOpen, setFindOpen] = useState(false)
+  const [findMode, setFindMode] = useState<'find' | 'replace'>('find')
+  const [findQuery, setFindQuery] = useState('')
+  const [replaceText, setReplaceText] = useState('')
+  const [findRegex, setFindRegex] = useState(false)
+  const [findCaseSensitive, setFindCaseSensitive] = useState(false)
+  const [findWholeWord, setFindWholeWord] = useState(false)
+  const [matchCount, setMatchCount] = useState(0)
+  const [currentMatch, setCurrentMatch] = useState(-1)
+
+  const matchesRef = useRef<SearchMatch[]>([])
+  const currentMatchRef = useRef(-1)
+  const findOpenRef = useRef(false)
+  findOpenRef.current = findOpen
+  const findQueryRef = useRef('')
+  findQueryRef.current = findQuery
+  const replaceTextRef = useRef('')
+  replaceTextRef.current = replaceText
+  const findRegexRef = useRef(false)
+  findRegexRef.current = findRegex
+  const findCaseSensitiveRef = useRef(false)
+  findCaseSensitiveRef.current = findCaseSensitive
+  const findWholeWordRef = useRef(false)
+  findWholeWordRef.current = findWholeWord
 
   // Notify consumers (e.g. FullscreenIDE's status bar) of the primary
   // cursor's position. Cheap to call after every cursor-affecting op.
@@ -287,6 +322,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         if (bCol - left >= 0 && bCol - left < cols) {
           renderer.drawRect(x, y, cw, ch, BRACKET_MATCH_COLOR)
         }
+      }
+    }
+
+    // Find/replace match highlights
+    const matches = matchesRef.current
+    for (let mi = 0; mi < matches.length; mi++) {
+      const m = matches[mi]
+      if (m.endLine < top || m.startLine >= top + rows) continue
+      const color = mi === currentMatchRef.current ? paintRef.current.findMatchActive : paintRef.current.findMatch
+      for (let ln = Math.max(m.startLine, top); ln <= Math.min(m.endLine, top + rows - 1); ln++) {
+        const data = lineCacheRef.current.get(ln)
+        const from = ln === m.startLine ? m.startCol : 0
+        const to = ln === m.endLine ? m.endCol : (data?.text.length ?? 0) + 1
+        const x0 = gutterWidth + (from - left) * cw
+        const x1 = gutterWidth + (to - left) * cw
+        const y = (ln - top) * ch
+        renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, color)
       }
     }
 
@@ -485,6 +537,114 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     setStatus('')
     notifyDirty(false)
   }, [notifyDirty])
+
+  // ── Find / replace ──────────────────────────────────────────────────────────
+
+  // Re-run editor.search with the current query/options and pick the match
+  // nearest the primary cursor as "current". Fire-and-forget.
+  const runSearch = useCallback(async () => {
+    const query = findQueryRef.current
+    if (!query) {
+      matchesRef.current = []
+      currentMatchRef.current = -1
+      setMatchCount(0)
+      setCurrentMatch(-1)
+      draw()
+      return
+    }
+    try {
+      const resp = await invoke<{ matches: SearchMatch[] }>('editor.search', {
+        bufferId: bufferIdRef.current,
+        query,
+        regex: findRegexRef.current,
+        caseSensitive: findCaseSensitiveRef.current,
+        wholeWord: findWholeWordRef.current,
+      })
+      matchesRef.current = resp.matches
+      setMatchCount(resp.matches.length)
+      const primary = cursorsRef.current[0]
+      let idx = resp.matches.findIndex(m =>
+        m.startLine > primary.line || (m.startLine === primary.line && m.startCol >= primary.col))
+      if (idx === -1) idx = resp.matches.length > 0 ? 0 : -1
+      currentMatchRef.current = idx
+      setCurrentMatch(idx)
+      draw()
+    } catch {
+      matchesRef.current = []
+      currentMatchRef.current = -1
+      setMatchCount(0)
+      setCurrentMatch(-1)
+      draw()
+    }
+  }, [draw])
+
+  // Apply a batch of edits (already in document coordinates, any order) —
+  // used by replace/replace-all, which build their edits from a search-match
+  // snapshot rather than per-cursor like applyMultiEdit.
+  const applyRawEdits = useCallback(async (edits: { startLine: number; startCol: number; endLine: number; endCol: number; text: string }[]) => {
+    if (edits.length === 0 || readOnlyRef.current) return
+    const sorted = [...edits].sort((a, b) => b.startLine - a.startLine || b.startCol - a.startCol)
+    const resp = await invoke<{ version: number; lineCount: number }>('editor.edit', {
+      bufferId: bufferIdRef.current, edits: sorted,
+    })
+    versionRef.current = resp.version
+    lineCountRef.current = resp.lineCount
+    lineCacheRef.current.clear()
+    setStatus('●')
+    notifyDirty(true)
+    onLineCountChangeRef.current?.(lineCountRef.current)
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [draw, fetchVisible, notifyDirty, updateBracketMatch])
+
+  // Enter/Shift+Enter — select the next/previous match, wrapping around.
+  const gotoMatch = useCallback((delta: number) => {
+    const matches = matchesRef.current
+    const n = matches.length
+    if (n === 0) return
+    const idx = ((currentMatchRef.current + delta) % n + n) % n
+    currentMatchRef.current = idx
+    setCurrentMatch(idx)
+    const m = matches[idx]
+    cursorsRef.current = [{ line: m.endLine, col: m.endCol, anchorLine: m.startLine, anchorCol: m.startCol }]
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor])
+
+  const replaceCurrent = useCallback(async () => {
+    const m = matchesRef.current[currentMatchRef.current]
+    if (!m) return
+    await applyRawEdits([{ startLine: m.startLine, startCol: m.startCol, endLine: m.endLine, endCol: m.endCol, text: replaceTextRef.current }])
+    await runSearch()
+  }, [applyRawEdits, runSearch])
+
+  const replaceAllMatches = useCallback(async () => {
+    const matches = matchesRef.current
+    if (matches.length === 0) return
+    const edits = matches.map(m => ({ startLine: m.startLine, startCol: m.startCol, endLine: m.endLine, endCol: m.endCol, text: replaceTextRef.current }))
+    await applyRawEdits(edits)
+    await runSearch()
+  }, [applyRawEdits, runSearch])
+
+  const closeFind = useCallback(() => {
+    setFindOpen(false)
+    matchesRef.current = []
+    currentMatchRef.current = -1
+    setMatchCount(0)
+    setCurrentMatch(-1)
+    draw()
+    textareaRef.current?.focus()
+  }, [draw])
+
+  const openFind = useCallback((mode: 'find' | 'replace') => {
+    setFindMode(mode)
+    setFindOpen(true)
+    if (findQueryRef.current) void runSearch()
+  }, [runSearch])
 
   const insertText = useCallback(async (text: string) => {
     const ops = cursorsRef.current.map((c, idx) => {
@@ -830,6 +990,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     })
   }, [gotoLine, ready, setCursorTo])
 
+  // Debounced re-search while the find bar is open and the query/options change.
+  useEffect(() => {
+    if (!findOpen) return
+    const t = setTimeout(() => { void runSearch() }, 150)
+    return () => clearTimeout(t)
+  }, [findOpen, findQuery, findRegex, findCaseSensitive, findWholeWord, runSearch])
+
   // ── Input handlers ──────────────────────────────────────────────────────────
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -848,6 +1015,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       case 'Home':       e.preventDefault(); void moveCursorsTo(c => ({ line: c.line, col: 0 }), shift); return
       case 'End':        e.preventDefault(); void moveCursorsTo(c => ({ line: c.line, col: Infinity }), shift); return
       case 'Escape':
+        if (findOpenRef.current) { e.preventDefault(); closeFind(); return }
         if (cursorsRef.current.length > 1) {
           e.preventDefault()
           cursorsRef.current = [cursorsRef.current[0]]
@@ -877,6 +1045,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           void redo()
         }
         return
+      case 'f':
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); openFind('find') }
+        return
+      case 'h':
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); openFind('replace') }
+        return
       default:
         if (!e.ctrlKey && !e.metaKey && !e.altKey && (AUTO_CLOSE_PAIRS[e.key] !== undefined || AUTO_CLOSE_CLOSERS.has(e.key))) {
           e.preventDefault()
@@ -884,7 +1058,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [addCursorVertical, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, redo, save, undo])
+  }, [addCursorVertical, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, save, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -1004,6 +1178,29 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           <div className="absolute inset-0 flex items-center justify-center text-[12px] text-[var(--info-bar-color)]">
             Loading…
           </div>
+        )}
+        {findOpen && (
+          <FindReplaceBar
+            mode={findMode}
+            query={findQuery}
+            replacement={replaceText}
+            matchCount={matchCount}
+            currentIndex={currentMatch}
+            regex={findRegex}
+            caseSensitive={findCaseSensitive}
+            wholeWord={findWholeWord}
+            onQueryChange={setFindQuery}
+            onReplacementChange={setReplaceText}
+            onToggleRegex={() => setFindRegex(v => !v)}
+            onToggleCaseSensitive={() => setFindCaseSensitive(v => !v)}
+            onToggleWholeWord={() => setFindWholeWord(v => !v)}
+            onToggleMode={() => setFindMode(m => m === 'find' ? 'replace' : 'find')}
+            onNext={() => gotoMatch(1)}
+            onPrev={() => gotoMatch(-1)}
+            onReplace={() => void replaceCurrent()}
+            onReplaceAll={() => void replaceAllMatches()}
+            onClose={closeFind}
+          />
         )}
       </div>
     </div>

@@ -248,6 +248,8 @@ export interface GpuEditorColors {
   currentLine: string
   cursor: string
   selection: string
+  findMatch: string
+  findMatchActive: string
 }
 
 export function themeToGpuColors(theme: AppTheme): GpuEditorColors {
@@ -277,6 +279,8 @@ export function themeToGpuColors(theme: AppTheme): GpuEditorColors {
     currentLine: mc['editor.lineHighlightBackground'] ?? '#1a1a1a',
     cursor:      mc['editorCursor.foreground']        ?? '#cccccc',
     selection:   mc['editor.selectionBackground']     ?? '#264f78',
+    findMatch:       mc['editor.findMatchHighlightBackground'] ?? '#623315',
+    findMatchActive: mc['editor.findMatchBackground']          ?? '#a8741a',
   }
 }
 
