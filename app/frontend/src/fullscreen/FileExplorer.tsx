@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
 import DeleteConfirmDialog from './DeleteConfirmDialog'
@@ -37,6 +38,8 @@ interface FlatRow {
   depth: number
 }
 
+const ROW_HEIGHT = 22 // px — matches .fe-node { height: 22px } in fullscreen.scss
+
 function parentDir(path: string): string {
   const idx = path.lastIndexOf('/')
   return idx === -1 ? path : path.substring(0, idx)
@@ -66,6 +69,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
   const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
   const dragSrc = useRef<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // (Re)fetch a directory's children and store them in the cache.
   const loadDir = useCallback(async (path: string) => {
@@ -120,6 +124,13 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     if (root) walk(root.path, 0)
     return out
   }, [root, dirCache, expanded])
+
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
 
   // Right-click on a file/folder node
   const openFileCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
@@ -254,7 +265,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const onDragEnd = () => { dragSrc.current = null; setDragOver(null) }
 
   // ── Flat tree row ──────────────────────────────────────────────────────────
-  function renderNode(node: FileNode, depth: number): React.ReactNode {
+  function renderNode(node: FileNode, depth: number, style: React.CSSProperties): React.ReactNode {
     const isOpen        = node.isDir && expanded.has(node.path)
     const isSelected    = node.path === selectedPath
     const isDragTarget  = dragOver === node.path
@@ -271,7 +282,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
           isDragTarget ? 'fe-node--dragover'  : '',
           isIgnored    ? 'fe-node--git-ignored' : '',
         ].join(' ')}
-        style={{ paddingLeft: `${depth * 14 + 8}px` }}
+        style={{ ...style, paddingLeft: `${depth * 14 + 8}px` }}
         onClick={() => {
           if (node.isDir) toggle(node)
           else onSelect(node)
@@ -338,10 +349,19 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
 
       {/* Tree — area menu on empty space */}
       <div
+        ref={scrollRef}
         className="fe-tree"
         onContextMenu={e => openAreaCtx(e, root)}
       >
-        {flatRows.map(({ node, depth }) => renderNode(node, depth))}
+        <div style={{ position: 'relative', height: virtualizer.getTotalSize(), width: '100%' }}>
+          {virtualizer.getVirtualItems().map(item => {
+            const { node, depth } = flatRows[item.index]
+            return renderNode(node, depth, {
+              position: 'absolute', top: 0, left: 0, right: 0,
+              height: `${item.size}px`, transform: `translateY(${item.start}px)`,
+            })
+          })}
+        </div>
       </div>
 
       {/* Context menu */}
