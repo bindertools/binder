@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(cmdide-backend LANGUAGES CXX)
+project(cmdide-backend LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +23,19 @@ find_package(httplib CONFIG REQUIRED)
 find_package(cmark CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
+find_package(unofficial-tree-sitter CONFIG REQUIRED)
+
+# ── Vendored tree-sitter grammars (parser.c per language, no external deps) ────
+add_library(cmdide-grammars STATIC
+    third_party/grammars/tree-sitter-json/src/parser.c
+    third_party/grammars/tree-sitter-javascript/src/parser.c
+    third_party/grammars/tree-sitter-javascript/src/scanner.c
+)
+set_target_properties(cmdide-grammars PROPERTIES LINKER_LANGUAGE C)
+target_include_directories(cmdide-grammars PRIVATE
+    third_party/grammars/tree-sitter-json/src
+    third_party/grammars/tree-sitter-javascript/src
+)
 
 # ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────
 add_library(cmdide-backend-lib STATIC
@@ -54,6 +67,8 @@ target_link_libraries(cmdide-backend-lib PUBLIC
     cmark::cmark
     unofficial::sqlite3::sqlite3
     libzip::zip
+    unofficial::tree-sitter::tree-sitter
+    cmdide-grammars
 )
 
 if(WIN32)

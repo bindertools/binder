@@ -1,0 +1,29 @@
+#pragma once
+#include <nlohmann/json.hpp>
+#include <string>
+
+// Backend-resident editor buffers: file text, tree-sitter parse trees and
+// highlight computation live here, keyed by buffer id. Buffers stay warm
+// (parsed, highlighted, view state intact) independent of which frontend
+// tab displays them.
+//
+// IPC surface (all editor.*):
+//   editor.open      {path}                          → {bufferId, lineCount, language, version, styles}
+//   editor.lines     {bufferId, start, end}          → {version, lines: [{text, spans: [[s,e,style],…]}]}
+//   editor.edit      {bufferId, edits: [{startLine,startCol,endLine,endCol,text}]}
+//                                                    → {version, lineCount, dirtyStart, dirtyEnd}
+//   editor.save      {bufferId}                      → {saved}
+//   editor.close     {bufferId}                      → {closed}
+//   editor.viewstate.set {bufferId, state}           → {}
+//   editor.viewstate.get {bufferId}                  → {state}
+//   editor.buffers   {}                              → {buffers: [{bufferId, path, lineCount, dirty}]}
+//
+// Columns in the IPC contract are UTF-16 code units (JS string indexing).
+
+namespace editor_ops {
+
+// Dispatch an editor.* IPC message. Fills resp; returns true if handled.
+bool dispatch(const std::string& type, const nlohmann::json& msg,
+              const std::string& id, nlohmann::json& resp);
+
+} // namespace editor_ops

@@ -8,6 +8,7 @@
     "cmark",
     "sqlite3",
     "libzip",
+    "tree-sitter",
     "zserge-webview",
     { "name": "webview2", "platform": "windows" }
   ]
