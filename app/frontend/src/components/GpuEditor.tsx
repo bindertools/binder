@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { invoke } from '../lib/ipc'
 import { git, parseChangedLines } from '../lib/git'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
@@ -6,8 +7,27 @@ import { computeMinimapGeometry, drawMinimap, minimapLineAt, MINIMAP_WIDTH, type
 import type { GpuEditorColors } from '../themes'
 import FindReplaceBar from './FindReplaceBar'
 import CompletionsPopup, { type CompletionItem } from './CompletionsPopup'
+import './GpuEditor.css'
 
 interface LineData { text: string; spans: [number, number, number][] }
+
+// One visible row's gutter decorations: the pin/mark dot and, for lines that
+// open an indented block, the fold chevron.
+interface GutterOverlayRow {
+  ln: number
+  y: number
+  foldable: boolean
+  folded: boolean
+  pinned: boolean
+  current: boolean
+}
+
+interface GutterOverlayState {
+  gutterWidth: number
+  cw: number
+  ch: number
+  rows: GutterOverlayRow[]
+}
 
 interface SearchMatch { startLine: number; startCol: number; endLine: number; endCol: number }
 
@@ -176,6 +196,34 @@ function lineIndent(text: string): number {
   return cols
 }
 
+// How far indent-guide scanning will look past a blank line for the nearest
+// non-blank neighbor — bounds the cost of files with very long blank runs.
+const MAX_BLANK_SCAN = 500
+
+// Indentation to draw guides at for `ln`. Non-blank lines use their own
+// leading whitespace; blank lines borrow the deeper of their surrounding
+// non-blank neighbors' indentation so guides run continuously through gaps
+// instead of disappearing on empty lines.
+function guideIndent(ln: number, lineCount: number, cache: Map<number, LineData>): number {
+  const data = cache.get(ln)
+  if (!data) return 0
+  if (data.text.trim().length > 0) return lineIndent(data.text)
+
+  let prev = 0
+  for (let i = ln - 1, scanned = 0; i >= 0 && scanned < MAX_BLANK_SCAN; i--, scanned++) {
+    const d = cache.get(i)
+    if (!d) break
+    if (d.text.trim().length > 0) { prev = lineIndent(d.text); break }
+  }
+  let next = 0
+  for (let i = ln + 1, scanned = 0; i < lineCount && scanned < MAX_BLANK_SCAN; i++, scanned++) {
+    const d = cache.get(i)
+    if (!d) break
+    if (d.text.trim().length > 0) { next = lineIndent(d.text); break }
+  }
+  return Math.max(prev, next)
+}
+
 // Cap on how many lines computeFoldEnd will scan ahead — bounds the cost of
 // large pretty-printed files (e.g. deeply-nested JSON) where a top-level
 // block could otherwise span the entire cached range.
@@ -245,11 +293,12 @@ function unfoldContaining(ln: number, folds: Map<number, number>) {
   }
 }
 
-// Adjust pinned-line numbers after an edit changes the line count: lines
-// before the edited range are untouched, lines after shift by the change in
-// line count, and pins inside the edited range are dropped (their content
-// changed, so the mark no longer has a clear target).
-function shiftPinnedLines(pins: Set<number>, prevLineCount: number, newLineCount: number, dirtyStart: number, dirtyEnd: number) {
+// Adjust line numbers in a gutter decoration set (pins, git-changed lines)
+// after an edit changes the line count: lines before the edited range are
+// untouched, lines after shift by the change in line count, and entries
+// inside the edited range are dropped (their content changed, so callers
+// that want to re-mark that range should add it back afterwards).
+function shiftLineSet(pins: Set<number>, prevLineCount: number, newLineCount: number, dirtyStart: number, dirtyEnd: number) {
   if (newLineCount === prevLineCount) return
   const delta = newLineCount - prevLineCount
   const next = new Set<number>()
@@ -259,6 +308,16 @@ function shiftPinnedLines(pins: Set<number>, prevLineCount: number, newLineCount
   }
   pins.clear()
   for (const p of next) pins.add(p)
+}
+
+// Mark lines [start, end] (inclusive, clamped to the document) as changed in
+// the git gutter. Called on every edit so the blue indicator bar appears as
+// soon as the user types, rather than only after a save triggers a real
+// `git diff` via fetchGitGutter().
+function markLinesChanged(changed: Set<number>, start: number, end: number, lineCount: number) {
+  const from = Math.max(0, start)
+  const to = Math.min(lineCount - 1, Math.max(end, start))
+  for (let i = from; i <= to; i++) changed.add(i)
 }
 
 // Actual (0-based) line numbers to render, up to `count` rows starting at
@@ -304,13 +363,32 @@ const GUTTER_BAR_COLS = 1
 const GUTTER_BAR_WIDTH = 3
 const GUTTER_BAR_INSET = 2
 
-// Gutter glyphs for code folding: drawn in the rightmost gutter column
-// (the padding column just left of the text area) for foldable lines.
-const FOLD_EXPANDED_GLYPH = '-'
-const FOLD_COLLAPSED_GLYPH = '+'
+// Breathing room (in pixels) around gutter elements: space before the
+// indicator bar / line numbers, and space on each side of the fold glyph.
+const GUTTER_LEFT_PAD = 10
+const GUTTER_FOLD_PAD = 8
 
 // Placeholder shown after a collapsed line's text.
 const FOLD_PLACEHOLDER = ' ⋯'
+
+// Total width of the gutter (line numbers, pin-dot column, indicator bar,
+// and fold glyph), including padding. Shared by drawing, hit-testing, and
+// layout math so they never drift apart.
+function computeGutterWidth(lineCount: number, cw: number): number {
+  const digits = Math.max(3, String(Math.max(1, lineCount)).length)
+  return GUTTER_LEFT_PAD + (digits + GUTTER_BAR_COLS) * cw + GUTTER_FOLD_PAD * 2 + cw * 2
+}
+
+// X position of the fold glyph's column within the gutter.
+function foldGlyphX(gutterWidth: number, cw: number): number {
+  return gutterWidth - GUTTER_FOLD_PAD - cw
+}
+
+// X position of the pin/mark dot's column, between the line number and the
+// fold glyph.
+function pinDotX(gutterWidth: number, cw: number): number {
+  return foldGlyphX(gutterWidth, cw) - GUTTER_FOLD_PAD - cw
+}
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, viewKey,
@@ -377,6 +455,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const paintRef = useRef<PaintColors>(buildPaintColors(colors ?? DEFAULT_GPU_COLORS))
 
+  // ── Gutter overlay (pin dots + fold chevrons, rendered as DOM for hover) ─────
+  const [gutterOverlay, setGutterOverlay] = useState<GutterOverlayState>({ gutterWidth: 0, cw: 0, ch: 0, rows: [] })
+  const gutterOverlayKeyRef = useRef('')
+
   // ── Find / replace state ─────────────────────────────────────────────────────
   const [findOpen, setFindOpen] = useState(false)
   const [findMode, setFindMode] = useState<'find' | 'replace'>('find')
@@ -440,8 +522,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const cw = renderer.cellWidth
     const ch = renderer.cellHeight
     const lineCount = lineCountRef.current
-    const gutterDigits = Math.max(3, String(Math.max(1, lineCount)).length)
-    const gutterWidth = (gutterDigits + 1 + GUTTER_BAR_COLS) * cw
+    const gutterWidth = computeGutterWidth(lineCount, cw)
 
     renderer.beginFrame(paintRef.current.bg)
 
@@ -454,6 +535,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const ranges = cursors.map(rangeOf).filter((r): r is [number, number, number, number] => r !== null)
 
     const visLines = computeVisibleLines(top, rows, lineCount, foldedRangesRef.current)
+    const overlayRows: GutterOverlayRow[] = []
 
     // Current-line highlight (full width, behind text)
     const curRow = visLines.indexOf(curLine)
@@ -467,10 +549,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       const data = lineCacheRef.current.get(ln)
       const y = row * ch
 
-      // Line number (right-aligned in gutter), brightened on the current
-      // line or shown in red if the line is pinned/marked.
+      // Line number (right-aligned in gutter, left of the pin-dot/fold
+      // columns), brightened on the current line or shown in red if
+      // pinned/marked.
       const numStr = String(ln + 1)
-      const numX = gutterWidth - (numStr.length + 1) * cw
+      const numX = pinDotX(gutterWidth, cw) - numStr.length * cw
       const numColor = pinnedLinesRef.current.has(ln) ? paintRef.current.errorLine
         : ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter
       renderer.drawText(numX, y, numStr, numColor)
@@ -483,23 +566,28 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         : gitChangedLinesRef.current.has(ln) ? paintRef.current.gitModified
         : null
       if (barColor) {
-        renderer.drawRect(GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
+        renderer.drawRect(GUTTER_LEFT_PAD + GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
       }
 
-      // Fold chevron in the gutter's rightmost (padding) column, for lines
-      // that open an indented block.
+      // Pin dot and fold chevron for this row are rendered as a DOM overlay
+      // (see gutterOverlay) so they get real CSS hover/cursor states.
       const foldEnd = computeFoldEnd(ln, lineCount, lineCacheRef.current)
-      if (foldEnd !== null) {
-        const glyph = foldedRangesRef.current.has(ln) ? FOLD_COLLAPSED_GLYPH : FOLD_EXPANDED_GLYPH
-        renderer.drawText(gutterWidth - cw, y, glyph, ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter)
-      }
+      overlayRows.push({
+        ln, y,
+        foldable: foldEnd !== null,
+        folded: foldedRangesRef.current.has(ln),
+        pinned: pinnedLinesRef.current.has(ln),
+        current: ln === curLine,
+      })
 
       if (!data) continue
 
       // Indent guides — a thin vertical line at each indent stop preceding
-      // the line's first non-whitespace character.
+      // the line's first non-whitespace character. Blank lines borrow the
+      // deeper surrounding indentation so guides run continuously through
+      // gaps in a block instead of disappearing.
       if (indentGuidesRef.current) {
-        const indentCols = lineIndent(data.text)
+        const indentCols = guideIndent(ln, lineCount, lineCacheRef.current)
         for (let col = 0; col < indentCols; col += INDENT_SIZE) {
           const vis = col - left
           if (vis < 0 || vis >= cols) continue
@@ -593,6 +681,17 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
         }
       }
+    }
+
+    // Sync the DOM gutter overlay (pin dots + fold chevrons). Skipped when
+    // nothing relevant changed so the cursor-blink redraw (every 530ms)
+    // doesn't trigger a React re-render.
+    const overlayKey = `${gutterWidth}|${cw}|${ch}|` + overlayRows.map(r =>
+      `${r.ln}:${r.foldable ? 1 : 0}${r.folded ? 1 : 0}${r.pinned ? 1 : 0}${r.current ? 1 : 0}`
+    ).join(',')
+    if (overlayKey !== gutterOverlayKeyRef.current) {
+      gutterOverlayKeyRef.current = overlayKey
+      setGutterOverlay({ gutterWidth, cw, ch, rows: overlayRows })
     }
 
     renderer.endFrame()
@@ -718,7 +817,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const dpr = window.devicePixelRatio || 1
     dprRef.current = dpr
     renderer.resize(w, h, dpr)
-    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
+    const gutterWidth = computeGutterWidth(lineCountRef.current, renderer.cellWidth)
     const minimapW = minimapRef.current ? MINIMAP_WIDTH : 0
     visibleRowsRef.current = Math.max(1, Math.ceil(h / renderer.cellHeight))
     visibleColsRef.current = Math.max(1, Math.floor((w - gutterWidth - minimapW) / renderer.cellWidth))
@@ -788,8 +887,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const renderer = rendererRef.current
     const { line, col } = cursorsRef.current[0]
     if (!renderer) return { x: 0, y: 0 }
-    const gutterDigits = Math.max(3, String(Math.max(1, lineCountRef.current)).length)
-    const gutterWidth = (gutterDigits + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
+    const gutterWidth = computeGutterWidth(lineCountRef.current, renderer.cellWidth)
     const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
     const visLines = computeVisibleLines(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current)
     const row = visLines.indexOf(line)
@@ -853,7 +951,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
-    shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    shiftLineSet(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    shiftLineSet(gitChangedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    markLinesChanged(gitChangedLinesRef.current, resp.dirtyStart, resp.dirtyEnd, resp.lineCount)
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
 
     const cursors = cursorsRef.current.slice()
@@ -907,7 +1007,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
     if (resp.dirtyStart !== undefined && resp.dirtyEnd !== undefined) {
-      shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+      shiftLineSet(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+      shiftLineSet(gitChangedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+      markLinesChanged(gitChangedLinesRef.current, resp.dirtyStart, resp.dirtyEnd, resp.lineCount)
       invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     } else {
       if (resp.lineCount !== prevLineCount) pinnedLinesRef.current.clear()
@@ -993,7 +1095,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
-    shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    shiftLineSet(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    shiftLineSet(gitChangedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    markLinesChanged(gitChangedLinesRef.current, resp.dirtyStart, resp.dirtyEnd, resp.lineCount)
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     setStatus('●')
     notifyDirty(true)
@@ -1601,7 +1705,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const canvas = canvasRef.current
     if (!renderer || !canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
+    const gutterWidth = computeGutterWidth(lineCountRef.current, renderer.cellWidth)
     const x = clientX - rect.left - gutterWidth
     const y = clientY - rect.top
     const rowIdx = Math.max(0, Math.floor(y / renderer.cellHeight))
@@ -1613,30 +1717,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const draggingRef = useRef(false)
 
-  // Toggle the fold at the clicked row's gutter chevron, if any. Returns
-  // true if the click was handled (so the caller skips cursor placement).
-  const toggleFoldAt = useCallback((clientX: number, clientY: number): boolean => {
-    const renderer = rendererRef.current
-    const canvas = canvasRef.current
-    if (!renderer || !canvas) return false
-    const rect = canvas.getBoundingClientRect()
-    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
-    const x = clientX - rect.left
-    if (x < gutterWidth - renderer.cellWidth || x >= gutterWidth) return false
-    const y = clientY - rect.top
-    const rowIdx = Math.max(0, Math.floor(y / renderer.cellHeight))
-    const visLines = computeVisibleLines(topLineRef.current, rowIdx + 1, lineCountRef.current, foldedRangesRef.current)
-    const ln = visLines[rowIdx]
-    if (ln === undefined) return false
+  // Toggle the fold anchored at `ln`, if it opens an indented block.
+  const toggleFold = useCallback((ln: number) => {
     const foldEnd = computeFoldEnd(ln, lineCountRef.current, lineCacheRef.current)
-    if (foldEnd === null) return false
+    if (foldEnd === null) return
     if (foldedRangesRef.current.has(ln)) foldedRangesRef.current.delete(ln)
     else foldedRangesRef.current.set(ln, foldEnd)
     clampScroll()
     fetchVisible()
     draw()
-    return true
   }, [clampScroll, draw, fetchVisible])
+
+  // Toggle the pin/mark on line `ln`.
+  const togglePin = useCallback((ln: number) => {
+    if (pinnedLinesRef.current.has(ln)) pinnedLinesRef.current.delete(ln)
+    else pinnedLinesRef.current.add(ln)
+    draw()
+  }, [draw])
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     // Canvas isn't focusable, so the browser's default mousedown action would
@@ -1645,13 +1742,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     // so keystrokes keep reaching the editor.
     e.preventDefault()
     textareaRef.current?.focus()
-    if (toggleFoldAt(e.clientX, e.clientY)) return
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
     if (e.ctrlKey) {
-      if (pinnedLinesRef.current.has(pos.line)) pinnedLinesRef.current.delete(pos.line)
-      else pinnedLinesRef.current.add(pos.line)
-      draw()
+      togglePin(pos.line)
       return
     }
     if (e.altKey) {
@@ -1660,7 +1754,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     }
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
-  }, [addCursorAt, draw, pixelToPos, setCursorTo, toggleFoldAt])
+  }, [addCursorAt, pixelToPos, setCursorTo, togglePin])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
@@ -1795,6 +1889,46 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           onDoubleClick={onDoubleClick}
           style={{ display: 'block', cursor: 'text' }}
         />
+        {gutterOverlay.rows.length > 0 && (
+          <div
+            className="gpu-gutter-overlay"
+            style={{
+              width: gutterOverlay.gutterWidth,
+              '--gpu-gutter-color': (colors ?? DEFAULT_GPU_COLORS).gutter,
+              '--gpu-gutter-active-color': (colors ?? DEFAULT_GPU_COLORS).gutterActive,
+              '--gpu-error-color': (colors ?? DEFAULT_GPU_COLORS).errorLine,
+            } as React.CSSProperties}
+          >
+            {gutterOverlay.rows.map(row => (
+              <div key={row.ln} className="gpu-gutter-row" style={{ top: row.y, width: gutterOverlay.gutterWidth, height: gutterOverlay.ch }}>
+                <button
+                  type="button"
+                  className={`gpu-pin-dot${row.pinned ? ' pinned' : ''}`}
+                  style={{ left: pinDotX(gutterOverlay.gutterWidth, gutterOverlay.cw), width: gutterOverlay.cw, height: gutterOverlay.ch }}
+                  onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+                  onClick={() => togglePin(row.ln)}
+                  title={row.pinned ? 'Remove mark' : 'Mark line'}
+                >
+                  <span className="dot" />
+                </button>
+                {row.foldable && (
+                  <button
+                    type="button"
+                    className={`gpu-fold-btn${row.current ? ' current' : ''}`}
+                    style={{ left: foldGlyphX(gutterOverlay.gutterWidth, gutterOverlay.cw), width: gutterOverlay.cw, height: gutterOverlay.ch }}
+                    onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+                    onClick={() => toggleFold(row.ln)}
+                    title={row.folded ? 'Expand' : 'Collapse'}
+                  >
+                    {row.folded
+                      ? <ChevronRight size={Math.max(10, Math.round(gutterOverlay.cw * 1.4))} strokeWidth={2} />
+                      : <ChevronDown size={Math.max(10, Math.round(gutterOverlay.cw * 1.4))} strokeWidth={2} />}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {minimap && (
           <canvas
             ref={minimapCanvasRef}
