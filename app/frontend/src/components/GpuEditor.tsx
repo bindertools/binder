@@ -159,6 +159,9 @@ const FONT_FAMILY = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Mona
 const MIN_FONT_SIZE = 8
 const MAX_FONT_SIZE = 36
 
+// Lines scrolled per "notch" of a standard mouse wheel (deltaY of ~100px).
+const LINES_PER_WHEEL_NOTCH = 3
+
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, gotoLine, viewKey,
   showHeader = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
@@ -176,6 +179,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const topLineRef = useRef<number>(0)
   const leftColRef = useRef<number>(0)
+  const wheelAccumRef = useRef<number>(0)
   const cursorsRef = useRef<Cursor[]>([{ line: 0, col: 0 }])
   const bracketMatchRef = useRef<[[number, number], [number, number]] | null>(null)
   const visibleRowsRef = useRef<number>(1)
@@ -1353,7 +1357,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
       }
-      const dLines = Math.round(e.deltaY / renderer.cellHeight) || (e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0)
+      // Convert pixel delta to lines using a fixed "lines per wheel notch"
+      // rate (independent of font size/cellHeight, which previously made a
+      // single notch jump 5-6 lines). An accumulator carries fractional
+      // remainders so small touchpad deltas still scroll smoothly.
+      wheelAccumRef.current += (e.deltaY / 100) * LINES_PER_WHEEL_NOTCH
+      const dLines = Math.trunc(wheelAccumRef.current)
+      wheelAccumRef.current -= dLines
       const dCols = Math.round(e.deltaX / renderer.cellWidth)
       if (dLines !== 0) topLineRef.current += dLines
       if (dCols !== 0) leftColRef.current += dCols
