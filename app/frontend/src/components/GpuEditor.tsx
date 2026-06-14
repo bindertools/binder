@@ -1091,7 +1091,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
       recomputeViewport()
       setReady(true)
-      textareaRef.current?.focus()
+      // Read-only instances (e.g. the workflow code preview, which stays
+      // mounted in a background overlay) must never grab keyboard focus —
+      // doing so on every filePath change steals focus from whichever
+      // editor the user is actually typing into.
+      if (!readOnlyRef.current) textareaRef.current?.focus()
       void updateBracketMatch()
     }
 
