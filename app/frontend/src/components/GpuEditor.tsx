@@ -44,6 +44,7 @@ interface Props {
   colors?: GpuEditorColors
   readOnly?: boolean
   minimap?: boolean
+  indentGuides?: boolean
   gotoLine?: number
   // Per-pane view-state key (cursor/scroll position), so two panes showing
   // the same buffer keep independent cursor/scroll. Omit for single-pane
@@ -100,6 +101,7 @@ interface PaintColors {
   currentLine: RGBA
   cursor: RGBA
   selection: RGBA
+  indentGuide: RGBA
   findMatch: RGBA
   findMatchActive: RGBA
   gitModified: RGBA
@@ -116,6 +118,7 @@ function buildPaintColors(c: GpuEditorColors): PaintColors {
     currentLine: hexToRgba(c.currentLine),
     cursor: hexToRgba(c.cursor),
     selection: hexToRgba(c.selection, 0.55),
+    indentGuide: hexToRgba(c.gutter, 0.18),
     findMatch: hexToRgba(c.findMatch, 0.55),
     findMatchActive: hexToRgba(c.findMatchActive, 0.75),
     gitModified: hexToRgba(c.gitModified),
@@ -178,6 +181,10 @@ const MAX_FONT_SIZE = 36
 // Lines scrolled per "notch" of a standard mouse wheel (deltaY of ~100px).
 const LINES_PER_WHEEL_NOTCH = 3
 
+// Width of one indentation level, in columns — matches the 2-space indent
+// inserted by the Tab key.
+const INDENT_SIZE = 2
+
 // Extra leading column reserved in the gutter for the git-change /
 // diagnostic indicator bar, ahead of the right-aligned line number.
 const GUTTER_BAR_COLS = 1
@@ -187,7 +194,7 @@ const GUTTER_BAR_WIDTH = 3
 const GUTTER_BAR_INSET = 2
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
-  filePath, fontSize = 13, colors, readOnly = false, minimap = false, gotoLine, viewKey,
+  filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, viewKey,
   showHeader = true, diagnostics, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -214,6 +221,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   readOnlyRef.current = readOnly
   const minimapRef = useRef<boolean>(minimap)
   minimapRef.current = minimap
+  const indentGuidesRef = useRef<boolean>(indentGuides)
+  indentGuidesRef.current = indentGuides
   const minimapGeomRef = useRef<MinimapGeometry>({ firstLine: 0, lastLine: -1, rowHeight: 2 })
   const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
   const minimapFetchingRef = useRef(false)
@@ -347,6 +356,24 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       }
 
       if (!data) continue
+
+      // Indent guides — a thin vertical line at each indent stop preceding
+      // the line's first non-whitespace character.
+      if (indentGuidesRef.current) {
+        const text = data.text
+        let indentCols = 0
+        for (let i = 0; i < text.length; i++) {
+          const ch2 = text[i]
+          if (ch2 === ' ') indentCols++
+          else if (ch2 === '\t') indentCols += INDENT_SIZE - (indentCols % INDENT_SIZE)
+          else break
+        }
+        for (let col = 0; col < indentCols; col += INDENT_SIZE) {
+          const vis = col - left
+          if (vis < 0 || vis >= cols) continue
+          renderer.drawRect(gutterWidth + vis * cw, y, 1, ch, paintRef.current.indentGuide)
+        }
+      }
 
       // Selection backgrounds (one per cursor with an active selection)
       for (const [sLine, sCol, eLine, eCol] of ranges) {
@@ -1293,6 +1320,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     recomputeViewport()
     draw()
   }, [minimap, ready, recomputeViewport, draw])
+
+  // Toggling indent guides only affects rendering, not layout.
+  useEffect(() => {
+    if (!ready) return
+    draw()
+  }, [indentGuides, ready, draw])
 
   // ── Input handlers ──────────────────────────────────────────────────────────
 

@@ -10,13 +10,14 @@ interface Props {
   gotoLine?:    number
   gpuColors?:   GpuEditorColors
   minimap?:     boolean
+  indentGuides?: boolean
   diagnostics?: { line: number; sev: number }[]
 }
 
 export default function Editor({
-  tabId: _tabId, filePath, active: _active, defaultZoom = 1, gotoLine, gpuColors, minimap, diagnostics,
+  tabId: _tabId, filePath, active: _active, defaultZoom = 1, gotoLine, gpuColors, minimap, indentGuides, diagnostics,
 }: Props) {
   const fontSize = Math.round(13 * defaultZoom)
 
-  return <GpuEditor filePath={filePath} fontSize={fontSize} colors={gpuColors} minimap={minimap} gotoLine={gotoLine} diagnostics={diagnostics} />
+  return <GpuEditor filePath={filePath} fontSize={fontSize} colors={gpuColors} minimap={minimap} indentGuides={indentGuides} gotoLine={gotoLine} diagnostics={diagnostics} />
 }
