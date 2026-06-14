@@ -31,11 +31,12 @@
   position: relative;
   transition: background 0.15s;
 
-  /* Wider invisible hit-zone so it's easy to grab */
+  /* Wider invisible hit-zone so it's easy to grab. Skewed away from the explorer's
+     edge so it doesn't sit on top of the file tree's scrollbar thumb. */
   &::after {
     content: '';
     position: absolute;
-    inset: 0 -4px;
+    inset: 0 -7px 0 -1px;
     cursor: col-resize;
   }
 }
@@ -118,7 +119,7 @@
   overflow-x: hidden;
   padding: 2px 0 8px;
 }
-.fe-tree::-webkit-scrollbar { width: 4px; }
+.fe-tree::-webkit-scrollbar { width: 8px; }
 .fe-tree::-webkit-scrollbar-track { background: transparent; }
 .fe-tree::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; }
 .fe-tree::-webkit-scrollbar-thumb:hover { background: var(--ide-text-lo); }
@@ -381,12 +382,9 @@
   background: var(--ide-bg-alt);
   border-bottom: 1px solid var(--ide-border);
   flex-shrink: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
   height: 35px;
   position: relative;
 }
-.ide-tabs::-webkit-scrollbar { height: 0; }
 
 /* Drop target highlight when dragging a tab over the tab bar */
 .ide-tabs--drop-target {
@@ -394,6 +392,36 @@
   outline: 1px dashed var(--ide-accent);
   outline-offset: -1px;
 }
+
+/* Left/right scroll arrows */
+.ide-tabs__nav {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--ide-border);
+}
+.ide-tabs__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ide-text-mid);
+  cursor: pointer;
+}
+.ide-tabs__arrow:hover:not(:disabled) { color: var(--ide-fg); background: var(--ide-bg-hi); }
+.ide-tabs__arrow:disabled { color: var(--ide-text-lo); opacity: 0.35; cursor: default; }
+
+.ide-tabs__scroll {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+}
+.ide-tabs__scroll::-webkit-scrollbar { height: 0; }
 
 .ide-tabs__empty {
   padding: 0 14px;
@@ -408,17 +436,31 @@
 .ide-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 10px 0 12px;
+  gap: 6px;
+  padding: 0 10px;
   font-size: 12.5px;
   color: var(--ide-text-mid);
   cursor: pointer;
-  border-right: 1px solid var(--ide-border);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
   user-select: none;
 }
+
+/* Thin separator between adjacent tabs, hidden around the active tab
+   since its highlighted background already provides a visual boundary */
+.ide-tab:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: var(--ide-border);
+}
+.ide-tab--active::after,
+.ide-tab--active + .ide-tab::after { display: none; }
+
 .ide-tab:hover { color: var(--ide-fg); background: var(--ide-bg-hi); }
 
 .ide-tab--active {
@@ -438,6 +480,15 @@
   background: color-mix(in srgb, var(--ide-accent) 18%, var(--ide-editor-bg));
 }
 
+.ide-tab__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ide-text-lo);
+}
+.ide-tab--active .ide-tab__icon,
+.ide-tab:hover .ide-tab__icon { color: var(--ide-text-mid); }
+
 .ide-tab__name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .ide-tab__dot  {
   width: 7px; height: 7px;
@@ -450,18 +501,16 @@
   border: none;
   color: transparent;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  padding: 0 2px;
+  padding: 2px;
   border-radius: 3px;
   display: flex;
   align-items: center;
-  margin-left: 2px;
-  font-family: inherit;
+  flex-shrink: 0;
 }
 .ide-tab:hover .ide-tab__close,
 .ide-tab--active .ide-tab__close { color: var(--ide-text-mid); }
 .ide-tab__close:hover { background: var(--ide-border-lo); color: var(--ide-fg) !important; }
+.ide-tab__close--leading { margin-right: 2px; }
 
 /* ── Editor pane ──────────────────────────────────────────────────────────────── */
 .ide-editor {

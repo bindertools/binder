@@ -114,7 +114,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
 
   // ── explorer state ────────────────────────────────────────────────────────────
   const [gitStatusMap,  setGitStatusMap]  = useState<Record<string, string>>({})
-  const [explorerW,   setExplorerW]   = useState(220)
+  const [explorerW,   setExplorerW]   = useState(285)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
   const [collapsed,   setCollapsed]   = useState(false)
 

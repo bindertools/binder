@@ -217,7 +217,7 @@
   margin-left: 0.6em;
   padding: 0 0.4em;
   border: 1px solid var(--color-sep-strong);
-  border-radius: 15px;
+  border-radius: 10px;
   color: var(--info-bar-hover-color);
   font-weight: 400;
   font-size: 0.8em;
