@@ -162,6 +162,100 @@ function dedupeCursors(cursors: Cursor[]): Cursor[] {
   return result
 }
 
+// Indentation width (in columns) of a line's leading whitespace — tabs
+// advance to the next INDENT_SIZE stop, matching the indent-guide columns.
+function lineIndent(text: string): number {
+  let cols = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === ' ') cols++
+    else if (c === '\t') cols += INDENT_SIZE - (cols % INDENT_SIZE)
+    else break
+  }
+  return cols
+}
+
+// Cap on how many lines computeFoldEnd will scan ahead — bounds the cost of
+// large pretty-printed files (e.g. deeply-nested JSON) where a top-level
+// block could otherwise span the entire cached range.
+const MAX_FOLD_SCAN = 2000
+
+// The last line (inclusive, 0-based) of the indented block that `ln` opens,
+// or null if `ln` isn't a fold anchor. Purely indentation-based, so it
+// degrades gracefully when later lines aren't cached yet (stops early).
+function computeFoldEnd(ln: number, lineCount: number, cache: Map<number, LineData>): number | null {
+  const data = cache.get(ln)
+  if (!data || data.text.trim().length === 0) return null
+  const baseIndent = lineIndent(data.text)
+  let end = -1
+  const limit = Math.min(lineCount, ln + 1 + MAX_FOLD_SCAN)
+  for (let i = ln + 1; i < limit; i++) {
+    const d = cache.get(i)
+    if (!d) break
+    if (d.text.trim().length === 0) continue
+    if (lineIndent(d.text) <= baseIndent) break
+    end = i
+  }
+  return end > ln ? end : null
+}
+
+// True if `ln` is hidden inside a collapsed fold (anchor lines remain visible).
+function isLineHidden(ln: number, folds: Map<number, number>): boolean {
+  for (const [anchor, end] of folds) {
+    if (ln > anchor && ln <= end) return true
+  }
+  return false
+}
+
+// The nearest visible line at or after `ln`, skipping collapsed ranges.
+function nextVisibleLine(ln: number, folds: Map<number, number>): number {
+  let result = ln
+  for (;;) {
+    let maxEnd = -1
+    for (const [anchor, end] of folds) {
+      if (result > anchor && result <= end) maxEnd = Math.max(maxEnd, end)
+    }
+    if (maxEnd < 0) return result
+    result = maxEnd + 1
+  }
+}
+
+// The nearest visible line at or before `ln`, skipping collapsed ranges.
+function prevVisibleLine(ln: number, folds: Map<number, number>): number {
+  let result = ln
+  for (;;) {
+    let minAnchor = -1
+    for (const [anchor, end] of folds) {
+      if (result > anchor && result <= end) minAnchor = minAnchor < 0 ? anchor : Math.min(minAnchor, anchor)
+    }
+    if (minAnchor < 0) return result
+    result = minAnchor
+  }
+}
+
+// Reveal `ln` by removing any (possibly nested) folds that hide it.
+function unfoldContaining(ln: number, folds: Map<number, number>) {
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const [anchor, end] of folds) {
+      if (ln > anchor && ln <= end) { folds.delete(anchor); changed = true; break }
+    }
+  }
+}
+
+// Actual (0-based) line numbers to render, up to `count` rows starting at
+// `top`, skipping lines hidden inside collapsed folds.
+function computeVisibleLines(top: number, count: number, lineCount: number, folds: Map<number, number>): number[] {
+  const result: number[] = []
+  let ln = top
+  while (result.length < count && ln < lineCount) {
+    if (!isLineHidden(ln, folds)) result.push(ln)
+    ln++
+  }
+  return result
+}
+
 // Highlight color for matched bracket pairs — a subtle neutral box that
 // works against any theme (not theme-derived, unlike the other paint colors).
 const BRACKET_MATCH_COLOR: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.4 }
@@ -193,6 +287,14 @@ const GUTTER_BAR_COLS = 1
 const GUTTER_BAR_WIDTH = 3
 const GUTTER_BAR_INSET = 2
 
+// Gutter glyphs for code folding: drawn in the rightmost gutter column
+// (the padding column just left of the text area) for foldable lines.
+const FOLD_EXPANDED_GLYPH = '-'
+const FOLD_COLLAPSED_GLYPH = '+'
+
+// Placeholder shown after a collapsed line's text.
+const FOLD_PLACEHOLDER = ' ⋯'
+
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, viewKey,
   showHeader = true, diagnostics, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
@@ -223,6 +325,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   minimapRef.current = minimap
   const indentGuidesRef = useRef<boolean>(indentGuides)
   indentGuidesRef.current = indentGuides
+  // Code folding: anchor line (0-based) -> last hidden line (inclusive) of
+  // the collapsed block. Cleared whenever the line count changes, since
+  // anchors would otherwise point at the wrong lines after an edit.
+  const foldedRangesRef = useRef<Map<number, number>>(new Map())
   const minimapGeomRef = useRef<MinimapGeometry>({ firstLine: 0, lastLine: -1, rowHeight: 2 })
   const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
   const minimapFetchingRef = useRef(false)
@@ -327,15 +433,17 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const { line: curLine } = cursors[0]
     const ranges = cursors.map(rangeOf).filter((r): r is [number, number, number, number] => r !== null)
 
+    const visLines = computeVisibleLines(top, rows, lineCount, foldedRangesRef.current)
+
     // Current-line highlight (full width, behind text)
-    if (curLine >= top && curLine < top + rows) {
-      const y = (curLine - top) * ch
+    const curRow = visLines.indexOf(curLine)
+    if (curRow >= 0) {
+      const y = curRow * ch
       renderer.drawRect(0, y, canvas.clientWidth, ch, paintRef.current.currentLine)
     }
 
-    for (let row = 0; row < rows; row++) {
-      const ln = top + row
-      if (ln >= lineCount) break
+    for (let row = 0; row < visLines.length; row++) {
+      const ln = visLines[row]
       const data = lineCacheRef.current.get(ln)
       const y = row * ch
 
@@ -355,19 +463,20 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         renderer.drawRect(GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
       }
 
+      // Fold chevron in the gutter's rightmost (padding) column, for lines
+      // that open an indented block.
+      const foldEnd = computeFoldEnd(ln, lineCount, lineCacheRef.current)
+      if (foldEnd !== null) {
+        const glyph = foldedRangesRef.current.has(ln) ? FOLD_COLLAPSED_GLYPH : FOLD_EXPANDED_GLYPH
+        renderer.drawText(gutterWidth - cw, y, glyph, ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter)
+      }
+
       if (!data) continue
 
       // Indent guides — a thin vertical line at each indent stop preceding
       // the line's first non-whitespace character.
       if (indentGuidesRef.current) {
-        const text = data.text
-        let indentCols = 0
-        for (let i = 0; i < text.length; i++) {
-          const ch2 = text[i]
-          if (ch2 === ' ') indentCols++
-          else if (ch2 === '\t') indentCols += INDENT_SIZE - (indentCols % INDENT_SIZE)
-          else break
-        }
+        const indentCols = lineIndent(data.text)
         for (let col = 0; col < indentCols; col += INDENT_SIZE) {
           const vis = col - left
           if (vis < 0 || vis >= cols) continue
@@ -407,14 +516,24 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         i = j
       }
+
+      // Collapsed-fold placeholder, drawn right after the line's text.
+      if (foldedRangesRef.current.has(ln)) {
+        const col = text.length - left
+        if (col < cols) {
+          const x = gutterWidth + Math.max(0, col) * cw
+          renderer.drawText(x, y, FOLD_PLACEHOLDER, paintRef.current.gutter)
+        }
+      }
     }
 
     // Matched bracket pair highlight
     if (bracketMatchRef.current) {
       for (const [bLine, bCol] of bracketMatchRef.current) {
-        if (bLine < top || bLine >= top + rows) continue
+        const row = visLines.indexOf(bLine)
+        if (row < 0) continue
         const x = gutterWidth + (bCol - left) * cw
-        const y = (bLine - top) * ch
+        const y = row * ch
         if (bCol - left >= 0 && bCol - left < cols) {
           renderer.drawRect(x, y, cw, ch, BRACKET_MATCH_COLOR)
         }
@@ -428,12 +547,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       if (m.endLine < top || m.startLine >= top + rows) continue
       const color = mi === currentMatchRef.current ? paintRef.current.findMatchActive : paintRef.current.findMatch
       for (let ln = Math.max(m.startLine, top); ln <= Math.min(m.endLine, top + rows - 1); ln++) {
+        const row = visLines.indexOf(ln)
+        if (row < 0) continue
         const data = lineCacheRef.current.get(ln)
         const from = ln === m.startLine ? m.startCol : 0
         const to = ln === m.endLine ? m.endCol : (data?.text.length ?? 0) + 1
         const x0 = gutterWidth + (from - left) * cw
         const x1 = gutterWidth + (to - left) * cw
-        const y = (ln - top) * ch
+        const y = row * ch
         renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, color)
       }
     }
@@ -441,9 +562,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     // Carets — one per cursor
     if (cursorVisibleRef.current) {
       for (const c of cursors) {
-        if (c.line < top || c.line >= top + rows) continue
+        const row = visLines.indexOf(c.line)
+        if (row < 0) continue
         const x = gutterWidth + (c.col - left) * cw
-        const y = (c.line - top) * ch
+        const y = row * ch
         if (c.col - left >= 0 && c.col - left <= cols) {
           renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
         }
@@ -595,6 +717,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const clampScroll = useCallback(() => {
     const maxTop = Math.max(0, lineCountRef.current - 1)
     topLineRef.current = Math.min(Math.max(0, topLineRef.current), maxTop)
+    if (isLineHidden(topLineRef.current, foldedRangesRef.current)) {
+      topLineRef.current = nextVisibleLine(topLineRef.current, foldedRangesRef.current)
+    }
     leftColRef.current = Math.max(0, leftColRef.current)
   }, [])
 
@@ -643,7 +768,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const gutterDigits = Math.max(3, String(Math.max(1, lineCountRef.current)).length)
     const gutterWidth = (gutterDigits + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
     const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
-    const y = (line - topLineRef.current + 1) * renderer.cellHeight
+    const visLines = computeVisibleLines(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current)
+    const row = visLines.indexOf(line)
+    const y = ((row >= 0 ? row : line - topLineRef.current) + 1) * renderer.cellHeight
     return { x, y }
   }, [])
 
@@ -702,6 +829,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
+    if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
 
     const cursors = cursorsRef.current.slice()
@@ -753,6 +881,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
+    if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
     if (resp.dirtyStart !== undefined && resp.dirtyEnd !== undefined) {
       invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     } else {
@@ -837,6 +966,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
+    if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     setStatus('●')
     notifyDirty(true)
@@ -1065,6 +1195,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           }
         }
       }
+      if (isLineHidden(line, foldedRangesRef.current)) unfoldContaining(line, foldedRangesRef.current)
       next.push({ line, col, anchorLine, anchorCol })
     }
     cursorsRef.current = dedupeCursors(next)
@@ -1091,6 +1222,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       const line = Math.max(0, Math.min(lineCountRef.current - 1, pos.line))
       const data = await ensureLine(line)
       const col = Math.max(0, Math.min(data?.text.length ?? 0, pos.col))
+      if (isLineHidden(line, foldedRangesRef.current)) unfoldContaining(line, foldedRangesRef.current)
       next.push({ line, col, anchorLine, anchorCol })
     }
     cursorsRef.current = dedupeCursors(next)
@@ -1112,6 +1244,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     line = Math.max(0, Math.min(lineCountRef.current - 1, line))
     const data = await ensureLine(line)
     col = Math.max(0, Math.min(data?.text.length ?? 0, col))
+    if (isLineHidden(line, foldedRangesRef.current)) unfoldContaining(line, foldedRangesRef.current)
     cursorsRef.current = [{ line, col, anchorLine, anchorCol }]
     cursorVisibleRef.current = true
     notifyCursor()
@@ -1204,6 +1337,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       bufferIdRef.current = open.bufferId
       lineCountRef.current = open.lineCount
       versionRef.current = open.version
+      foldedRangesRef.current.clear()
 
       let vs: ViewState = {}
       try {
@@ -1441,29 +1575,57 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
     const x = clientX - rect.left - gutterWidth
     const y = clientY - rect.top
-    const line = topLineRef.current + Math.floor(y / renderer.cellHeight)
+    const rowIdx = Math.max(0, Math.floor(y / renderer.cellHeight))
+    const visLines = computeVisibleLines(topLineRef.current, rowIdx + 1, lineCountRef.current, foldedRangesRef.current)
+    const line = rowIdx < visLines.length ? visLines[rowIdx] : Math.max(0, lineCountRef.current - 1)
     const col = leftColRef.current + Math.round(x / renderer.cellWidth)
     return { line: Math.max(0, line), col: Math.max(0, col) }
   }, [])
 
   const draggingRef = useRef(false)
 
+  // Toggle the fold at the clicked row's gutter chevron, if any. Returns
+  // true if the click was handled (so the caller skips cursor placement).
+  const toggleFoldAt = useCallback((clientX: number, clientY: number): boolean => {
+    const renderer = rendererRef.current
+    const canvas = canvasRef.current
+    if (!renderer || !canvas) return false
+    const rect = canvas.getBoundingClientRect()
+    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
+    const x = clientX - rect.left
+    if (x < gutterWidth - renderer.cellWidth || x >= gutterWidth) return false
+    const y = clientY - rect.top
+    const rowIdx = Math.max(0, Math.floor(y / renderer.cellHeight))
+    const visLines = computeVisibleLines(topLineRef.current, rowIdx + 1, lineCountRef.current, foldedRangesRef.current)
+    const ln = visLines[rowIdx]
+    if (ln === undefined) return false
+    const foldEnd = computeFoldEnd(ln, lineCountRef.current, lineCacheRef.current)
+    if (foldEnd === null) return false
+    if (foldedRangesRef.current.has(ln)) foldedRangesRef.current.delete(ln)
+    else foldedRangesRef.current.set(ln, foldEnd)
+    clampScroll()
+    fetchVisible()
+    draw()
+    return true
+  }, [clampScroll, draw, fetchVisible])
+
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = pixelToPos(e.clientX, e.clientY)
-    if (!pos) return
     // Canvas isn't focusable, so the browser's default mousedown action would
     // blur the hidden textarea and shift focus to <body>, undoing the
     // focus() call below. Preventing that default keeps the textarea focused
     // so keystrokes keep reaching the editor.
     e.preventDefault()
     textareaRef.current?.focus()
+    if (toggleFoldAt(e.clientX, e.clientY)) return
+    const pos = pixelToPos(e.clientX, e.clientY)
+    if (!pos) return
     if (e.altKey) {
       void addCursorAt(pos.line, pos.col)
       return
     }
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
-  }, [addCursorAt, pixelToPos, setCursorTo])
+  }, [addCursorAt, pixelToPos, setCursorTo, toggleFoldAt])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
