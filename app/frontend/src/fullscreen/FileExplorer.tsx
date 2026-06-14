@@ -83,8 +83,9 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   }, [onLoadDir])
 
   // New root (cwd changed) — reset cache/expansion and load the root's children.
+  // The root itself is shown as the first (expanded) tree row.
   useEffect(() => {
-    setExpanded(new Set())
+    setExpanded(new Set(root ? [root.path] : []))
     setDirCache(new Map())
     if (root) void loadDir(root.path)
   }, [root?.path, loadDir])
@@ -126,7 +127,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     return () => unsub()
   }, [loadDir])
 
-  // ── flatten the cached tree for rendering ───────────────────────────────────
+  // ── flatten the cached tree for rendering — root is the first row ───────────
   const flatRows = useMemo(() => {
     const out: FlatRow[] = []
     function walk(path: string, depth: number) {
@@ -137,7 +138,10 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
         if (child.isDir && expanded.has(child.path)) walk(child.path, depth + 1)
       }
     }
-    if (root) walk(root.path, 0)
+    if (root) {
+      out.push({ node: root, depth: 0 })
+      if (expanded.has(root.path)) walk(root.path, 1)
+    }
     return out
   }, [root, dirCache, expanded])
 
@@ -355,14 +359,6 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
 
   return (
     <div className="fe-root">
-      {/* Root label — area menu */}
-      <div
-        className="fe-header"
-        onContextMenu={e => openAreaCtx(e, root)}
-      >
-        <span className="fe-header__name">{root.name.toUpperCase()}</span>
-      </div>
-
       {/* Tree — area menu on empty space */}
       <div
         ref={scrollRef}

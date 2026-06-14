@@ -112,24 +112,6 @@
   overflow: hidden;
 }
 
-.fe-header {
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 14px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ide-text-lo);
-  border-bottom: 1px solid var(--ide-border);
-  flex-shrink: 0;
-  height: 28px;
-  cursor: default;
-  overflow: hidden;
-  user-select: none;
-}
-.fe-header__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .fe-tree {
   flex: 1;
   overflow-y: auto;
@@ -151,8 +133,10 @@
 .fe-node {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   height: 22px;
+  margin: 0 6px;
+  border-radius: 5px;
   font-size: 13px;
   font-weight: 400;
   color: var(--ide-text-hi);
@@ -161,12 +145,13 @@
   white-space: nowrap;
   overflow: hidden;
   position: relative;
+  transition: background 0.08s ease;
 }
 .fe-node:hover {
   background: color-mix(in srgb, var(--ide-fg) 7%, transparent);
 }
 .fe-node--selected {
-  background: color-mix(in srgb, var(--ide-select) 35%, transparent) !important;
+  background: color-mix(in srgb, var(--ide-fg) 12%, transparent) !important;
   color: var(--ide-fg);
 }
 .fe-node--dragover {
@@ -181,17 +166,19 @@
   align-items: center;
   justify-content: center;
   color: var(--ide-text-lo);
-  opacity: 0.5;
+  opacity: 0.65;
 }
 .fe-node:hover .fe-node__chevron,
-.fe-node--selected .fe-node__chevron { opacity: 0.9; }
+.fe-node--selected .fe-node__chevron { opacity: 1; }
 
 .fe-node__icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  /* Color data lives in FileIcon.tsx — all palettes preserved for future themes */
+  color: var(--ide-text-lo);
 }
+.fe-node:hover .fe-node__icon,
+.fe-node--selected .fe-node__icon { color: var(--ide-text-hi); }
 
 .fe-node__name {
   overflow: hidden;
