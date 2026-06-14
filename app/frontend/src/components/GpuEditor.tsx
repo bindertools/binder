@@ -1375,7 +1375,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   }), [save, undo, redo, selectAll, openFind])
 
   return (
-    <div className="flex-1 flex flex-col bg-[var(--app-bg)] overflow-hidden">
+    <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">
       {showHeader && (
         <div className="px-[14px] text-[11px] text-[var(--info-bar-color)] bg-[var(--info-bar-bg)] border-b border-[var(--border-color)] font-mono whitespace-nowrap overflow-hidden text-ellipsis shrink-0 h-[26px] leading-[26px] flex items-center justify-between">
           <span>{filePath}</span>
