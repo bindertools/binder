@@ -433,6 +433,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void fetchLines(missing[0], missing[missing.length - 1])
   }, [fetchLines])
 
+  // After an edit, drop only the cache entries that may now be stale instead
+  // of clearing everything. The immediate draw() that follows an edit would
+  // otherwise render the whole viewport blank (cache empty) until the
+  // editor.lines round-trip resolves, producing a visible flash on every
+  // keystroke. If the line count didn't change, only [dirtyStart, dirtyEnd]
+  // can have changed. If it did change, every line at/after dirtyStart has
+  // shifted to a different index and must be refetched.
+  const invalidateDirtyLines = useCallback((prevLineCount: number, newLineCount: number, dirtyStart: number, dirtyEnd: number) => {
+    if (newLineCount !== prevLineCount) {
+      for (const ln of Array.from(lineCacheRef.current.keys())) {
+        if (ln >= dirtyStart) lineCacheRef.current.delete(ln)
+      }
+    } else {
+      for (let ln = dirtyStart; ln <= dirtyEnd; ln++) lineCacheRef.current.delete(ln)
+    }
+  }, [])
+
   // Lazily fetch lines needed by the minimap in chunks, redrawing as each
   // chunk arrives. Serialized via minimapFetchingRef so concurrent draw()
   // calls (scrolling, blinking) don't pile up redundant requests.
@@ -601,9 +618,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const resp = await invoke<{ version: number; lineCount: number; dirtyStart: number; dirtyEnd: number }>('editor.edit', {
       bufferId: bufferIdRef.current, edits,
     })
+    const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
-    lineCacheRef.current.clear()
+    invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
 
     const cursors = cursorsRef.current.slice()
     for (const { idx, range: [sl, sc], text, cursor } of ops) {
@@ -626,7 +644,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
+  }, [draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
 
   // Replace the identifier prefix immediately left of the cursor with the
   // selected completion's insertText.
@@ -651,9 +669,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       cursorLine?: number; cursorCol?: number
     }>(op, { bufferId: bufferIdRef.current })
     if (!resp.applied) return
+    const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
-    lineCacheRef.current.clear()
+    if (resp.dirtyStart !== undefined && resp.dirtyEnd !== undefined) {
+      invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    } else {
+      lineCacheRef.current.clear()
+    }
     const primary = cursorsRef.current[0]
     cursorsRef.current = [{
       line: resp.cursorLine ?? primary.line,
@@ -668,7 +691,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [closeCompletions, draw, ensureCursorVisible, fetchVisible, notifyCursor, notifyDirty, updateBracketMatch])
+  }, [closeCompletions, draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
 
   const undo = useCallback(() => applyUndoRedo('editor.undo'), [applyUndoRedo])
   const redo = useCallback(() => applyUndoRedo('editor.redo'), [applyUndoRedo])
@@ -726,19 +749,20 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const applyRawEdits = useCallback(async (edits: { startLine: number; startCol: number; endLine: number; endCol: number; text: string }[]) => {
     if (edits.length === 0 || readOnlyRef.current) return
     const sorted = [...edits].sort((a, b) => b.startLine - a.startLine || b.startCol - a.startCol)
-    const resp = await invoke<{ version: number; lineCount: number }>('editor.edit', {
+    const resp = await invoke<{ version: number; lineCount: number; dirtyStart: number; dirtyEnd: number }>('editor.edit', {
       bufferId: bufferIdRef.current, edits: sorted,
     })
+    const prevLineCount = lineCountRef.current
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
-    lineCacheRef.current.clear()
+    invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     setStatus('●')
     notifyDirty(true)
     onLineCountChangeRef.current?.(lineCountRef.current)
     fetchVisible()
     draw()
     void updateBracketMatch()
-  }, [draw, fetchVisible, notifyDirty, updateBracketMatch])
+  }, [draw, fetchVisible, invalidateDirtyLines, notifyDirty, updateBracketMatch])
 
   // Enter/Shift+Enter — select the next/previous match, wrapping around.
   const gotoMatch = useCallback((delta: number) => {
