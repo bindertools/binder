@@ -1364,9 +1364,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       // Convert pixel delta to lines using a fixed "lines per wheel notch"
       // rate (independent of font size/cellHeight, which previously made a
       // single notch jump 5-6 lines). An accumulator carries fractional
-      // remainders so small touchpad deltas still scroll smoothly.
+      // remainders so small touchpad deltas still scroll smoothly. Each
+      // event is capped to one notch's worth of lines so devices that report
+      // oversized deltaY (fast mice, trackpad momentum flings) can't dump
+      // dozens of lines in a single frame — the remainder carries forward
+      // and drains over the next few events instead.
       wheelAccumRef.current += (e.deltaY / 100) * LINES_PER_WHEEL_NOTCH
-      const dLines = Math.trunc(wheelAccumRef.current)
+      const dLines = Math.trunc(Math.max(-LINES_PER_WHEEL_NOTCH, Math.min(LINES_PER_WHEEL_NOTCH, wheelAccumRef.current)))
       wheelAccumRef.current -= dLines
       const dCols = Math.round(e.deltaX / renderer.cellWidth)
       if (dLines !== 0) topLineRef.current += dLines
