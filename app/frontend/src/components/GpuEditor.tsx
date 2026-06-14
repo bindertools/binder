@@ -1295,6 +1295,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
+    // Canvas isn't focusable, so the browser's default mousedown action would
+    // blur the hidden textarea and shift focus to <body>, undoing the
+    // focus() call below. Preventing that default keeps the textarea focused
+    // so keystrokes keep reaching the editor.
+    e.preventDefault()
     textareaRef.current?.focus()
     if (e.altKey) {
       void addCursorAt(pos.line, pos.col)
