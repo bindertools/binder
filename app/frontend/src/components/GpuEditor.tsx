@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import { invoke } from '../lib/ipc'
+import { git, parseChangedLines } from '../lib/git'
 import { GpuTextRenderer, hexToRgba, type RGBA } from '../lib/gpuTextRenderer'
 import { computeMinimapGeometry, drawMinimap, minimapLineAt, MINIMAP_WIDTH, type MinimapGeometry } from '../lib/minimapRenderer'
 import type { GpuEditorColors } from '../themes'
@@ -51,6 +52,9 @@ interface Props {
   // Show the internal filename/status header bar. Consumers with their own
   // tab bar + status bar (FullscreenIDE) set this to false.
   showHeader?: boolean
+  // Diagnostics for this file (lint/type-check errors and warnings), drawn
+  // as gutter bars. `line` is 1-based to match ProbItem/gotoLine convention.
+  diagnostics?: { line: number; sev: number }[]
   onCursorChange?: (line: number, col: number) => void
   onLineCountChange?: (count: number) => void
   onDirtyChange?: (dirty: boolean) => void
@@ -78,21 +82,29 @@ const DEFAULT_GPU_COLORS: GpuEditorColors = {
   ],
   bg: '#0d0d0d',
   gutter: '#555555',
+  gutterActive: '#cccccc',
   currentLine: '#1a1a1a',
   cursor: '#cccccc',
   selection: '#264f78',
   findMatch: '#623315',
   findMatchActive: '#a8741a',
+  gitModified: '#3794ff',
+  errorLine: '#f14c4c',
+  warningLine: '#cca700',
 }
 
 interface PaintColors {
   bg: RGBA
   gutter: RGBA
+  gutterActive: RGBA
   currentLine: RGBA
   cursor: RGBA
   selection: RGBA
   findMatch: RGBA
   findMatchActive: RGBA
+  gitModified: RGBA
+  errorLine: RGBA
+  warningLine: RGBA
   styles: RGBA[]
 }
 
@@ -100,11 +112,15 @@ function buildPaintColors(c: GpuEditorColors): PaintColors {
   return {
     bg: hexToRgba(c.bg),
     gutter: hexToRgba(c.gutter),
+    gutterActive: hexToRgba(c.gutterActive),
     currentLine: hexToRgba(c.currentLine),
     cursor: hexToRgba(c.cursor),
     selection: hexToRgba(c.selection, 0.55),
     findMatch: hexToRgba(c.findMatch, 0.55),
     findMatchActive: hexToRgba(c.findMatchActive, 0.75),
+    gitModified: hexToRgba(c.gitModified),
+    errorLine: hexToRgba(c.errorLine),
+    warningLine: hexToRgba(c.warningLine),
     styles: c.styles.map(hex => hexToRgba(hex)),
   }
 }
@@ -162,9 +178,17 @@ const MAX_FONT_SIZE = 36
 // Lines scrolled per "notch" of a standard mouse wheel (deltaY of ~100px).
 const LINES_PER_WHEEL_NOTCH = 3
 
+// Extra leading column reserved in the gutter for the git-change /
+// diagnostic indicator bar, ahead of the right-aligned line number.
+const GUTTER_BAR_COLS = 1
+
+// Width and inset (from the left edge of the gutter) of the indicator bar.
+const GUTTER_BAR_WIDTH = 3
+const GUTTER_BAR_INSET = 2
+
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, gotoLine, viewKey,
-  showHeader = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
+  showHeader = true, diagnostics, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -198,6 +222,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const viewKeyRef = useRef<string | undefined>(viewKey)
   viewKeyRef.current = viewKey
   const dirtyRef = useRef<boolean>(false)
+
+  // Gutter decorations: 0-based line numbers with uncommitted git changes,
+  // and 0-based line -> diagnostic severity (0=error, 1=warn) from `diagnostics`.
+  const gitChangedLinesRef = useRef<Set<number>>(new Set())
+  const diagnosticLinesRef = useRef<Map<number, number>>(new Map())
 
   const onCursorChangeRef = useRef(onCursorChange)
   onCursorChangeRef.current = onCursorChange
@@ -277,7 +306,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const ch = renderer.cellHeight
     const lineCount = lineCountRef.current
     const gutterDigits = Math.max(3, String(Math.max(1, lineCount)).length)
-    const gutterWidth = (gutterDigits + 1) * cw
+    const gutterWidth = (gutterDigits + 1 + GUTTER_BAR_COLS) * cw
 
     renderer.beginFrame(paintRef.current.bg)
 
@@ -301,10 +330,21 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       const data = lineCacheRef.current.get(ln)
       const y = row * ch
 
-      // Line number (right-aligned in gutter)
+      // Line number (right-aligned in gutter), brightened on the current line
       const numStr = String(ln + 1)
       const numX = gutterWidth - (numStr.length + 1) * cw
-      renderer.drawText(numX, y, numStr, paintRef.current.gutter)
+      renderer.drawText(numX, y, numStr, ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter)
+
+      // Gutter indicator bar: diagnostics take priority over git changes,
+      // errors over warnings — one bar per line, matching the reference UI.
+      const sev = diagnosticLinesRef.current.get(ln)
+      const barColor = sev === 0 ? paintRef.current.errorLine
+        : sev === 1 ? paintRef.current.warningLine
+        : gitChangedLinesRef.current.has(ln) ? paintRef.current.gitModified
+        : null
+      if (barColor) {
+        renderer.drawRect(GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
+      }
 
       if (!data) continue
 
@@ -420,6 +460,20 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [draw])
 
+  // Refresh the git-change gutter bar for the current file. Best-effort —
+  // silently no-ops outside a git repo (or if git isn't available).
+  const fetchGitGutter = useCallback(async () => {
+    const sep = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+    if (sep < 0) return
+    const dir = filePath.slice(0, sep)
+    const name = filePath.slice(sep + 1)
+    try {
+      const { diff, untracked } = await git.diffLines(dir, name)
+      gitChangedLinesRef.current = parseChangedLines(diff, untracked, lineCountRef.current)
+      draw()
+    } catch { /* not a git repo */ }
+  }, [filePath, draw])
+
   const fetchVisible = useCallback(() => {
     const top = topLineRef.current
     const rows = visibleRowsRef.current
@@ -492,7 +546,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const dpr = window.devicePixelRatio || 1
     dprRef.current = dpr
     renderer.resize(w, h, dpr)
-    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1) * renderer.cellWidth
+    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
     const minimapW = minimapRef.current ? MINIMAP_WIDTH : 0
     visibleRowsRef.current = Math.max(1, Math.ceil(h / renderer.cellHeight))
     visibleColsRef.current = Math.max(1, Math.floor((w - gutterWidth - minimapW) / renderer.cellWidth))
@@ -560,7 +614,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const { line, col } = cursorsRef.current[0]
     if (!renderer) return { x: 0, y: 0 }
     const gutterDigits = Math.max(3, String(Math.max(1, lineCountRef.current)).length)
-    const gutterWidth = (gutterDigits + 1) * renderer.cellWidth
+    const gutterWidth = (gutterDigits + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
     const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
     const y = (line - topLineRef.current + 1) * renderer.cellHeight
     return { x, y }
@@ -701,7 +755,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     await invoke('editor.save', { bufferId: bufferIdRef.current })
     setStatus('')
     notifyDirty(false)
-  }, [notifyDirty])
+    void fetchGitGutter()
+  }, [notifyDirty, fetchGitGutter])
 
   // ── Find / replace ──────────────────────────────────────────────────────────
 
@@ -1052,6 +1107,33 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void updateBracketMatch()
   }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
+  // Double-click — select the word (or punctuation/whitespace run) under the
+  // given position. Classifies characters into word/whitespace/punctuation
+  // and expands the selection to cover the contiguous run of the same class.
+  const selectWordAt = useCallback(async (line: number, col: number) => {
+    closeCompletions()
+    line = Math.max(0, Math.min(lineCountRef.current - 1, line))
+    const data = await ensureLine(line)
+    const text = data?.text ?? ''
+    if (text.length === 0) {
+      cursorsRef.current = [{ line, col: 0 }]
+    } else {
+      const idx = Math.max(0, Math.min(text.length - 1, col))
+      const classOf = (c: string) => /\s/.test(c) ? 0 : /[A-Za-z0-9_]/.test(c) ? 1 : 2
+      const cls = classOf(text[idx])
+      let start = idx, end = idx + 1
+      while (start > 0 && classOf(text[start - 1]) === cls) start--
+      while (end < text.length && classOf(text[end]) === cls) end++
+      cursorsRef.current = [{ line, col: end, anchorLine: line, anchorCol: start }]
+    }
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
     closeCompletions()
@@ -1115,6 +1197,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
       recomputeViewport()
       setReady(true)
+      void fetchGitGutter()
       // Read-only instances (e.g. the workflow code preview, which stays
       // mounted in a background overlay) must never grab keyboard focus —
       // doing so on every filePath change steals focus from whichever
@@ -1163,6 +1246,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     paintRef.current = buildPaintColors(colors ?? DEFAULT_GPU_COLORS)
     draw()
   }, [colors, draw])
+
+  // Re-derive the per-line diagnostic severity map whenever diagnostics
+  // change. Keeps the most severe (lowest sev) entry per line.
+  useEffect(() => {
+    const map = new Map<number, number>()
+    for (const d of diagnostics ?? []) {
+      const ln = d.line - 1
+      const existing = map.get(ln)
+      if (existing === undefined || d.sev < existing) map.set(ln, d.sev)
+    }
+    diagnosticLinesRef.current = map
+    draw()
+  }, [diagnostics, draw])
 
   // External font-size changes (e.g. global zoom-level config) reset any
   // local Ctrl+wheel zoom applied to this instance.
@@ -1269,6 +1365,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           else void undo()
         }
         return
+      case 'a':
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); void selectAll() }
+        return
       case 'y':
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault()
@@ -1288,7 +1387,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, undo])
+  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -1306,7 +1405,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const canvas = canvasRef.current
     if (!renderer || !canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1) * renderer.cellWidth
+    const gutterWidth = (Math.max(3, String(Math.max(1, lineCountRef.current)).length) + 1 + GUTTER_BAR_COLS) * renderer.cellWidth
     const x = clientX - rect.left - gutterWidth
     const y = clientY - rect.top
     const line = topLineRef.current + Math.floor(y / renderer.cellHeight)
@@ -1335,12 +1434,33 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
+    // The mouse button may have been released outside the canvas (e.g. over
+    // the file explorer or tab bar) — that mouseup never reaches our handler
+    // since it's only bound to this element, leaving draggingRef stuck true.
+    // Bail out (and stop tracking) if the primary button is no longer down.
+    if (e.buttons === 0) { draggingRef.current = false; return }
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
     void setCursorTo(pos.line, pos.col, true)
   }, [pixelToPos, setCursorTo])
 
   const onMouseUp = useCallback(() => { draggingRef.current = false }, [])
+
+  const onDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const pos = pixelToPos(e.clientX, e.clientY)
+    if (!pos) return
+    e.preventDefault()
+    textareaRef.current?.focus()
+    void selectWordAt(pos.line, pos.col)
+  }, [pixelToPos, selectWordAt])
+
+  // Drag-selection can extend outside the canvas; a mouseup there wouldn't
+  // reach onMouseUp (bound only to the canvas), leaving draggingRef stuck.
+  useEffect(() => {
+    const handler = () => { draggingRef.current = false }
+    window.addEventListener('mouseup', handler)
+    return () => window.removeEventListener('mouseup', handler)
+  }, [])
 
   // ── Minimap interaction ─────────────────────────────────────────────────────
 
@@ -1442,6 +1562,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
+          onDoubleClick={onDoubleClick}
           style={{ display: 'block', cursor: 'text' }}
         />
         {minimap && (
@@ -1451,7 +1572,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
             onMouseMove={onMinimapMouseMove}
             onMouseUp={onMinimapMouseUp}
             onMouseLeave={onMinimapMouseUp}
-            style={{ position: 'absolute', top: 0, right: 0, width: `${MINIMAP_WIDTH}px`, height: '100%', cursor: 'pointer' }}
+            style={{ position: 'absolute', top: 0, right: 0, width: `${MINIMAP_WIDTH}px`, height: '100%', cursor: 'pointer', borderLeft: '1px solid var(--border-color)' }}
           />
         )}
         <textarea

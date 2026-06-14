@@ -1149,9 +1149,13 @@ export default function App() {
   // ── Render: non-terminal tab content ─────────────────────────────────────────
   function renderNonTerminalContent(tab: Tab): React.ReactNode {
     if (tab.type === 'editor') {
+      const fileDiagnostics = probItems
+        .filter(p => p.file.replace(/\\/g, '/') === tab.filePath!.replace(/\\/g, '/'))
+        .map(p => ({ line: p.line, sev: p.sev }))
       return (
         <Editor tabId={tab.id} filePath={tab.filePath!} active={true}
-          defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} minimap={appConfig.minimap} />
+          defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} minimap={appConfig.minimap}
+          diagnostics={fileDiagnostics} />
       )
     }
     if (tab.type === 'database') return <Database dbPath={tab.dbPath!} privacyMode={appConfig.database_privacy} />

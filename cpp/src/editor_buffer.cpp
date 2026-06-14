@@ -2202,8 +2202,7 @@ std::pair<uint32_t, uint32_t> reparse_and_dirty(Buffer& b, uint32_t dirty_start,
             TSRange* ranges = ts_tree_get_changed_ranges(old_tree, nt, &nranges);
             for (uint32_t i = 0; i < nranges; i++) {
                 dirty_start = std::min(dirty_start, ranges[i].start_point.row);
-                dirty_end = std::max(dirty_end == b.line_count() - 1 ? 0 : dirty_end,
-                                     ranges[i].end_point.row);
+                dirty_end = std::max(dirty_end, ranges[i].end_point.row);
             }
             if (nranges > 0) free(ranges);
             ts_tree_delete(old_tree);
@@ -2236,7 +2235,7 @@ json op_edit(const json& msg) {
         std::string old_text = apply_edit(*b, sl, sc, el, ec, text);
         new_entries.push_back({sl, sc, el, ec, old_text, text});
         dirty_start = std::min(dirty_start, sl);
-        dirty_end = b->line_count() - 1; // conservative; refined below via tree
+        dirty_end = std::max(dirty_end, end_of_insertion(sl, sc, text).first);
     }
 
     auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
@@ -2290,7 +2289,7 @@ json op_undo(const json& msg) {
         auto [iel, iec] = end_of_insertion(it->sl, it->sc, it->new_text);
         apply_edit(*b, it->sl, it->sc, iel, iec, it->old_text);
         dirty_start = std::min(dirty_start, it->sl);
-        dirty_end = b->line_count() - 1;
+        dirty_end = std::max(dirty_end, end_of_insertion(it->sl, it->sc, it->old_text).first);
     }
     auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
 
@@ -2319,7 +2318,7 @@ json op_redo(const json& msg) {
     for (auto& e : g.entries) {
         apply_edit(*b, e.sl, e.sc, e.el, e.ec, e.new_text);
         dirty_start = std::min(dirty_start, e.sl);
-        dirty_end = b->line_count() - 1;
+        dirty_end = std::max(dirty_end, end_of_insertion(e.sl, e.sc, e.new_text).first);
     }
     auto [ds, de] = reparse_and_dirty(*b, dirty_start, dirty_end);
 

@@ -129,6 +129,11 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
   const [rightStatus, setRightStatus] = useState<PaneStatus>(INITIAL_PANE_STATUS)
   const [fontSize,   setFontSize]   = useState(() => Math.round(13 * defaultZoom))
 
+  // Minimap visibility — initialised from the settings-driven `minimap` prop,
+  // but independently toggleable via View > Minimap.
+  const [minimapEnabled, setMinimapEnabled] = useState(minimap)
+  useEffect(() => { setMinimapEnabled(minimap) }, [minimap])
+
   // ── editor refs ───────────────────────────────────────────────────────────────
   const leftEditorRef  = useRef<GpuEditorHandle>(null)
   const rightEditorRef = useRef<GpuEditorHandle>(null)
@@ -502,7 +507,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
         filePath={fileObj.path}
         fontSize={fontSize}
         colors={gpuColors}
-        minimap={minimap}
+        minimap={minimapEnabled}
         viewKey={viewKey}
         showHeader={false}
         onCursorChange={(line, col) => setStatus(s => ({ ...s, line: line + 1, col: col + 1 }))}
@@ -678,6 +683,7 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
         else if (cmd === 'editor.action.selectAll') handle.selectAll()
         else if (cmd === 'actions.find') handle.openFind('find')
         else if (cmd === 'editor.action.startFindReplaceAction') handle.openFind('replace')
+        else if (cmd === 'editor.action.toggleMinimap') setMinimapEnabled(v => !v)
       },
     }
   }, [])

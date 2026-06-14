@@ -245,11 +245,15 @@ export interface GpuEditorColors {
   styles: string[]
   bg: string
   gutter: string
+  gutterActive: string
   currentLine: string
   cursor: string
   selection: string
   findMatch: string
   findMatchActive: string
+  gitModified: string
+  errorLine: string
+  warningLine: string
 }
 
 export function themeToGpuColors(theme: AppTheme): GpuEditorColors {
@@ -276,11 +280,15 @@ export function themeToGpuColors(theme: AppTheme): GpuEditorColors {
     ],
     bg:          mc['editor.background']              ?? theme.appBg,
     gutter:      mc['editorLineNumber.foreground']    ?? theme.infoBarColor,
+    gutterActive: mc['editorLineNumber.activeForeground'] ?? '#cccccc',
     currentLine: mc['editor.lineHighlightBackground'] ?? '#1a1a1a',
     cursor:      mc['editorCursor.foreground']        ?? '#cccccc',
     selection:   mc['editor.selectionBackground']     ?? '#264f78',
     findMatch:       mc['editor.findMatchHighlightBackground'] ?? '#623315',
     findMatchActive: mc['editor.findMatchBackground']          ?? '#a8741a',
+    gitModified: mc['editorGutter.modifiedBackground'] ?? '#3794ff',
+    errorLine:   mc['editorError.foreground']          ?? '#f14c4c',
+    warningLine: mc['editorWarning.foreground']        ?? '#cca700',
   }
 }
 

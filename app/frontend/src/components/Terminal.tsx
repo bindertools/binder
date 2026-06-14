@@ -199,6 +199,10 @@ export default function Terminal({
   const historyIdxRef = useRef(-1)   // -1 = not navigating history
   const savedInputRef = useRef('')   // current input saved when entering history
 
+  // Undo stack for the input bar (Ctrl+Z) — one entry per edit, holding the
+  // value *before* that edit.
+  const undoStackRef = useRef<string[]>([])
+
   useEffect(() => {
     GetTerminalCwd(tabId).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
@@ -742,9 +746,28 @@ export default function Terminal({
   // ── input-bar handlers (bar modes only) ─────────────────────────────────────
   const handleInputBarChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
+    const stack = undoStackRef.current
+    const prev = lineRef.current
+    if (stack[stack.length - 1] !== prev) {
+      stack.push(prev)
+      if (stack.length > 200) stack.shift()
+    }
     setInputBarValue(value)
     lineRef.current = value
     updateMenuRef.current()
+  }, [])
+
+  // Select the entire scrollback output (for copying), used as Ctrl+A's
+  // fallback when the input bar has nothing of its own to select.
+  const selectAllOutput = React.useCallback(() => {
+    const blocksEl = rootRef.current?.querySelector('.term-blocks')
+    if (!blocksEl) return
+    const sel = window.getSelection()
+    if (!sel) return
+    const range = document.createRange()
+    range.selectNodeContents(blocksEl)
+    sel.removeAllRanges()
+    sel.addRange(range)
   }, [])
 
   const handleInputBarKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -763,6 +786,7 @@ export default function Terminal({
       setInputBarValue('')
       setMenu(null)
       lineRef.current = ''
+      undoStackRef.current = []
       submitRef.current(value)
     } else if (e.key === 'Tab') {
       e.preventDefault()
@@ -770,17 +794,30 @@ export default function Terminal({
       handleTabRef.current()
     } else if (e.key === 'Escape') {
       setMenu(null)
+    } else if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
+      e.preventDefault()
+      if (inputBarValue) (e.target as HTMLInputElement).select()
+      else selectAllOutput()
+    } else if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault()
+      const stack = undoStackRef.current
+      if (stack.length === 0) return
+      const prev = stack.pop()!
+      setInputBarValue(prev)
+      lineRef.current = prev
     } else if (e.ctrlKey && e.key === 'c') {
       e.preventDefault()
       setInputBarValue('')
       setMenu(null)
       lineRef.current = ''
+      undoStackRef.current = []
       void InterruptCommand(tabId)
     } else if (e.ctrlKey && e.key === 'u') {
       e.preventDefault()
       setInputBarValue('')
       setMenu(null)
       lineRef.current = ''
+      undoStackRef.current = []
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       const hist = historyRef.current
@@ -793,6 +830,7 @@ export default function Terminal({
       } else { return }
       const v = hist[historyIdxRef.current]
       setInputBarValue(v); lineRef.current = v
+      undoStackRef.current = []
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       if (historyIdxRef.current === -1) return
@@ -806,8 +844,9 @@ export default function Terminal({
         const v = hist[historyIdxRef.current]
         setInputBarValue(v); lineRef.current = v
       }
+      undoStackRef.current = []
     }
-  }, [inputBarValue, isCommandRunning]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inputBarValue, isCommandRunning, selectAllOutput]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── render ────────────────────────────────────────────────────────────────────
   const cwdLabel = React.useMemo(() => {
@@ -877,11 +916,17 @@ export default function Terminal({
   // like the "click to expand" output toggle) sends focus to the input bar so
   // the user can start typing immediately — mirrors opening/switching to this
   // terminal tab, which also focuses it via the effect above.
-  const handlePaneMouseDown = (e: React.MouseEvent) => {
+  //
+  // Deferred to mouseup (rather than mousedown) and skipped when the click
+  // produced a text selection: focusing the input bar on mousedown would
+  // collapse any selection the user is in the middle of dragging out in the
+  // output area, making it impossible to select/copy terminal output.
+  const handlePaneMouseUp = (e: React.MouseEvent) => {
     if (isPtyActive) return
     const target = e.target as HTMLElement
     if (target.closest('input, button, a, .term-output-more')) return
-    requestAnimationFrame(() => inputBarRef.current?.focus())
+    if (window.getSelection()?.toString()) return
+    inputBarRef.current?.focus()
   }
 
   return (
@@ -889,7 +934,7 @@ export default function Terminal({
       ref={rootRef}
       className="flex-1 flex flex-col overflow-hidden"
       style={{ '--term-font-size': `${fontSize}px` } as React.CSSProperties}
-      onMouseDown={handlePaneMouseDown}
+      onMouseUp={handlePaneMouseUp}
     >
       {commandAlignment === 'top' && inputRow}
       {!isPtyActive && (

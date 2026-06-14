@@ -236,6 +236,23 @@ bool dispatch(const std::string& type, const json& msg,
         return true;
     }
 
+    // Per-line change info for the editor's git gutter — all uncommitted
+    // (staged + unstaged) changes to `file` relative to HEAD, as a -U0
+    // unified diff. Untracked files report `untracked: true` instead, since
+    // `git diff HEAD` knows nothing about them.
+    if (type == "git.diff.lines") {
+        auto file = msg.value("file", std::string{});
+        if (path.empty() || file.empty()) { reply_err("path and file required"); return true; }
+        auto st = run_git(path, {"status", "--porcelain", "--", file});
+        if (st.out.size() >= 2 && st.out[0] == '?' && st.out[1] == '?') {
+            reply({{"diff", ""}, {"untracked", true}});
+            return true;
+        }
+        auto r = run_git(path, {"diff", "-U0", "HEAD", "--", file});
+        reply({{"diff", r.out}, {"untracked", false}});
+        return true;
+    }
+
     if (type == "git.add") {
         if (path.empty()) { reply_err("path required"); return true; }
         auto file = msg.value("file", std::string{});
