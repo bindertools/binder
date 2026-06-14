@@ -27,6 +27,7 @@ interface ViewState {
   leftCol?: number
   cursorLine?: number
   cursorCol?: number
+  pinnedLines?: number[]
 }
 
 export interface GpuEditorHandle {
@@ -244,6 +245,22 @@ function unfoldContaining(ln: number, folds: Map<number, number>) {
   }
 }
 
+// Adjust pinned-line numbers after an edit changes the line count: lines
+// before the edited range are untouched, lines after shift by the change in
+// line count, and pins inside the edited range are dropped (their content
+// changed, so the mark no longer has a clear target).
+function shiftPinnedLines(pins: Set<number>, prevLineCount: number, newLineCount: number, dirtyStart: number, dirtyEnd: number) {
+  if (newLineCount === prevLineCount) return
+  const delta = newLineCount - prevLineCount
+  const next = new Set<number>()
+  for (const p of pins) {
+    if (p < dirtyStart) next.add(p)
+    else if (p > dirtyEnd) next.add(p + delta)
+  }
+  pins.clear()
+  for (const p of next) pins.add(p)
+}
+
 // Actual (0-based) line numbers to render, up to `count` rows starting at
 // `top`, skipping lines hidden inside collapsed folds.
 function computeVisibleLines(top: number, count: number, lineCount: number, folds: Map<number, number>): number[] {
@@ -329,6 +346,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   // the collapsed block. Cleared whenever the line count changes, since
   // anchors would otherwise point at the wrong lines after an edit.
   const foldedRangesRef = useRef<Map<number, number>>(new Map())
+  // Pinned/marked lines (0-based) — rendered with a red line number and a
+  // red bar in the minimap. Persisted per buffer/view.
+  const pinnedLinesRef = useRef<Set<number>>(new Set())
   const minimapGeomRef = useRef<MinimapGeometry>({ firstLine: 0, lastLine: -1, rowHeight: 2 })
   const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
   const minimapFetchingRef = useRef(false)
@@ -447,10 +467,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       const data = lineCacheRef.current.get(ln)
       const y = row * ch
 
-      // Line number (right-aligned in gutter), brightened on the current line
+      // Line number (right-aligned in gutter), brightened on the current
+      // line or shown in red if the line is pinned/marked.
       const numStr = String(ln + 1)
       const numX = gutterWidth - (numStr.length + 1) * cw
-      renderer.drawText(numX, y, numStr, ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter)
+      const numColor = pinnedLinesRef.current.has(ln) ? paintRef.current.errorLine
+        : ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter
+      renderer.drawText(numX, y, numStr, numColor)
 
       // Gutter indicator bar: diagnostics take priority over git changes,
       // errors over warnings — one bar per line, matching the reference UI.
@@ -590,7 +613,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           ln => lineCacheRef.current.get(ln),
           paintRef.current.styles, paintRef.current.bg,
           top, rows, paintRef.current.selection,
-          geom,
+          geom, pinnedLinesRef.current, paintRef.current.errorLine,
         )
         ctx.restore()
         minimapFetchRef.current(geom.firstLine, geom.lastLine)
@@ -830,6 +853,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
+    shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
 
     const cursors = cursorsRef.current.slice()
@@ -883,8 +907,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
     if (resp.dirtyStart !== undefined && resp.dirtyEnd !== undefined) {
+      shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
       invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     } else {
+      if (resp.lineCount !== prevLineCount) pinnedLinesRef.current.clear()
       lineCacheRef.current.clear()
     }
     const primary = cursorsRef.current[0]
@@ -967,6 +993,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     versionRef.current = resp.version
     lineCountRef.current = resp.lineCount
     if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
+    shiftPinnedLines(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
     setStatus('●')
     notifyDirty(true)
@@ -1349,6 +1376,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       topLineRef.current = vs.topLine ?? 0
       leftColRef.current = vs.leftCol ?? 0
       cursorsRef.current = [{ line: vs.cursorLine ?? 0, col: vs.cursorCol ?? 0 }]
+      pinnedLinesRef.current = new Set(vs.pinnedLines ?? [])
 
       dirtyRef.current = open.dirty
       onDirtyChangeRef.current?.(open.dirty)
@@ -1385,6 +1413,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           state: {
             topLine: topLineRef.current, leftCol: leftColRef.current,
             cursorLine: primary.line, cursorCol: primary.col,
+            pinnedLines: Array.from(pinnedLinesRef.current),
           },
         }).catch(() => {})
       }
@@ -1619,13 +1648,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     if (toggleFoldAt(e.clientX, e.clientY)) return
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
+    if (e.ctrlKey) {
+      if (pinnedLinesRef.current.has(pos.line)) pinnedLinesRef.current.delete(pos.line)
+      else pinnedLinesRef.current.add(pos.line)
+      draw()
+      return
+    }
     if (e.altKey) {
       void addCursorAt(pos.line, pos.col)
       return
     }
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
-  }, [addCursorAt, pixelToPos, setCursorTo, toggleFoldAt])
+  }, [addCursorAt, draw, pixelToPos, setCursorTo, toggleFoldAt])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return

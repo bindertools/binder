@@ -45,6 +45,7 @@ export function drawMinimap(
   styles: RGBA[], bg: RGBA,
   topLine: number, visibleRows: number, viewportColor: RGBA,
   geometry: MinimapGeometry,
+  pinnedLines?: Set<number>, pinColor?: RGBA,
 ): void {
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = rgbaCss(bg)
@@ -80,6 +81,17 @@ export function drawMinimap(
     const vh = Math.max(2, visibleRows * rowHeight)
     ctx.fillStyle = rgbaCss(viewportColor)
     ctx.fillRect(0, vy, width, vh)
+
+    // Pinned/marked lines — a solid bar across the full width, drawn last
+    // so marks stay visible over the viewport indicator.
+    if (pinnedLines && pinnedLines.size > 0 && pinColor) {
+      ctx.fillStyle = rgbaCss(pinColor)
+      for (const ln of pinnedLines) {
+        if (ln < firstLine || ln > lastLine) continue
+        const y = (ln - firstLine) * rowHeight
+        ctx.fillRect(0, y, width, Math.max(2, rowHeight))
+      }
+    }
   }
 }
 
