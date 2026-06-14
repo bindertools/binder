@@ -319,6 +319,40 @@ export default function FullscreenIDE({ cwd, theme, minimap, defaultZoom }: Prop
     })
   }, [])
 
+  // Auto-close tabs for files removed from disk, detected via the native file
+  // watcher's 'fs:changed' dir-change events (re-list each affected directory
+  // and drop any open file no longer present).
+  useEffect(() => {
+    const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+    const unsub = EventsOn('fs:changed', (payload: unknown) => {
+      const dirs = (payload as { dirs?: string[] })?.dirs ?? []
+      if (dirs.length === 0) return
+      const dirSet = new Set(dirs.map(norm))
+      const byDir = new Map<string, OpenFile[]>()
+      for (const f of openFilesRef.current) {
+        const slash = f.path.lastIndexOf('/')
+        const dir = slash === -1 ? '' : f.path.slice(0, slash)
+        if (!dirSet.has(norm(dir))) continue
+        const list = byDir.get(dir) ?? []
+        list.push(f)
+        byDir.set(dir, list)
+      }
+      if (byDir.size === 0) return
+
+      void Promise.all([...byDir.entries()].map(async ([dir, files]) => {
+        try {
+          const { entries } = await ExplorerReaddir(dir)
+          const names = new Set(entries.map(e => e.name.toLowerCase()))
+          return files.filter(f => !names.has(f.path.slice(f.path.lastIndexOf('/') + 1).toLowerCase()))
+        } catch { return [] }
+      })).then(groups => {
+        const toClose = groups.flat().map(f => f.path)
+        if (toClose.length) closeFiles(toClose)
+      })
+    })
+    return unsub
+  }, [closeFiles])
+
   // ── move to panel ─────────────────────────────────────────────────────────────
   const moveToPanel = useCallback((paths: string[], target: 'left' | 'right') => {
     setOpenFiles(prev => prev.map(f =>
