@@ -364,8 +364,10 @@ const GUTTER_BAR_WIDTH = 3
 const GUTTER_BAR_INSET = 2
 
 // Breathing room (in pixels) around gutter elements: space before the
-// indicator bar / line numbers, and space on each side of the fold glyph.
+// indicator bar / line numbers, space between the line number and the
+// pin/mark dot, and space on each side of the fold glyph.
 const GUTTER_LEFT_PAD = 10
+const GUTTER_PIN_PAD = 8
 const GUTTER_FOLD_PAD = 8
 
 // Placeholder shown after a collapsed line's text.
@@ -376,7 +378,7 @@ const FOLD_PLACEHOLDER = ' ⋯'
 // layout math so they never drift apart.
 function computeGutterWidth(lineCount: number, cw: number): number {
   const digits = Math.max(3, String(Math.max(1, lineCount)).length)
-  return GUTTER_LEFT_PAD + (digits + GUTTER_BAR_COLS) * cw + GUTTER_FOLD_PAD * 2 + cw * 2
+  return GUTTER_LEFT_PAD + (digits + GUTTER_BAR_COLS) * cw + GUTTER_PIN_PAD + GUTTER_FOLD_PAD * 2 + cw * 2
 }
 
 // X position of the fold glyph's column within the gutter.
@@ -553,7 +555,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       // columns), brightened on the current line or shown in red if
       // pinned/marked.
       const numStr = String(ln + 1)
-      const numX = pinDotX(gutterWidth, cw) - numStr.length * cw
+      const numX = pinDotX(gutterWidth, cw) - GUTTER_PIN_PAD - numStr.length * cw
       const numColor = pinnedLinesRef.current.has(ln) ? paintRef.current.errorLine
         : ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter
       renderer.drawText(numX, y, numStr, numColor)

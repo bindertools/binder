@@ -30,8 +30,8 @@
 }
 
 .gpu-pin-dot .dot {
-  width: 6px;
-  height: 6px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--gpu-gutter-active-color);
   opacity: 0;
