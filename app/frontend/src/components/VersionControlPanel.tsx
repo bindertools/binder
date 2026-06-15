@@ -190,6 +190,21 @@ const PushIcon = () => (
     <path d="M2 11h8"/>
   </svg>
 )
+const ArrowUpIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 9V1M3 3l3-3 3 3"/>
+  </svg>
+)
+const ArrowDownIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 1v8M3 7l3 3 3-3"/>
+  </svg>
+)
+const CurrentDotIcon = () => (
+  <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" aria-hidden className="shrink-0">
+    <circle cx="3" cy="3" r="3"/>
+  </svg>
+)
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -337,7 +352,10 @@ export default function VersionControlPanel({ cwd, active }: Props) {
                     if (b !== status?.branch) void run(() => git.checkout(cwd, b))
                   }}
                 >
-                  {b === status?.branch && '• '}{b}
+                  <span className="inline-flex items-center gap-1.5">
+                    {b === status?.branch && <CurrentDotIcon />}
+                    {b}
+                  </span>
                 </button>
               ))}
             </div>
@@ -346,10 +364,10 @@ export default function VersionControlPanel({ cwd, active }: Props) {
 
         {/* ahead/behind badges */}
         {(status?.ahead ?? 0) > 0 && (
-          <span className="text-[10px] text-green-400 font-mono shrink-0">↑{status!.ahead}</span>
+          <span className="flex items-center gap-0.5 text-[10px] text-green-400 font-mono shrink-0"><ArrowUpIcon />{status!.ahead}</span>
         )}
         {(status?.behind ?? 0) > 0 && (
-          <span className="text-[10px] text-yellow-400 font-mono shrink-0">↓{status!.behind}</span>
+          <span className="flex items-center gap-0.5 text-[10px] text-yellow-400 font-mono shrink-0"><ArrowDownIcon />{status!.behind}</span>
         )}
 
         <IconBtn title="Pull" onClick={() => run(() => git.pull(cwd))} disabled={pending}>
