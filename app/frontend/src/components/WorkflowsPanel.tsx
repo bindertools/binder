@@ -14,7 +14,7 @@ interface Props {
   cwd:        string
   active:     boolean
   gpuColors?: GpuEditorColors
-  onOpenFile?: (path: string, line: number, col: number) => void
+  onEditWorkflow?: (path: string) => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -420,7 +420,7 @@ interface SelectionState {
 // from the global workflow-runs store rather than this panel's own state).
 const lastSelection = new Map<string, SelectionState>()
 
-export default function WorkflowsPanel({ cwd, active, gpuColors, onOpenFile }: Props) {
+export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [checking, setChecking] = useState(false)
@@ -526,9 +526,9 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onOpenFile }: P
   }, [cwd, selectedFile])
 
   const handleEditWorkflow = useCallback(() => {
-    if (!selected || !onOpenFile) return
-    onOpenFile(`${cwd.replace(/\\/g, '/')}/${selected.path}`, 0, 0)
-  }, [selected, cwd, onOpenFile])
+    if (!selected || !onEditWorkflow) return
+    onEditWorkflow(`${cwd.replace(/\\/g, '/')}/${selected.path}`)
+  }, [selected, cwd, onEditWorkflow])
 
   const latestRun = useLatestRun(allRuns, cwd, selected?.file)
   const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
@@ -643,7 +643,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onOpenFile }: P
                       <button
                         className="wf-btn wf-btn--ghost wf-code-card__edit-btn"
                         onClick={handleEditWorkflow}
-                        disabled={!onOpenFile}
+                        disabled={!onEditWorkflow}
                         title="Open this workflow file in the code editor"
                       >
                         <EditIcon /> Edit Workflow

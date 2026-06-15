@@ -478,6 +478,12 @@ export default function App() {
   // tabs and back, instead of refetching and re-skeletoning every time.
   const workflowsLeafIds = useStickyLeafIds(allLeavesWithWs, 'workflows')
 
+  // Pending "open this file" requests for a pane's FullscreenIDE, keyed by leaf
+  // id — set when e.g. the Workflows page's "Edit Workflow" button switches a
+  // pane to the editor page and asks it to open a specific file. `token`
+  // changes on every request so FullscreenIDE re-opens even the same path.
+  const [pendingEditorOpen, setPendingEditorOpen] = useState<Record<string, { path: string; token: number }>>({})
+
   const updateLayout = useCallback((workspaceId: string, fn: (l: Layout) => Layout) => {
     setLayouts(prev => {
       const cur = prev[workspaceId]
@@ -935,6 +941,18 @@ export default function App() {
   const handleSidebarNavigate = useCallback((page: PageId) => {
     updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: page })) }))
   }, [activeWorkspaceId, updateLayout])
+
+  // Switches the given pane to the Code Editor page and asks its FullscreenIDE
+  // to open `filePath` — used by the Workflows page's "Edit Workflow" button so
+  // it edits the YAML in-place rather than opening a separate editor tab.
+  const handleEditFileInPane = useCallback((wsId: string, leafId: string, filePath: string) => {
+    updateLayout(wsId, l => ({
+      ...l,
+      focusedPaneId: leafId,
+      root: updateLeafInTree(l.root, leafId, leaf => ({ ...leaf, activePage: 'editor' })),
+    }))
+    setPendingEditorOpen(prev => ({ ...prev, [leafId]: { path: filePath, token: Date.now() } }))
+  }, [updateLayout])
 
   const handleSelectRecentPath = useCallback((path: string) => {
     if (!activeTerminalId) return
@@ -1441,7 +1459,8 @@ export default function App() {
                 }}
               >
                 <FullscreenIDE cwd={paneCwd} theme={resolvedTheme} indentGuides={appConfig.indent_guides}
-                  minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom} />
+                  minimap={appConfig.minimap} wordWrap={appConfig.file_word_wrap} defaultZoom={currentZoom}
+                  openFileRequest={pendingEditorOpen[leafId]} />
               </div>
             )
           })}
@@ -1469,7 +1488,7 @@ export default function App() {
                 }}
               >
                 <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors}
-                  onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
+                  onEditWorkflow={(path) => handleEditFileInPane(wsId, leafId, path)} />
               </div>
             )
           })}

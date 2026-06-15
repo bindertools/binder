@@ -90,6 +90,7 @@ interface Props {
   minimap: boolean
   wordWrap: boolean
   defaultZoom: number
+  openFileRequest?: { path: string; token: number }
 }
 
 interface PaneStatus {
@@ -101,7 +102,7 @@ interface PaneStatus {
 
 const INITIAL_PANE_STATUS: PaneStatus = { line: 1, col: 1, totalLines: 0, eol: 'LF' }
 
-export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defaultZoom }: Props) {
+export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defaultZoom, openFileRequest }: Props) {
   // ── file state ───────────────────────────────────────────────────────────────
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
@@ -293,8 +294,20 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
       setFocusedPanel(panel)
       setSelectedPaths(new Set())
     } catch { /* permission error */ }
-   
+
   }, [openFiles, switchActiveFile])
+
+  // ── open a file requested from outside (e.g. Workflows "Edit Workflow") ───────
+  const lastOpenRequestRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!openFileRequest || openFileRequest.token === lastOpenRequestRef.current) return
+    lastOpenRequestRef.current = openFileRequest.token
+    const path = openFileRequest.path.replace(/\\/g, '/')
+    const name = path.split('/').pop() ?? path
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot + 1) : ''
+    void openFile({ name, path, isDir: false, ext })
+  }, [openFileRequest, openFile])
 
   // ── close files ───────────────────────────────────────────────────────────────
   const closeFiles = useCallback((paths: string[]) => {
