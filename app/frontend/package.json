@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:ui-text": "node scripts/check-ui-text.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.2",
