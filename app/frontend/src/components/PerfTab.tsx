@@ -176,7 +176,7 @@ export default function PerfTab({ tabId, active }: Props) {
         <GaugeCard value={data.cpu_percent}  label="CPU"  color="var(--accent)" />
         <GaugeCard value={data.mem_percent}  label="RAM"  color="var(--color-success)" />
         <GaugeCard value={data.disk_percent} label="Disk" color="var(--color-warning)" />
-        {data.gpu_available && <GaugeCard value={data.gpu_percent} label="GPU" color="#BF5AF2" sublabel={data.gpu_name} />}
+        {data.gpu_available && <GaugeCard value={data.gpu_percent} label="GPU" color="var(--color-purple)" sublabel={data.gpu_name} />}
       </div>
 
       <div className="perf__sparks">
@@ -190,7 +190,7 @@ export default function PerfTab({ tabId, active }: Props) {
         <StatRow label={<>Net <NetUpIcon /></>}   value={fmt(data.net_bytes_sent)} />
         <StatRow label={<>Net <NetDownIcon /></>} value={fmt(data.net_bytes_recv)} />
         {data.gpu_available && (
-          <StatRow label="GPU" value={`${data.gpu_name} — ${data.gpu_percent.toFixed(0)}%`} />
+          <StatRow label="GPU" value={`${data.gpu_name} (${data.gpu_percent.toFixed(0)}%)`} />
         )}
       </div>
     </div>
