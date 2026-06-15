@@ -59,6 +59,14 @@ const EyeOffIcon = () => (
   </svg>
 )
 
+const WarningIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M7 1.8L12.4 11.5H1.6L7 1.8Z" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+    <path d="M7 5.5V8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    <circle cx="7" cy="10.2" r="0.7" fill="currentColor"/>
+  </svg>
+)
+
 // ── JSON syntax highlighter ───────────────────────────────────────────────────
 
 function JsonView({
@@ -221,7 +229,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
           <div className="db-sidebar-header">Tables</div>
           <div className="db-sidebar-list">
             {loading && <div className="db-sidebar-state">Loading…</div>}
-            {error   && <div className="db-sidebar-state db-sidebar-state--error">⚠ {error}</div>}
+            {error   && <div className="db-sidebar-state db-sidebar-state--error"><WarningIcon /> {error}</div>}
             {!loading && !error && (schema?.tables ?? []).map(t => (
               <button
                 key={t.name}

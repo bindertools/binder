@@ -96,7 +96,15 @@
   opacity: 0.5;
   font-style: italic;
 }
-.db-sidebar-state--error { color: var(--color-error); opacity: 1; font-style: normal; }
+.db-sidebar-state--error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-error);
+  opacity: 1;
+  font-style: normal;
+}
+.db-sidebar-state--error svg { flex-shrink: 0; }
 
 /* ── Table list items ────────────────────────────────────────────────────────── */
 .db-table-item {
