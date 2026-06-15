@@ -351,6 +351,10 @@ const MAX_FONT_SIZE = 36
 // Lines scrolled per "notch" of a standard mouse wheel (deltaY of ~100px).
 const LINES_PER_WHEEL_NOTCH = 3
 
+// Default/maximum height of the completions popup — also used to decide
+// whether it should open above or below the cursor's line.
+const COMPLETIONS_MAX_HEIGHT = 300
+
 // Width of one indentation level, in columns — matches the 2-space indent
 // inserted by the Tab key.
 const INDENT_SIZE = 2
@@ -491,7 +495,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const [completionOpen, setCompletionOpen] = useState(false)
   const [completionItems, setCompletionItems] = useState<CompletionItem[]>([])
   const [completionIndex, setCompletionIndex] = useState(0)
-  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0 })
+  const [completionPos, setCompletionPos] = useState({ x: 0, y: 0, above: false, maxHeight: COMPLETIONS_MAX_HEIGHT })
 
   const completionOpenRef = useRef(false)
   completionOpenRef.current = completionOpen
@@ -884,17 +888,27 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     if (completionOpenRef.current) setCompletionOpen(false)
   }, [])
 
-  // Pixel position just below the primary cursor, for positioning the popup.
+  // Pixel position for the completions popup, anchored to the primary
+  // cursor's line. Placed below the line by default, but flipped above it
+  // when there isn't enough room beneath (e.g. the cursor is near the
+  // bottom of the viewport).
   const cursorPixelPos = useCallback(() => {
     const renderer = rendererRef.current
     const { line, col } = cursorsRef.current[0]
-    if (!renderer) return { x: 0, y: 0 }
+    if (!renderer) return { x: 0, y: 0, above: false, maxHeight: COMPLETIONS_MAX_HEIGHT }
     const gutterWidth = computeGutterWidth(lineCountRef.current, renderer.cellWidth)
     const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
     const visLines = computeVisibleLines(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current)
     const row = visLines.indexOf(line)
-    const y = ((row >= 0 ? row : line - topLineRef.current) + 1) * renderer.cellHeight
-    return { x, y }
+    const rowIndex = row >= 0 ? row : line - topLineRef.current
+    const rowTop = rowIndex * renderer.cellHeight
+    const rowBottom = rowTop + renderer.cellHeight
+    const containerHeight = containerRef.current?.clientHeight ?? 0
+    const spaceBelow = containerHeight - rowBottom
+    const spaceAbove = rowTop
+    const above = spaceBelow < COMPLETIONS_MAX_HEIGHT && spaceAbove > spaceBelow
+    const maxHeight = Math.max(100, Math.min(COMPLETIONS_MAX_HEIGHT, (above ? spaceAbove : spaceBelow) - 8))
+    return { x, y: above ? rowTop : rowBottom, above, maxHeight }
   }, [])
 
   // Fetch completions for the primary cursor's position. No-op for
@@ -1825,6 +1839,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const handler = (e: WheelEvent) => {
       const renderer = rendererRef.current
       if (!renderer) return
+      // Let the completions popup scroll its own list — don't also scroll
+      // the editor viewport underneath it.
+      if ((e.target as HTMLElement | null)?.closest('.gpu-completions-popup')) return
       if (e.ctrlKey) {
         e.preventDefault()
         const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSizeRef.current + (e.deltaY < 0 ? 1 : -1)))
@@ -1988,6 +2005,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
             index={completionIndex}
             x={completionPos.x}
             y={completionPos.y}
+            above={completionPos.above}
+            maxHeight={completionPos.maxHeight}
             onSelect={setCompletionIndex}
             onAccept={i => { completionIndexRef.current = i; void acceptCompletion() }}
           />

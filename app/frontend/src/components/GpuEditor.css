@@ -67,3 +67,13 @@
 .gpu-fold-btn.current {
   color: var(--gpu-gutter-active-color);
 }
+
+/* Completions popup scrollbar — themed to match the rest of the app instead
+   of the default browser scrollbar. */
+.gpu-completions-popup {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+}
+.gpu-completions-popup::-webkit-scrollbar       { width: 6px; }
+.gpu-completions-popup::-webkit-scrollbar-track { background: transparent; }
+.gpu-completions-popup::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }

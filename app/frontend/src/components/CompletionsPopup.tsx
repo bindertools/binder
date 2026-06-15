@@ -15,6 +15,8 @@ interface Props {
   index: number
   x: number
   y: number
+  above?: boolean
+  maxHeight?: number
   onSelect: (i: number) => void
   onAccept: (i: number) => void
 }
@@ -32,7 +34,7 @@ const KIND_META: Record<string, { Icon: typeof Variable; color: string; label: s
 }
 const DEFAULT_KIND_META = { Icon: Component, color: 'var(--info-bar-color)', label: 'symbol' }
 
-export default function CompletionsPopup({ items, index, x, y, onSelect, onAccept }: Props) {
+export default function CompletionsPopup({ items, index, x, y, above = false, maxHeight = 300, onSelect, onAccept }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,8 +45,8 @@ export default function CompletionsPopup({ items, index, x, y, onSelect, onAccep
   return (
     <div
       ref={listRef}
-      className="absolute z-20 max-h-[300px] w-[360px] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] shadow-lg font-mono text-[12px]"
-      style={{ left: x, top: y }}
+      className="gpu-completions-popup absolute z-20 w-[360px] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] shadow-lg font-mono text-[12px]"
+      style={{ left: x, top: y, maxHeight, transform: above ? 'translateY(-100%)' : undefined }}
     >
       {items.map((item, i) => {
         const meta = KIND_META[item.kind] ?? DEFAULT_KIND_META
