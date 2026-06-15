@@ -1,8 +1,21 @@
 import React, { useEffect, useState } from 'react'
+import PageHeader from './shared/PageHeader'
 
 interface Props {
   cwd: string
 }
+
+const IconPlus = () => (
+  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+    <path d="M6 2v8M2 6h8"/>
+  </svg>
+)
+
+const IconX = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+  </svg>
+)
 
 interface Note {
   id:      string
@@ -79,77 +92,83 @@ export default function NotepadPage({ cwd }: Props) {
   const displayPath = cwd ? cwd.replace(/\\/g, '/') : 'Global notes'
 
   return (
-    <div className="absolute inset-0 flex bg-[var(--app-bg)] text-[var(--tab-color)] font-ui">
-      {/* Notes list */}
-      <div className="w-[220px] shrink-0 border-r border-sep flex flex-col overflow-hidden">
-        <div className="px-3 pt-2.5 pb-2 border-b border-sep">
-          <div className="text-[10px] uppercase tracking-wider opacity-50 mb-1">Notes for</div>
-          <div className="text-[11px] font-mono truncate" title={displayPath}>{displayPath}</div>
+    <div className="absolute inset-0 flex flex-col bg-[var(--app-bg)] text-[var(--tab-color)] font-ui">
+      <PageHeader
+        title="Notepad"
+        subtitle={displayPath}
+        actions={
+          <button
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-accent-border bg-accent-dim text-accent text-[12px] cursor-pointer hover:bg-accent/20 transition-colors"
+            onClick={newNote}
+          >
+            <IconPlus /> New Note
+          </button>
+        }
+      />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Notes list */}
+        <div className="w-[220px] shrink-0 border-r border-sep flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            {notes.map(n => (
+              <div
+                key={n.id}
+                className={[
+                  'relative group px-3 py-2 cursor-pointer border-b border-[var(--surface-raised)] transition-colors',
+                  n.id === selectedId ? 'bg-surface-overlay' : 'hover:bg-surface-raised',
+                ].join(' ')}
+                onClick={() => { setSelectedId(n.id); setEditingTitle(false) }}
+              >
+                <div className="text-[12px] truncate pr-4">{n.title || 'Untitled'}</div>
+                <div className="text-[11px] opacity-50 truncate mt-0.5">{n.body.slice(0, 60) || ' '}</div>
+                <button
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex items-center text-[var(--tab-color)] hover:text-error cursor-pointer bg-transparent border-0"
+                  onClick={e => { e.stopPropagation(); deleteNote(n.id) }}
+                  aria-label="Delete note"
+                >
+                  <IconX />
+                </button>
+              </div>
+            ))}
+            {notes.length === 0 && (
+              <div className="text-center text-[12px] opacity-40 py-5 px-3">No notes for this path yet</div>
+            )}
+          </div>
         </div>
-        <button
-          className="m-2.5 px-2.5 py-1.5 rounded-md border border-accent-border bg-accent-dim text-accent text-[12px] cursor-pointer hover:bg-accent/20 transition-colors"
-          onClick={newNote}
-        >
-          + New Note
-        </button>
-        <div className="flex-1 overflow-y-auto">
-          {notes.map(n => (
-            <div
-              key={n.id}
-              className={[
-                'relative group px-3 py-2 cursor-pointer border-b border-[rgba(255,255,255,0.04)] transition-colors',
-                n.id === selectedId ? 'bg-surface-overlay' : 'hover:bg-surface-raised',
-              ].join(' ')}
-              onClick={() => { setSelectedId(n.id); setEditingTitle(false) }}
-            >
-              <div className="text-[12px] truncate pr-4">{n.title || 'Untitled'}</div>
-              <div className="text-[11px] opacity-50 truncate mt-0.5">{n.body.slice(0, 60) || ' '}</div>
-              <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-[var(--tab-color)] hover:text-error cursor-pointer bg-transparent border-0 text-[14px] leading-none"
-                onClick={e => { e.stopPropagation(); deleteNote(n.id) }}
-                aria-label="Delete note"
-              >×</button>
+
+        {/* Editor */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {selected ? (
+            <>
+              {editingTitle ? (
+                <input
+                  className="text-[16px] font-semibold bg-transparent border-0 border-b border-sep px-5 py-3 outline-none"
+                  value={selected.title}
+                  autoFocus
+                  onChange={e => updateTitle(e.target.value)}
+                  onBlur={() => setEditingTitle(false)}
+                  onKeyDown={e => { if (e.key === 'Enter') setEditingTitle(false) }}
+                />
+              ) : (
+                <div
+                  className="text-[16px] font-semibold border-b border-sep px-5 py-3 cursor-text"
+                  onClick={() => setEditingTitle(true)}
+                >
+                  {selected.title || 'Untitled'}
+                </div>
+              )}
+              <textarea
+                className="flex-1 bg-transparent border-0 outline-none resize-none px-5 py-4 text-[13px] leading-relaxed font-ui"
+                value={selected.body}
+                onChange={e => updateBody(e.target.value)}
+                placeholder="Start writing…"
+              />
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-[12px] opacity-40">
+              Select or create a note
             </div>
-          ))}
-          {notes.length === 0 && (
-            <div className="text-center text-[12px] opacity-40 py-5 px-3">No notes for this path yet</div>
           )}
         </div>
-      </div>
-
-      {/* Editor */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {selected ? (
-          <>
-            {editingTitle ? (
-              <input
-                className="text-[16px] font-semibold bg-transparent border-0 border-b border-sep px-5 py-3 outline-none"
-                value={selected.title}
-                autoFocus
-                onChange={e => updateTitle(e.target.value)}
-                onBlur={() => setEditingTitle(false)}
-                onKeyDown={e => { if (e.key === 'Enter') setEditingTitle(false) }}
-              />
-            ) : (
-              <div
-                className="text-[16px] font-semibold border-b border-sep px-5 py-3 cursor-text"
-                onClick={() => setEditingTitle(true)}
-              >
-                {selected.title || 'Untitled'}
-              </div>
-            )}
-            <textarea
-              className="flex-1 bg-transparent border-0 outline-none resize-none px-5 py-4 text-[13px] leading-relaxed font-ui"
-              value={selected.body}
-              onChange={e => updateBody(e.target.value)}
-              placeholder="Start writing…"
-            />
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-[12px] opacity-40">
-            Select or create a note
-          </div>
-        )}
       </div>
     </div>
   )
