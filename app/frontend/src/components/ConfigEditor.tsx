@@ -10,6 +10,20 @@ import { SHORTCUT_DEFS, eventToKey, setShortcutsPaused } from '../lib/useShortcu
 import { SelectDirectory } from '../../wailsjs/go/main/App'
 import './ConfigEditor.scss'
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+const IconCheck = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconX = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+  </svg>
+)
+
 interface Props {
   appConfig:           AppConfig
   onSaveSettings:      (cfg: AppConfig) => Promise<void>
@@ -290,7 +304,8 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
           </div>
           {saveStatus !== 'idle' && (
             <span className={`sp-save-status${saveStatus === 'saved' ? ' is-saved' : ' is-error'}`}>
-              {saveStatus === 'saved' ? '✓ Saved' : '✕ Error'}
+              {saveStatus === 'saved' ? <IconCheck /> : <IconX />}
+              {saveStatus === 'saved' ? 'Saved' : 'Error'}
             </span>
           )}
         </div>
@@ -477,10 +492,9 @@ function AppearanceSection({
   onToggle: (k: keyof AppConfig) => void
   onGitToggle: () => void
 }) {
-  const isCustom = cfg.theme === 'custom'
   const themeOptions = [
     ...PRESET_KEYS.map(k => ({ label: k, value: k })),
-    { label: isCustom ? 'custom ●' : 'custom', value: 'custom' },
+    { label: 'custom', value: 'custom' },
   ]
 
   return (

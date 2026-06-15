@@ -138,6 +138,9 @@
 
 /* ── Auto-save status indicator ──────────────────────────────────────────────── */
 .sp-save-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-family: var(--font-ui);
   padding: 4px 10px;
