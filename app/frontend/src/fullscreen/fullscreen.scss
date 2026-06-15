@@ -469,6 +469,11 @@
   border-bottom: 2px solid var(--ide-accent);
 }
 
+/* Unsaved changes: blue bottom border in place of the active accent */
+.ide-tab--dirty {
+  border-bottom: 2px solid #0a84ff;
+}
+
 /* Preview tab: italic + slightly dimmed — has not been edited yet */
 .ide-tab--preview .ide-tab__name { font-style: italic; opacity: 0.8; }
 
@@ -490,12 +495,6 @@
 .ide-tab:hover .ide-tab__icon { color: var(--ide-text-mid); }
 
 .ide-tab__name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.ide-tab__dot  {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: #da8548;
-  flex-shrink: 0;
-}
 .ide-tab__close {
   background: none;
   border: none;
@@ -510,7 +509,6 @@
 .ide-tab:hover .ide-tab__close,
 .ide-tab--active .ide-tab__close { color: var(--ide-text-mid); }
 .ide-tab__close:hover { background: var(--ide-border-lo); color: var(--ide-fg) !important; }
-.ide-tab__close--leading { margin-right: 2px; }
 
 /* ── Editor pane ──────────────────────────────────────────────────────────────── */
 .ide-editor {

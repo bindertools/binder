@@ -179,6 +179,7 @@ export default function IDETabBar({
                 isActive   ? 'ide-tab--active'   : '',
                 isSelected ? 'ide-tab--selected' : '',
                 isPreview  ? 'ide-tab--preview'  : '',
+                f.dirty    ? 'ide-tab--dirty'    : '',
               ].filter(Boolean).join(' ')}
               title={f.path}
               onDragStart={e => onDragStart(e, f.path)}
@@ -191,29 +192,17 @@ export default function IDETabBar({
               }}
               onContextMenu={e => openMenu(e, f.path)}
             >
-              {isActive && (
-                <button
-                  className="ide-tab__close ide-tab__close--leading"
-                  onMouseDown={e => { e.stopPropagation(); onClose([f.path]) }}
-                  title="Close"
-                >
-                  <CloseIcon />
-                </button>
-              )}
               <span className="ide-tab__icon">
                 <FileIcon name={f.name} ext={extOf(f.name)} isDir={false} />
               </span>
               <span className="ide-tab__name">{f.name}</span>
-              {f.dirty && <span className="ide-tab__dot" />}
-              {!isActive && (
-                <button
-                  className="ide-tab__close"
-                  onMouseDown={e => { e.stopPropagation(); onClose([f.path]) }}
-                  title="Close"
-                >
-                  <CloseIcon />
-                </button>
-              )}
+              <button
+                className="ide-tab__close"
+                onMouseDown={e => { e.stopPropagation(); onClose([f.path]) }}
+                title="Close"
+              >
+                <CloseIcon />
+              </button>
             </div>
           )
         })}
