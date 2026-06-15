@@ -7,6 +7,20 @@ import {
 } from '../themes'
 import './ThemeEditor.scss'
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+const IconCheck = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconX = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+  </svg>
+)
+
 interface Props {
   /** The active theme key stored in config ('dark', 'custom', etc.) */
   currentTheme: string
@@ -134,10 +148,10 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
     })
 
   // ── save button label ────────────────────────────────────────────────────────
-  const saveLabel =
-    saving            ? 'Saving…'        :
-    saveMsg === 'saved' ? '✓ Saved'       :
-    saveMsg === 'error' ? '✕ Error'       :
+  const saveLabel: React.ReactNode =
+    saving              ? 'Saving…' :
+    saveMsg === 'saved' ? <><IconCheck /> Saved</> :
+    saveMsg === 'error' ? <><IconX /> Error</> :
     'Save Custom Theme'
 
   // ── render ───────────────────────────────────────────────────────────────────
