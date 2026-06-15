@@ -149,11 +149,11 @@
   white-space: nowrap;
 }
 .sp-save-status.is-saved {
-  background: rgba(48,209,88,0.1);
+  background: var(--color-success-bg);
   color: var(--color-success);
 }
 .sp-save-status.is-error {
-  background: rgba(255,69,58,0.1);
+  background: var(--color-error-bg);
   color: var(--color-error);
 }
 
@@ -171,7 +171,7 @@
 
 .sp-group-body {
   border: 1px solid var(--sep);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   overflow: hidden;
   background: var(--surface-raised);
 }
