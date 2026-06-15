@@ -4,6 +4,7 @@ export interface PageSidebarNavItem {
   id: string
   label: string
   icon?: React.ReactNode
+  badge?: React.ReactNode
   subtitle?: React.ReactNode
   meta?: React.ReactNode
 }
@@ -36,7 +37,10 @@ export default function PageSidebarNav({ items, activeId, onSelect, className = 
               </span>
             )}
             <span className="flex-1 min-w-0 flex flex-col gap-0.5">
-              <span className="text-[12.5px] font-medium truncate">{item.label}</span>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[12.5px] font-medium truncate">{item.label}</span>
+                {item.badge}
+              </span>
               {item.subtitle && (
                 <span className="text-[10.5px] font-mono text-[var(--info-bar-color)] opacity-50 truncate">
                   {item.subtitle}

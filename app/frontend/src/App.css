@@ -136,6 +136,15 @@
   }
 }
 
+/* ── Utility: thin scrollbar for sidebar/list panels ──────────────────────────── */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar       { width: 5px; }
+.thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
+
 /* ── Focused pane overlay ───────────────────────────────────────────────────── */
 /* Pseudo-element inset ring; kept in CSS because Tailwind after: requires content in class string */
 .pane--focused::after {
