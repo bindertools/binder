@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { git, type GitStatus, type GitStash } from '../lib/git'
+import PageHeader from './shared/PageHeader'
 
 interface Props {
   cwd: string
@@ -19,8 +20,8 @@ function DiffViewer({ diff }: { diff: string }) {
     <div className="overflow-auto h-full font-mono text-[11px] leading-[1.5]">
       {lines.map((line, i) => {
         let cls = 'text-[var(--tab-color-hover)] whitespace-pre'
-        if (line.startsWith('+') && !line.startsWith('+++')) cls = 'bg-green-950/40 text-green-400 whitespace-pre'
-        else if (line.startsWith('-') && !line.startsWith('---')) cls = 'bg-red-950/40 text-red-400 whitespace-pre'
+        if (line.startsWith('+') && !line.startsWith('+++')) cls = 'bg-green-950/40 text-[var(--color-git-add)] whitespace-pre'
+        else if (line.startsWith('-') && !line.startsWith('---')) cls = 'bg-red-950/40 text-[var(--color-git-remove)] whitespace-pre'
         else if (line.startsWith('@@')) cls = 'text-cyan-500 whitespace-pre'
         else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++'))
           cls = 'text-[var(--tab-color)] whitespace-pre'
@@ -33,7 +34,7 @@ function DiffViewer({ diff }: { diff: string }) {
 // ── Status code badge ─────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  M: 'text-yellow-400', A: 'text-green-400', D: 'text-red-400',
+  M: 'text-yellow-400', A: 'text-[var(--color-git-add)]', D: 'text-[var(--color-git-remove)]',
   R: 'text-blue-400',   C: 'text-blue-400',  U: 'text-orange-400',
 }
 
@@ -69,6 +70,23 @@ function IconBtn({
       disabled={disabled}
       onClick={e => { e.stopPropagation(); onClick() }}
       className="flex items-center justify-center w-5 h-5 rounded text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised border-0 bg-transparent cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-[background,color] duration-[100ms]"
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── Toolbar icon button (header actions) ────────────────────────────────────────
+
+function ToolbarIconBtn({
+  title, onClick, disabled, children,
+}: { title: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex items-center justify-center w-8 h-8 rounded-[var(--r-md)] text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] hover:bg-surface-raised border border-sep hover:border-sep-strong bg-transparent cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-[background,color,border-color] duration-[100ms]"
     >
       {children}
     </button>
@@ -205,6 +223,11 @@ const CurrentDotIcon = () => (
     <circle cx="3" cy="3" r="3"/>
   </svg>
 )
+const CloseIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+    <path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5"/>
+  </svg>
+)
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -324,8 +347,26 @@ export default function VersionControlPanel({ cwd, active }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[var(--app-bg)] text-[var(--tab-color-hover)]">
 
+      <PageHeader
+        title="Version Control"
+        subtitle={cwd}
+        actions={
+          <>
+            <ToolbarIconBtn title="Pull" onClick={() => run(() => git.pull(cwd))} disabled={pending}>
+              <PullIcon />
+            </ToolbarIconBtn>
+            <ToolbarIconBtn title="Push" onClick={() => run(() => git.push(cwd))} disabled={pending}>
+              <PushIcon />
+            </ToolbarIconBtn>
+            <ToolbarIconBtn title="Refresh" onClick={refresh} disabled={loading}>
+              <RefreshIcon />
+            </ToolbarIconBtn>
+          </>
+        }
+      />
+
       {/* ── Branch bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[var(--border-color)] shrink-0">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border-color)] shrink-0">
         <BranchIcon />
         <div className="relative flex-1 min-w-0" ref={branchRef}>
           <button
@@ -364,21 +405,11 @@ export default function VersionControlPanel({ cwd, active }: Props) {
 
         {/* ahead/behind badges */}
         {(status?.ahead ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] text-green-400 font-mono shrink-0"><ArrowUpIcon />{status!.ahead}</span>
+          <span className="flex items-center gap-0.5 text-[10px] text-[var(--color-git-add)] font-mono shrink-0"><ArrowUpIcon />{status!.ahead}</span>
         )}
         {(status?.behind ?? 0) > 0 && (
           <span className="flex items-center gap-0.5 text-[10px] text-yellow-400 font-mono shrink-0"><ArrowDownIcon />{status!.behind}</span>
         )}
-
-        <IconBtn title="Pull" onClick={() => run(() => git.pull(cwd))} disabled={pending}>
-          <PullIcon />
-        </IconBtn>
-        <IconBtn title="Push" onClick={() => run(() => git.push(cwd))} disabled={pending}>
-          <PushIcon />
-        </IconBtn>
-        <IconBtn title="Refresh" onClick={refresh} disabled={loading}>
-          <RefreshIcon />
-        </IconBtn>
       </div>
 
       {/* ── Scrollable body ─────────────────────────────────────────────────── */}
@@ -567,10 +598,10 @@ export default function VersionControlPanel({ cwd, active }: Props) {
           <SectionHeader label="Diff" count={0}>
             {selFile && (
               <button
-                className="text-[10px] text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer"
+                className="inline-flex items-center text-[10px] text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer"
                 onClick={() => { setSelFile(null); setDiff('') }}
               >
-                ✕
+                <CloseIcon />
               </button>
             )}
           </SectionHeader>
