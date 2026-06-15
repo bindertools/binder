@@ -333,9 +333,9 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
           <div className="ps-ext__reqs-title">Requirements</div>
           <ul className="ps-ext__reqs-list">
             <li>Repository must be <strong>public</strong> on GitHub</li>
-            <li>Must include <code>dist/index.js</code> — a compiled ESM bundle that exports a <code>Plugin</code> object as its default export</li>
+            <li>Must include <code>dist/index.js</code>: a compiled ESM bundle that exports a <code>Plugin</code> object as its default export</li>
             <li>Must be built using the <a className="ps-link" href="https://github.com/cmdide/plugin-sdk" target="_blank" rel="noreferrer">CMD IDE Plugin SDK</a></li>
-            <li>External plugins are <strong>not verified</strong> by the CMD IDE team — only install code you trust</li>
+            <li>External plugins are <strong>not verified</strong> by the CMD IDE team. Only install code you trust</li>
           </ul>
         </div>
 
