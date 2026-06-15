@@ -14,14 +14,14 @@ type SevFilter = 'all' | 'high' | 'medium' | 'info'
 // ── Severity / method meta ──────────────────────────────────────────────────────
 
 const SEV_META: Record<EndpointItem['severity'], { label: string; color: string; bg: string }> = {
-  high:   { label: 'No Auth',     color: '#ff453a', bg: 'rgba(255,69,58,0.12)' },
-  medium: { label: 'No Throttle', color: '#ffa800', bg: 'rgba(255,168,0,0.12)' },
-  info:   { label: 'Secured',     color: '#34c759', bg: 'rgba(52,199,89,0.10)' },
+  high:   { label: 'No Auth',     color: 'var(--color-error)',   bg: 'var(--color-error-bg)' },
+  medium: { label: 'No Throttle', color: 'var(--color-warning)', bg: 'var(--color-warning-bg)' },
+  info:   { label: 'Secured',     color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
 }
 
 const METHOD_COLORS: Record<string, string> = {
-  GET: '#0a84ff', POST: '#34c759', PUT: '#ffa800', PATCH: '#ffa800',
-  DELETE: '#ff453a', ANY: '#8e8e93',
+  GET: 'var(--color-accent)', POST: 'var(--color-success)', PUT: 'var(--color-warning)', PATCH: 'var(--color-warning)',
+  DELETE: 'var(--color-error)', ANY: '#8e8e93',
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
