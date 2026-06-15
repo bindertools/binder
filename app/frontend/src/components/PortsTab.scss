@@ -79,6 +79,9 @@
 .ports__select:focus  { border-color: var(--accent-border); }
 
 .ports__refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--surface-raised);
   border: 1px solid var(--sep);
   border-radius: var(--r-md);
@@ -123,6 +126,11 @@
   user-select: none;
   white-space: nowrap;
   transition: color var(--t-fast);
+}
+.ports__th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .ports__th:hover         { color: var(--info-bar-hover-color); }
 .ports__th--active       { color: var(--accent); }

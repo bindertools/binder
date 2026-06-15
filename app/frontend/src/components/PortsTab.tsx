@@ -33,6 +33,25 @@ const IconEndpoint = () => (
   </svg>
 )
 
+const IconChevronUp = () => (
+  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
+    <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconChevronDown = () => (
+  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
+    <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconRefresh = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+    <path d="M11 6.5C11 9.04 8.76 11 6 11C3.24 11 1 9.04 1 6.5C1 3.96 3.24 2 6 2C7.6 2 9.02 2.72 9.9 3.86" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path d="M10 1.5V4.5H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function PortsSkeleton() {
@@ -122,7 +141,10 @@ export default function PortsTab({ active, cwd }: Props) {
 
   const Col = ({ k, label }: { k: keyof PortInfo; label: string }) => (
     <th className={`ports__th${sortKey === k ? ' ports__th--active' : ''}`} onClick={() => handleSort(k)}>
-      {label}{sortKey === k ? (sortAsc ? ' ▲' : ' ▼') : ''}
+      <span className="ports__th-inner">
+        {label}
+        {sortKey === k && (sortAsc ? <IconChevronUp /> : <IconChevronDown />)}
+      </span>
     </th>
   )
 
@@ -173,7 +195,7 @@ export default function PortsTab({ active, cwd }: Props) {
               <option value="all">All states</option>
               {states.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button className="ports__refresh" onClick={refresh}>↻ refresh</button>
+            <button className="ports__refresh" onClick={refresh}><IconRefresh /> Refresh</button>
             {message && <span className="ports__msg">{message}</span>}
           </div>
           {loading ? <PortsSkeleton /> : (
