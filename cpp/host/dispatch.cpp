@@ -1693,9 +1693,19 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                         int from = (int)li - kBeforeWindow; if (from < 0) from = 0;
                         int to   = (int)li + kAfterWindow;  if (to >= (int)lines.size()) to = (int)lines.size() - 1;
 
+                        // A line matching any endpoint pattern marks the boundary of a
+                        // neighboring route definition; stop the local window there so
+                        // an adjacent (differently-secured) route's middleware doesn't
+                        // bleed into this one's classification.
+                        auto isOtherEndpointLine = [&](int wi) {
+                            for (size_t pj : applicable)
+                                if (std::regex_search(lines[wi], kCompiled[pj])) return true;
+                            return false;
+                        };
+
                         bool localRateLimit = false, localAuth = false;
                         std::string localRateLimitEvidence, localAuthEvidence;
-                        for (int wi = from; wi <= to; ++wi) {
+                        auto scanWindowLine = [&](int wi) {
                             if (!localRateLimit) {
                                 auto sig = find_signal(lowerLines[wi], kRateLimitSignals, kRateLimitSignalCount);
                                 if (!sig.empty()) { localRateLimit = true; localRateLimitEvidence = sig; }
@@ -1704,6 +1714,15 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                                 auto sig = find_signal(lowerLines[wi], kAuthSignals, kAuthSignalCount);
                                 if (!sig.empty()) { localAuth = true; localAuthEvidence = sig; }
                             }
+                        };
+                        for (int wi = (int)li - 1; wi >= from; --wi) {
+                            if (isOtherEndpointLine(wi)) break;
+                            scanWindowLine(wi);
+                        }
+                        scanWindowLine((int)li);
+                        for (int wi = (int)li + 1; wi <= to; ++wi) {
+                            if (isOtherEndpointLine(wi)) break;
+                            scanWindowLine(wi);
                         }
 
                         bool hasRateLimit = localRateLimit || globalRateLimit;
