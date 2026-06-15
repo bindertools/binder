@@ -1940,8 +1940,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
                     title={row.folded ? 'Expand' : 'Collapse'}
                   >
                     {row.folded
-                      ? <ChevronRight size={Math.max(14, Math.round(gutterOverlay.cw * 1.9))} strokeWidth={2.5} />
-                      : <ChevronDown size={Math.max(14, Math.round(gutterOverlay.cw * 1.9))} strokeWidth={2.5} />}
+                      ? <ChevronRight size={Math.max(18, Math.round(gutterOverlay.cw * 2.6))} strokeWidth={3} />
+                      : <ChevronDown size={Math.max(18, Math.round(gutterOverlay.cw * 2.6))} strokeWidth={3} />}
                   </button>
                 )}
               </div>
