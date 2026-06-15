@@ -84,7 +84,18 @@ function SparkCard({ label, color, points, current }: { label: string; color: st
   )
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
+const NetUpIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 9V1M3 3l3-3 3 3"/>
+  </svg>
+)
+const NetDownIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 1v8M3 7l3 3 3-3"/>
+  </svg>
+)
+
+function StatRow({ label, value }: { label: React.ReactNode; value: string }) {
   return (
     <div className="perf-stat">
       <span className="perf-stat__label">{label}</span>
@@ -176,8 +187,8 @@ export default function PerfTab({ tabId, active }: Props) {
       <div className="perf__stats-card">
         <StatRow label="Memory"  value={`${fmt(data.mem_used)} / ${fmt(data.mem_total)}`} />
         <StatRow label="Disk"    value={`${fmt(data.disk_used)} / ${fmt(data.disk_total)}`} />
-        <StatRow label="Net ↑"   value={fmt(data.net_bytes_sent)} />
-        <StatRow label="Net ↓"   value={fmt(data.net_bytes_recv)} />
+        <StatRow label={<>Net <NetUpIcon /></>}   value={fmt(data.net_bytes_sent)} />
+        <StatRow label={<>Net <NetDownIcon /></>} value={fmt(data.net_bytes_recv)} />
         {data.gpu_available && (
           <StatRow label="GPU" value={`${data.gpu_name} — ${data.gpu_percent.toFixed(0)}%`} />
         )}

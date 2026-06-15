@@ -121,6 +121,9 @@
 .perf-stat:hover { background: var(--surface-raised); }
 
 .perf-stat__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: var(--info-bar-color);
 }
