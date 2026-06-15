@@ -275,7 +275,7 @@
 
 // "Sun-fade" — the button's base color slowly pulses through a warm glow.
 .wf-run-btn--running {
-  background: linear-gradient(135deg, var(--accent), #ff9f0a 50%, var(--accent));
+  background: linear-gradient(135deg, var(--accent), var(--color-warning) 50%, var(--accent));
   background-size: 220% 220%;
   animation: wf-run-sunfade 3.2s ease-in-out infinite;
 }
@@ -426,12 +426,12 @@
 
 .wf-pill--success {
   background: rgba(74, 222, 128, 0.12);
-  color: #4ade80;
+  color: var(--color-git-add);
 }
 
 .wf-pill--failure {
   background: rgba(248, 113, 113, 0.12);
-  color: #f87171;
+  color: var(--color-git-remove);
 }
 
 // ── Code card ──────────────────────────────────────────────────────────────
@@ -566,12 +566,12 @@
 
 .wf-timeline__dot--success {
   background: rgba(74, 222, 128, 0.18);
-  color: #4ade80;
+  color: var(--color-git-add);
 }
 
 .wf-timeline__dot--failure {
   background: rgba(248, 113, 113, 0.18);
-  color: #f87171;
+  color: var(--color-git-remove);
 }
 
 .wf-timeline__dot--skipped {
@@ -603,7 +603,7 @@
 }
 
 .wf-timeline__content--failure {
-  color: #f87171;
+  color: var(--color-git-remove);
 }
 
 .wf-timeline__content--skipped {
@@ -823,11 +823,11 @@
 }
 
 .wf-events-map__node--success .wf-events-map__label {
-  fill: #4ade80;
+  fill: var(--color-git-add);
 }
 
 .wf-events-map__node--failure .wf-events-map__label {
-  fill: #f87171;
+  fill: var(--color-git-remove);
 }
 
 .wf-events-map__sublabel {
@@ -884,11 +884,11 @@
 }
 
 .wf-history__status--success {
-  color: #4ade80;
+  color: var(--color-git-add);
 }
 
 .wf-history__status--failure {
-  color: #f87171;
+  color: var(--color-git-remove);
 }
 
 .wf-history__label {

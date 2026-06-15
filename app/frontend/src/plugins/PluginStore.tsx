@@ -82,6 +82,23 @@ function IconTrash() {
   )
 }
 
+function IconSearch() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="6.5" cy="6.5" r="4.5"/>
+      <path d="M10 10l3 3"/>
+    </svg>
+  )
+}
+
+function IconExternalLink() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M5 9L9 5M9 5H5.5M9 5V8.5"/>
+    </svg>
+  )
+}
+
 function Chip({ label, variant }: { label: string; variant: 'official' | 'external' }) {
   return <span className={`ps-chip ps-chip--${variant}`}>{label}</span>
 }
@@ -152,7 +169,7 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
   return (
     <div className="ps__center">
       <div className="ps-search-wrap">
-        <span className="ps-search-icon">⌕</span>
+        <span className="ps-search-icon"><IconSearch /></span>
         <input
           className="ps-search"
           placeholder="Search plugins…"
@@ -351,8 +368,9 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
                   </div>
                   <div className="ps-row__meta">
                     {toSafeGithubUrl(ext.githubUrl) ? (
-                      <a className="ps-link" href={toSafeGithubUrl(ext.githubUrl)!} target="_blank" rel="noreferrer">
-                        {toSafeGithubUrl(ext.githubUrl)!.replace('https://github.com/', '')} ↗
+                      <a className="ps-link ps-link--external" href={toSafeGithubUrl(ext.githubUrl)!} target="_blank" rel="noreferrer">
+                        {toSafeGithubUrl(ext.githubUrl)!.replace('https://github.com/', '')}
+                        <IconExternalLink />
                       </a>
                     ) : (
                       <span className="ps-muted">{ext.githubUrl}</span>

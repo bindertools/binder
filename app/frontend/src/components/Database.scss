@@ -476,7 +476,7 @@
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--color-warning);
-  background: rgba(255,159,10,0.1);
+  background: var(--color-warning-bg);
   border: 1px solid rgba(255,159,10,0.2);
   border-radius: var(--r-sm);
   padding: 2px 7px;
@@ -527,7 +527,7 @@
   font-weight: 500;
   font-family: var(--font-ui);
   color: var(--color-warning);
-  background: rgba(255,159,10,0.1);
+  background: var(--color-warning-bg);
   border: 1px solid rgba(255,159,10,0.2);
   border-radius: var(--r-sm);
   padding: 3px 8px;

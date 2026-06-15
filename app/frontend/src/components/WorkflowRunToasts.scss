@@ -56,8 +56,8 @@
   font-size: 11px;
   opacity: 0.7;
 
-  &--success { color: #4ade80; opacity: 0.9; }
-  &--failure { color: #f87171; opacity: 0.9; }
+  &--success { color: var(--color-git-add); opacity: 0.9; }
+  &--failure { color: var(--color-git-remove); opacity: 0.9; }
 }
 
 .wf-toast__download-status {
@@ -70,7 +70,7 @@
   animation: wf-toast-fade-in 0.15s ease both;
 
   &--done {
-    color: #4ade80;
+    color: var(--color-git-add);
     opacity: 0.9;
   }
 }
@@ -118,11 +118,11 @@
 
   &--success {
     background: rgba(74, 222, 128, 0.18);
-    color: #4ade80;
+    color: var(--color-git-add);
   }
   &--failure {
     background: rgba(248, 113, 113, 0.18);
-    color: #f87171;
+    color: var(--color-git-remove);
   }
 }
 
