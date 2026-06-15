@@ -108,7 +108,7 @@
 }
 .te-section-head:hover { background: var(--surface-raised); }
 
-.te-chevron       { color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
+.te-chevron       { display: flex; align-items: center; color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
 .te-section-label { flex: 1; }
 .te-section-count { font-size: 10px; color: var(--info-bar-color); font-weight: 400; text-transform: none; letter-spacing: 0; }
 

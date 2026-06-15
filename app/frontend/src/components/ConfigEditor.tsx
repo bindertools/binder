@@ -24,6 +24,20 @@ const IconX = () => (
   </svg>
 )
 
+const IconChevron = ({ expanded }: { expanded: boolean }) => (
+  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden
+    style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform var(--t-fast)' }}>
+    <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconUndo = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M2 2.5V6h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M2 7a5 5 0 1 0 1.6-3.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+)
+
 interface Props {
   appConfig:           AppConfig
   onSaveSettings:      (cfg: AppConfig) => Promise<void>
@@ -552,7 +566,7 @@ function AppearanceSection({
                 className="sp-color-section-head"
                 onClick={() => onToggleExpanded(section.id)}
               >
-                <span className="sp-chevron">{expanded.has(section.id) ? '▾' : '▸'}</span>
+                <span className="sp-chevron"><IconChevron expanded={expanded.has(section.id)} /></span>
                 <span className="sp-color-section-label">{section.label}</span>
                 <span className="sp-color-section-count">{section.items.length} colors</span>
               </button>
@@ -843,7 +857,7 @@ function ShortcutsSection({
                               onSave(next)
                             }}
                           >
-                            ↺
+                            <IconUndo />
                           </button>
                         )}
                       </>

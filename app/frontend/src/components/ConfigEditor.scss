@@ -406,7 +406,7 @@
 }
 .sp-color-section-head:hover { background: color-mix(in srgb, var(--app-bg) 50%, transparent); }
 
-.sp-chevron            { color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
+.sp-chevron            { display: flex; align-items: center; color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
 .sp-color-section-label { flex: 1; }
 .sp-color-section-count {
   font-size: 10px;
