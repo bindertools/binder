@@ -298,7 +298,7 @@ export default function EndpointsTab({ cwd, active }: Props) {
       {!scanning && items.length > 0 && (
         <div className="endpoints__disclaimer">
           <IconWarning />
-          Static pattern matching — endpoints and security controls may be missed or misclassified. Verify findings manually, especially for endpoints intentionally left public.
+          Static pattern matching: endpoints and security controls may be missed or misclassified. Verify findings manually, especially for endpoints intentionally left public.
         </div>
       )}
     </div>

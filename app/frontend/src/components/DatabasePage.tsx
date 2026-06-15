@@ -129,7 +129,7 @@ export default function DatabasePage({ terminalId, cwd, initialDbPath, privacyMo
               {loading
                 ? 'Looking for .db and .sqlite files'
                 : dbFiles.length > 0
-                  ? `${dbFiles.length} file${dbFiles.length !== 1 ? 's' : ''} found — choose one on the left`
+                  ? `${dbFiles.length} file${dbFiles.length !== 1 ? 's' : ''} found: choose one on the left`
                   : 'No .db or .sqlite files found in this directory'
               }
             </span>

@@ -595,7 +595,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
           <>
             {bashUnavailable && (
               <div className="wf-run__warning">
-                Git Bash was not found — steps that default to <span style={{ fontFamily: 'var(--font-mono)' }}>bash</span> may fail to run.
+                Git Bash was not found. Steps that default to <span style={{ fontFamily: 'var(--font-mono)' }}>bash</span> may fail to run.
               </div>
             )}
 

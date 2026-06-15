@@ -59,7 +59,7 @@ const TabCard = ({
     draggable
     onDragStart={e => onDragStart(e, tab.id)}
     className="flex items-center gap-1.5 px-2 py-[5px] rounded-md border border-[var(--border-color)] bg-[var(--app-bg)] cursor-grab active:cursor-grabbing select-none text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:border-sep-strong transition-[background,border-color,color] duration-[80ms] text-[11.5px] font-ui"
-    title={`Drag to move — currently in ${panel} panel`}
+    title={`Drag to move (currently in ${panel} panel)`}
   >
     <span className="shrink-0 opacity-70"><TabIcon type={tab.type} /></span>
     <span className="truncate max-w-[120px]">{tabLabel(tab, cwds)}</span>

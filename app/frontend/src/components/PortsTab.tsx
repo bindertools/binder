@@ -217,9 +217,9 @@ export default function PortsTab({ active, cwd }: Props) {
                     <tr key={i} className="ports__row">
                       <td className="ports__port">{p.port}</td>
                       <td className="ports__proto">{p.protocol}</td>
-                      <td className={`ports__state ports__state--${p.state.toLowerCase()}`}>{p.state || '—'}</td>
-                      <td className="ports__pid">{p.pid || '—'}</td>
-                      <td className="ports__process">{p.process || '—'}</td>
+                      <td className={`ports__state ports__state--${p.state.toLowerCase()}`}>{p.state || '-'}</td>
+                      <td className="ports__pid">{p.pid || '-'}</td>
+                      <td className="ports__process">{p.process || '-'}</td>
                       <td className="ports__addr">{p.address}</td>
                       <td className="ports__action">
                         <button
