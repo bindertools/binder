@@ -1468,7 +1468,8 @@ export default function App() {
                   display: visible && rect ? 'block' : 'none',
                 }}
               >
-                <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors} />
+                <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors}
+                  onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
               </div>
             )
           })}

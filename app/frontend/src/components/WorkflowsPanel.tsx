@@ -14,6 +14,7 @@ interface Props {
   cwd:        string
   active:     boolean
   gpuColors?: GpuEditorColors
+  onOpenFile?: (path: string, line: number, col: number) => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -81,6 +82,27 @@ const ClockIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="8" cy="8" r="6.25"/>
     <path d="M8 4.5V8.3l2.4 1.4"/>
+  </svg>
+)
+
+const ConsoleIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+    <path d="M4 6.25L6.5 8.25 4 10.25M8.5 10.25h3.5"/>
+  </svg>
+)
+
+const LockIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="7.25" width="10" height="6.75" rx="1.5"/>
+    <path d="M5 7.25V5a3 3 0 016 0v2.25"/>
+  </svg>
+)
+
+const EditIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.7 1.8l2.5 2.5L4.5 12 1.5 12.5 2 9.5z"/>
+    <path d="M8.2 3.3l2.5 2.5"/>
   </svg>
 )
 
@@ -385,7 +407,7 @@ function RunHistory({ cwd, file }: { cwd: string; file: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type Section = 'code' | 'events' | 'history'
+type Section = 'code' | 'events' | 'history' | 'console'
 
 interface SelectionState {
   file:    string
@@ -398,7 +420,7 @@ interface SelectionState {
 // from the global workflow-runs store rather than this panel's own state).
 const lastSelection = new Map<string, SelectionState>()
 
-export default function WorkflowsPanel({ cwd, active, gpuColors }: Props) {
+export default function WorkflowsPanel({ cwd, active, gpuColors, onOpenFile }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [checking, setChecking] = useState(false)
@@ -503,6 +525,11 @@ export default function WorkflowsPanel({ cwd, active, gpuColors }: Props) {
     if (selectedFile) lastSelection.set(cwd, { file: selectedFile, section: s })
   }, [cwd, selectedFile])
 
+  const handleEditWorkflow = useCallback(() => {
+    if (!selected || !onOpenFile) return
+    onOpenFile(`${cwd.replace(/\\/g, '/')}/${selected.path}`, 0, 0)
+  }, [selected, cwd, onOpenFile])
+
   const latestRun = useLatestRun(allRuns, cwd, selected?.file)
   const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
 
@@ -600,12 +627,28 @@ export default function WorkflowsPanel({ cwd, active, gpuColors }: Props) {
                 >
                   <ClockIcon /> History
                 </button>
+                <button
+                  onClick={() => selectSection('console')}
+                  className={`wf-detail-nav__btn${section === 'console' ? ' wf-detail-nav__btn--active' : ''}`}
+                >
+                  <ConsoleIcon /> Console
+                </button>
               </nav>
 
               <div className="wf-detail-content">
                 {section === 'code' && (
                   <div className="wf-code-card">
-                    <div className="wf-code-card__header">{selected.path}</div>
+                    <div className="wf-code-card__header">
+                      <span className="wf-code-card__path">{selected.path}</span>
+                      <button
+                        className="wf-btn wf-btn--ghost wf-code-card__edit-btn"
+                        onClick={handleEditWorkflow}
+                        disabled={!onOpenFile}
+                        title="Open this workflow file in the code editor"
+                      >
+                        <EditIcon /> Edit Workflow
+                      </button>
+                    </div>
                     <div className="wf-code-card__body">
                       {contentLoading ? (
                         <CodeSkeleton />
@@ -623,6 +666,32 @@ export default function WorkflowsPanel({ cwd, active, gpuColors }: Props) {
                 {section === 'events' && <WorkflowEventsMap content={content} loading={contentLoading} />}
 
                 {section === 'history' && <RunHistory cwd={cwd} file={selected.file} />}
+
+                {section === 'console' && (
+                  latestRun ? (
+                    <div className="wf-console">
+                      <StepTimeline events={latestRun.stepEvents} />
+                      <OutputCard
+                        output={latestRun.output}
+                        running={latestRun.status === 'running'}
+                        preparing={latestRun.status === 'running' && latestRun.output === ''}
+                      />
+                    </div>
+                  ) : (
+                    <div className="wf-console">
+                      <div className="wf-output-card wf-output-card--locked">
+                        <div className="wf-output-card__header wf-output-card__header--locked">
+                          <LockIcon size={12} />
+                          <span>Console</span>
+                        </div>
+                        <div className="wf-output-card__placeholder wf-output-card__placeholder--locked">
+                          <div className="wf-output-card__lock-icon"><LockIcon size={22} /></div>
+                          No active run. Use the Run button above to start this workflow and view its live console output here.
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
               </div>
             </div>
           </>

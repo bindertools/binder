@@ -308,23 +308,23 @@
   100% { background-position: 220% 0; }
 }
 
-// ── Detail body: vertical sub-section nav + content ────────────────────────
+// ── Detail body: horizontal sub-section nav + content ──────────────────────
 .wf-detail-body {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
   overflow: hidden;
 }
 
 .wf-detail-nav {
-  width: 178px;
+  width: fit-content;
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 4px;
-  padding: 8px;
-  height: fit-content;
+  padding: 4px;
   border-radius: var(--r-lg);
   border: 1px solid var(--sep);
   background: var(--surface-raised);
@@ -333,8 +333,8 @@
 .wf-detail-nav__btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   border: 1px solid transparent;
   border-radius: var(--r-md);
   background: transparent;
@@ -449,14 +449,28 @@
 .wf-code-card__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--sep);
+  flex-shrink: 0;
+}
+
+.wf-code-card__path {
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--tab-color);
   opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-code-card__edit-btn {
   flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
 }
 
 .wf-code-card__body {
@@ -653,6 +667,36 @@
   color: var(--tab-color);
   opacity: 0.5;
   line-height: 1.6;
+}
+
+// ── Console sub-section ────────────────────────────────────────────────────
+.wf-console {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wf-output-card--locked {
+  background: var(--surface-raised);
+}
+
+.wf-output-card__header--locked {
+  color: var(--tab-color);
+  opacity: 0.4;
+}
+
+.wf-output-card__placeholder--locked {
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0.35;
+}
+
+.wf-output-card__lock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 // ── Empty / loading states ─────────────────────────────────────────────────
