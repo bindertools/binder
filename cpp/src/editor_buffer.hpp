@@ -22,7 +22,9 @@
 //   editor.search    {bufferId, query, regex?, caseSensitive?, wholeWord?}
 //                                                     → {matches: [{startLine, startCol,
 //                                                        endLine, endCol}]} (capped at 10000)
-//   editor.completions {bufferId, line, col}         → {items: [{label, kind, insertText}]}
+//   editor.completions {bufferId, line, col}         → {items: [{label, kind, insertText, detail}]}
+//                          "detail" is the trimmed source line the symbol is
+//                          declared on (empty for keywords/word matches).
 //                          Combines tree-sitter symbol extraction, per-language
 //                          keyword tables and a word-based fallback, filtered
 //                          by the identifier prefix immediately left of (line, col).

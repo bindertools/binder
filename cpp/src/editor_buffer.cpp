@@ -1823,6 +1823,13 @@ struct EditGroup {
 
 // ── Buffer ────────────────────────────────────────────────────────────────────
 
+// A completion candidate's symbol kind plus a short snippet of the source
+// line where it's declared (shown as "detail" in the completions popup).
+struct CompletionSymbol {
+    std::string kind;
+    std::string detail;
+};
+
 struct Buffer {
     int id = 0;
     std::string path;
@@ -1838,7 +1845,7 @@ struct Buffer {
     std::map<std::string, json> view_states; // per viewKey ("" = default): opaque cursor/scroll state
     std::vector<EditGroup> undo_stack;
     std::vector<EditGroup> redo_stack;
-    std::map<std::string, std::string> completion_symbols; // name -> kind, cached per version
+    std::map<std::string, CompletionSymbol> completion_symbols; // name -> {kind, detail}, cached per version
     int completion_symbols_version = -1;
 
     ~Buffer() {
@@ -2486,7 +2493,7 @@ void rebuild_completion_symbols(Buffer& b) {
     for (; wit != wend && b.completion_symbols.size() < 2000; ++wit) {
         std::string w = wit->str();
         if (w.size() < 2) continue;
-        b.completion_symbols.emplace(w, "variable");
+        b.completion_symbols.emplace(w, CompletionSymbol{"variable", ""});
     }
 
     if (b.lang && b.tree) {
@@ -2506,7 +2513,23 @@ void rebuild_completion_symbols(Buffer& b) {
                     if (name.size() >= 2 && name.front() == '"' && name.back() == '"')
                         name = name.substr(1, name.size() - 2);
                     if (name.empty()) continue;
-                    b.completion_symbols[name] = cq->capture_kinds[cap.index];
+
+                    // Detail: the trimmed source line the symbol is declared
+                    // on, shown in the completions popup for context (e.g.
+                    // a function's signature line).
+                    TSPoint pt = point_for_byte(b, s);
+                    uint32_t ls, le;
+                    b.line_bytes(pt.row, ls, le);
+                    std::string line = b.text.substr(ls, le - ls);
+                    size_t first = line.find_first_not_of(" \t");
+                    std::string detail;
+                    if (first != std::string::npos) {
+                        size_t last = line.find_last_not_of(" \t\r");
+                        detail = line.substr(first, last - first + 1);
+                        if (detail.size() > 80) detail = detail.substr(0, 80) + "...";
+                    }
+
+                    b.completion_symbols[name] = CompletionSymbol{cq->capture_kinds[cap.index], detail};
                 }
             }
             ts_query_cursor_delete(cursor);
@@ -2540,27 +2563,27 @@ json op_completions(const json& msg) {
 
     if (b->completion_symbols_version != b->version) rebuild_completion_symbols(*b);
 
-    std::map<std::string, std::string> matches; // sorted by name, dedup'd
+    std::map<std::string, CompletionSymbol> matches; // sorted by name, dedup'd
 
     if (b->lang) {
         auto kwit = kKeywords.find(b->lang->name);
         if (kwit != kKeywords.end()) {
             for (const auto& kw : kwit->second) {
                 if (kw != prefix && kw.rfind(prefix, 0) == 0)
-                    matches.emplace(kw, "keyword");
+                    matches.emplace(kw, CompletionSymbol{"keyword", ""});
             }
         }
     }
 
-    for (const auto& [name, kind] : b->completion_symbols) {
+    for (const auto& [name, sym] : b->completion_symbols) {
         if (matches.size() >= 200) break;
         if (name != prefix && name.rfind(prefix, 0) == 0)
-            matches.emplace(name, kind);
+            matches.emplace(name, sym);
     }
 
     json items = json::array();
-    for (const auto& [name, kind] : matches) {
-        items.push_back({{"label", name}, {"kind", kind}, {"insertText", name}});
+    for (const auto& [name, sym] : matches) {
+        items.push_back({{"label", name}, {"kind", sym.kind}, {"insertText", name}, {"detail", sym.detail}});
         if (items.size() >= 50) break;
     }
     return {{"items", items}};

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { ChevronRight, ChevronDown } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
@@ -317,10 +318,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
       >
         <span className="fe-node__chevron">
           {node.isDir ? (
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"
-              style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>
-              <path d="M2 1l4 3-4 3V1z"/>
-            </svg>
+            isOpen ? <ChevronDown size={13} strokeWidth={2} /> : <ChevronRight size={13} strokeWidth={2} />
           ) : null}
         </span>
         <span className="fe-node__icon">

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { CaseSensitive, ChevronDown, ChevronRight, ChevronUp, Regex, Replace, ReplaceAll, WholeWord, X } from 'lucide-react'
 
 interface Props {
   mode: 'find' | 'replace'
@@ -23,7 +24,7 @@ interface Props {
 }
 
 const toggleClass = (active: boolean) =>
-  `w-5 h-5 flex items-center justify-center rounded text-[10px] font-semibold leading-none ${
+  `w-5 h-5 flex items-center justify-center rounded leading-none ${
     active ? 'bg-[var(--accent)] text-black' : 'text-[var(--info-bar-color)] hover:bg-[var(--info-bar-hover-bg)]'
   }`
 
@@ -69,10 +70,8 @@ export default function FindReplaceBar(props: Props) {
           onClick={props.onToggleMode}
           className={iconBtnClass}
         >
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"
-               style={{ transform: props.mode === 'replace' ? 'rotate(90deg)' : undefined }}>
-            <path d="M6 2l6 6-6 6V2z" />
-          </svg>
+          <ChevronRight size={13} strokeWidth={2}
+               style={{ transform: props.mode === 'replace' ? 'rotate(90deg)' : undefined, transition: 'transform 0.1s' }} />
         </button>
         <input
           ref={queryRef}
@@ -82,22 +81,26 @@ export default function FindReplaceBar(props: Props) {
           placeholder="Find"
           className={inputClass}
         />
-        <button title="Match case" onClick={props.onToggleCaseSensitive} className={toggleClass(props.caseSensitive)}>Aa</button>
-        <button title="Match whole word" onClick={props.onToggleWholeWord} className={toggleClass(props.wholeWord)}>ab</button>
-        <button title="Use regular expression" onClick={props.onToggleRegex} className={toggleClass(props.regex)}>.*</button>
+        <button title="Match case" onClick={props.onToggleCaseSensitive} className={toggleClass(props.caseSensitive)}>
+          <CaseSensitive size={14} strokeWidth={2} />
+        </button>
+        <button title="Match whole word" onClick={props.onToggleWholeWord} className={toggleClass(props.wholeWord)}>
+          <WholeWord size={14} strokeWidth={2} />
+        </button>
+        <button title="Use regular expression" onClick={props.onToggleRegex} className={toggleClass(props.regex)}>
+          <Regex size={14} strokeWidth={2} />
+        </button>
         <span className="min-w-[64px] text-center text-[11px] text-[var(--info-bar-color)]">
           {props.matchCount === 0 ? 'No results' : `${props.currentIndex + 1} of ${props.matchCount}`}
         </span>
         <button title="Previous match (Shift+Enter)" onClick={props.onPrev} disabled={props.matchCount === 0} className={iconBtnClass}>
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4l-6 6h12L8 4z" /></svg>
+          <ChevronUp size={13} strokeWidth={2} />
         </button>
         <button title="Next match (Enter)" onClick={props.onNext} disabled={props.matchCount === 0} className={iconBtnClass}>
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l6-6H2l6 6z" /></svg>
+          <ChevronDown size={13} strokeWidth={2} />
         </button>
         <button title="Close (Esc)" onClick={props.onClose} className={iconBtnClass}>
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
+          <X size={13} strokeWidth={2} />
         </button>
       </div>
       {props.mode === 'replace' && (
@@ -111,11 +114,13 @@ export default function FindReplaceBar(props: Props) {
             className={inputClass}
           />
           <button title="Replace (Enter)" onClick={props.onReplace} disabled={props.matchCount === 0}
-            className="h-5 px-1.5 rounded text-[11px] text-[var(--info-bar-hover-color)] hover:bg-[var(--info-bar-hover-bg)] disabled:opacity-40 disabled:hover:bg-transparent">
+            className="h-5 px-1.5 flex items-center gap-1 rounded text-[11px] text-[var(--info-bar-hover-color)] hover:bg-[var(--info-bar-hover-bg)] disabled:opacity-40 disabled:hover:bg-transparent">
+            <Replace size={13} strokeWidth={2} />
             Replace
           </button>
           <button title="Replace all (Ctrl+Enter)" onClick={props.onReplaceAll} disabled={props.matchCount === 0}
-            className="h-5 px-1.5 rounded text-[11px] text-[var(--info-bar-hover-color)] hover:bg-[var(--info-bar-hover-bg)] disabled:opacity-40 disabled:hover:bg-transparent">
+            className="h-5 px-1.5 flex items-center gap-1 rounded text-[11px] text-[var(--info-bar-hover-color)] hover:bg-[var(--info-bar-hover-bg)] disabled:opacity-40 disabled:hover:bg-transparent">
+            <ReplaceAll size={13} strokeWidth={2} />
             All
           </button>
         </div>
