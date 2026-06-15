@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import FileIcon from './FileIcon'
 
 const FILE_TYPES = [
   '.ts', '.tsx', '.js', '.jsx',
@@ -74,7 +75,8 @@ export default function NewItemDialog({ kind, onConfirm, onCancel }: Props) {
         {/* Preview of the final filename */}
         {name.trim() && (
           <div className="ni-preview">
-            {kind === 'file' ? '📄' : '📁'} {preview}
+            <FileIcon name={preview} ext={kind === 'folder' ? '' : (preview.split('.').pop() ?? '')} isDir={kind === 'folder'} />
+            {preview}
           </div>
         )}
 
