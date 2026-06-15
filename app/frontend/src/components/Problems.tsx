@@ -37,11 +37,11 @@ interface Props {
 // ── Severity config ───────────────────────────────────────────────────────────
 
 const SEV_META = {
-  critical: { label: 'Critical', color: '#ff453a', bg: 'rgba(255,69,58,0.12)',  order: 0 },
-  high:     { label: 'High',     color: '#ff6b35', bg: 'rgba(255,107,53,0.12)', order: 1 },
-  medium:   { label: 'Medium',   color: '#ffa800', bg: 'rgba(255,168,0,0.12)',  order: 2 },
-  low:      { label: 'Low',      color: '#34c759', bg: 'rgba(52,199,89,0.10)',  order: 3 },
-  info:     { label: 'Info',     color: '#636366', bg: 'rgba(99,99,102,0.12)',  order: 4 },
+  critical: { label: 'Critical', color: 'var(--color-severity-critical)', bg: 'rgba(255,69,58,0.12)',  order: 0 },
+  high:     { label: 'High',     color: 'var(--color-severity-high)',     bg: 'rgba(255,107,53,0.12)', order: 1 },
+  medium:   { label: 'Medium',   color: 'var(--color-severity-medium)',   bg: 'rgba(255,168,0,0.12)',  order: 2 },
+  low:      { label: 'Low',      color: 'var(--color-severity-low)',      bg: 'rgba(52,199,89,0.10)',  order: 3 },
+  info:     { label: 'Info',     color: 'var(--color-severity-info)',     bg: 'rgba(99,99,102,0.12)',  order: 4 },
 } as const
 
 // ── Dismissal persistence ─────────────────────────────────────────────────────
