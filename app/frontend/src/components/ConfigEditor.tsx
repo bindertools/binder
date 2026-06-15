@@ -107,9 +107,9 @@ const SHELL_OPTIONS = [
 ]
 
 const ALIGNMENT_OPTIONS = [
-  { label: 'Default — type directly in terminal',        value: 'default' },
-  { label: 'Top — fixed input bar below tab bar',        value: 'top' },
-  { label: 'Bottom — fixed input bar above status bar',  value: 'bottom' },
+  { label: 'Default: type directly in terminal',        value: 'default' },
+  { label: 'Top: fixed input bar below tab bar',         value: 'top' },
+  { label: 'Bottom: fixed input bar above status bar',   value: 'bottom' },
 ]
 
 function seedColors(theme: string, saved: Record<string, string>): Record<string, string> {
@@ -624,7 +624,7 @@ function PreferencesSection({
       </SettingGroup>
 
       <SettingGroup title="Privacy">
-        <SettingRow label="Database Privacy Mode" description="Blur all cell data in database views — click any cell to reveal it. Designed for screensharing and livestreams.">
+        <SettingRow label="Database Privacy Mode" description="Blur all cell data in database views. Click any cell to reveal it. Designed for screensharing and livestreams.">
           <Toggle checked={!!cfg.database_privacy} onChange={() => onToggle('database_privacy')} />
         </SettingRow>
       </SettingGroup>

@@ -1266,7 +1266,7 @@ export default function App() {
         <>
           <button
             className="flex items-center justify-center w-[28px] h-[28px] border-0 outline-none rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
-            title={`Update available: ${updateTag} — click to install`}
+            title={`Update available: ${updateTag} (click to install)`}
             onClick={() => PerformUpdate(updateTag).catch(() => {})}
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
