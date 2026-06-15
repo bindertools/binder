@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { ReadDatabase } from '../../wailsjs/go/main/App'
+import SidebarPanel from './shared/SidebarPanel'
+import { PageSidebarNavItem } from './shared/PageSidebarNav'
 import './Database.scss'
 
 interface DBColumn { name: string; type: string; notnull?: boolean; pk?: boolean }
@@ -206,6 +208,15 @@ export default function Database({ dbPath, privacyMode }: Props) {
 
   const fileName = dbPath.replace(/\\/g, '/').split('/').pop() ?? dbPath
 
+  const tableItems: PageSidebarNavItem[] = !loading && !error
+    ? (schema?.tables ?? []).map(t => ({
+        id: t.name,
+        label: t.name,
+        icon: <TableIcon />,
+        meta: t.row_count.toLocaleString(),
+      }))
+    : []
+
   return (
     <div className="db-root">
 
@@ -225,30 +236,20 @@ export default function Database({ dbPath, privacyMode }: Props) {
       <div className="db-body">
 
         {/* ── Left: table list ──────────────────────────────────────────────── */}
-        <aside className="db-sidebar">
-          <div className="db-sidebar-header">Tables</div>
-          <div className="db-sidebar-list">
-            {loading && <div className="db-sidebar-state">Loading…</div>}
-            {error   && <div className="db-sidebar-state db-sidebar-state--error"><WarningIcon /> {error}</div>}
-            {!loading && !error && (schema?.tables ?? []).map(t => (
-              <button
-                key={t.name}
-                className={`db-table-item${t.name === selectedTable ? ' is-active' : ''}`}
-                onClick={() => handleSelectTable(t.name)}
-              >
-                <span className="db-table-item-icon"><TableIcon /></span>
-                <span className="db-table-item-name">{t.name}</span>
-                <span className="db-table-item-count">{t.row_count.toLocaleString()}</span>
-              </button>
-            ))}
-            {!loading && !error && tableCount === 0 && (
-              <div className="db-sidebar-state">No tables</div>
-            )}
-          </div>
-        </aside>
-
-        {/* ── Divider ───────────────────────────────────────────────────────── */}
-        <div className="db-divider" />
+        <SidebarPanel
+          title="Tables"
+          items={tableItems}
+          activeId={selectedTable}
+          onSelect={handleSelectTable}
+          emptyMessage="No tables"
+        >
+          {loading && <div className="px-2.5 py-2.5 text-[12px] text-[var(--info-bar-color)] opacity-50 italic">Loading…</div>}
+          {error && (
+            <div className="flex items-center gap-1.5 px-2.5 py-2.5 text-[12px] text-[var(--color-error)]">
+              <WarningIcon /> {error}
+            </div>
+          )}
+        </SidebarPanel>
 
         {/* ── Right: data panel ─────────────────────────────────────────────── */}
         <main className="db-main">
