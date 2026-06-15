@@ -12,11 +12,48 @@ type StoreTab = 'browse' | 'external'
 
 interface Props { onPluginChange: () => void }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  development:  '⌨',
-  productivity: '◈',
-  utilities:    '⚒',
-  other:        '⊡',
+function IconCategoryDev() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1.5" y="3.5" width="12" height="8" rx="1.3"/>
+      <path d="M4 6.5h.01M7.5 6.5h.01M11 6.5h.01M4.5 9h6"/>
+    </svg>
+  )
+}
+
+function IconCategoryProductivity() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="7.5" r="6"/>
+      <circle cx="7.5" cy="7.5" r="2.5"/>
+    </svg>
+  )
+}
+
+function IconCategoryUtilities() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 2.5a3.2 3.2 0 0 0-4.2 4.2L2 10l2 2 3.3-3.3a3.2 3.2 0 0 0 4.2-4.2l-1 1-1.5-1.5 1-1z"/>
+    </svg>
+  )
+}
+
+function IconCategoryOther() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="8.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="1.5" y="8.5" width="5" height="5" rx="1"/>
+      <rect x="8.5" y="8.5" width="5" height="5" rx="1"/>
+    </svg>
+  )
+}
+
+const CATEGORY_ICONS: Record<string, () => React.JSX.Element> = {
+  development:  IconCategoryDev,
+  productivity: IconCategoryProductivity,
+  utilities:    IconCategoryUtilities,
+  other:        IconCategoryOther,
 }
 
 function IconDownload() {
@@ -163,7 +200,10 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
               <div key={entry.id} className={`ps-card${isInst ? ' ps-card--installed' : ''}`}>
                 <div className="ps-card__top">
                   <div className="ps-card__icon">
-                    {CATEGORY_ICONS[entry.category] ?? '⊡'}
+                    {(() => {
+                      const CategoryIcon = CATEGORY_ICONS[entry.category] ?? IconCategoryOther
+                      return <CategoryIcon />
+                    })()}
                   </div>
                   <div className="ps-card__identity">
                     <div className="ps-card__name">{entry.name}</div>
