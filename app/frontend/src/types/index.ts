@@ -85,6 +85,21 @@ export interface PortInfo {
   state: string
 }
 
+export interface EndpointItem {
+  framework:           string
+  method:              string
+  path:                string
+  file:                string
+  line:                number
+  col:                 number
+  snippet:             string
+  has_rate_limit:      boolean
+  has_auth:            boolean
+  rate_limit_evidence: string
+  auth_evidence:       string
+  severity:            'high' | 'medium' | 'info'
+}
+
 export interface PerfData {
   cpu_percent: number
   mem_used: number

@@ -7,6 +7,36 @@
   font-size: 13px;
 }
 
+/* ── Tab switcher ────────────────────────────────────────────────────────────── */
+.ports__tab-switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--sep);
+  flex-shrink: 0;
+}
+
+.ports__main-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--info-bar-color);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+  white-space: nowrap;
+}
+.ports__main-tab svg { flex-shrink: 0; }
+.ports__main-tab:hover { background: var(--surface-raised); color: var(--info-bar-hover-color); }
+.ports__main-tab.active { background: var(--surface-overlay); color: var(--info-bar-hover-color); }
+
 /* ── Toolbar ─────────────────────────────────────────────────────────────────── */
 .ports__toolbar {
   display: flex;

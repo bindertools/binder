@@ -1150,7 +1150,7 @@ export default function App() {
           <PluginStore onPluginChange={reloadPlugins} />
         )}
         {pane.activePage === 'ports' && (
-          <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} />
+          <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} cwd={paneCwd} />
         )}
         {pane.activePage === 'versioncontrol' && (
           <VersionControlPanel cwd={paneCwd} active={true} />
@@ -1186,7 +1186,7 @@ export default function App() {
       )
     }
     if (tab.type === 'preview') return <Preview previewType={tab.previewType!} src={tab.previewSrc!} path={tab.previewPath!} />
-    if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} />
+    if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} cwd={activeCwd} />
     if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={true} />
     if (tab.type === 'plugins' && __PLUGINS__) return <PluginStore onPluginChange={reloadPlugins} />
     if (!__PLUGINS__) return null

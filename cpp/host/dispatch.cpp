@@ -32,6 +32,8 @@
 #include <algorithm>
 #include <ctime>
 #include <cstdint>
+#include <regex>
+#include <cctype>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -1504,6 +1506,244 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             d->resolve_err(captured_seq, std::string("cwe scan error: ") + e.what());
           } catch (...) {
             d->resolve_err(captured_seq, "cwe scan error");
+          }
+        }).detach();
+        return;
+    }
+
+    // ── Endpoint discovery + security posture scan ────────────────────────────
+    if (type == "endpoints.scan") {
+        std::string scan_path = args.value("path", std::string{});
+        if (scan_path.empty()) {
+            try { scan_path = fs::current_path().string(); } catch (...) { scan_path = "."; }
+        }
+
+        std::string captured_seq  = seq;
+        std::string captured_path = scan_path;
+        auto* d = this;
+
+        std::thread([d, captured_seq, captured_path]() {
+          try {
+            struct EndpointPattern {
+                const char* framework;
+                const char* regex_src;
+                const char* extensions;
+                int method_group;       // 0 => use fixed_method
+                int path_group;         // 0 => path defaults to "/"
+                const char* fixed_method;
+            };
+
+            // Regex source strings use the RX(...)RX raw-string delimiter to
+            // safely contain `)"`-like sequences inside character classes.
+            static const EndpointPattern kPatterns[] = {
+                {"Express",       R"RX(\b(?:app|api|router|[A-Za-z_][A-Za-z0-9_]*[Rr]outer)\.(get|post|put|delete|patch|all)\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".js,.ts,.jsx,.tsx,.mjs,.cjs", 1, 2, nullptr},
+                {"NestJS",        R"RX(@(Get|Post|Put|Delete|Patch)\s*\(\s*(?:[`'"]([^`'")]*)[`'"])?\s*\))RX",
+                 ".ts", 1, 2, nullptr},
+                {"Flask/FastAPI", R"RX(@(?:app|api|router|bp|blueprint)\.(route|get|post|put|delete|patch)\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".py", 1, 2, nullptr},
+                {"Django",        R"RX(\bpath\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".py", 0, 1, "ANY"},
+                {"Go (gin/echo)", R"RX(\.(GET|POST|PUT|DELETE|PATCH)\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".go", 1, 2, nullptr},
+                {"Go (net/http)", R"RX(\.HandleFunc\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".go", 0, 1, "ANY"},
+                {"Spring",        R"RX(@(Get|Post|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:value\s*=\s*)?["']([^"']*)["'])RX",
+                 ".java,.kt", 1, 2, nullptr},
+                {"Rails/Sinatra", R"RX(^\s*(get|post|put|delete|patch)\s+[`'"]([^`'"]*)[`'"])RX",
+                 ".rb", 1, 2, nullptr},
+                {"Laravel",       R"RX(Route::(get|post|put|delete|patch)\s*\(\s*[`'"]([^`'"]*)[`'"])RX",
+                 ".php", 1, 2, nullptr},
+                {"ASP.NET Core",  R"RX(\[Http(Get|Post|Put|Delete|Patch)(?:\(\s*["']([^"']*)["']\s*\))?\])RX",
+                 ".cs", 1, 2, nullptr},
+            };
+            static const size_t kPatternCount = sizeof(kPatterns) / sizeof(kPatterns[0]);
+
+            // Compile every pattern once and keep it index-aligned with kPatterns.
+            static const std::vector<std::regex> kCompiled = []{
+                std::vector<std::regex> v;
+                v.reserve(kPatternCount);
+                for (auto& p : kPatterns) v.emplace_back(p.regex_src, std::regex::ECMAScript);
+                return v;
+            }();
+
+            // Heuristic markers (matched against lower-cased lines).
+            static const char* kRateLimitSignals[] = {
+                "ratelimit", "rate_limit", "rate-limit", "limiter", "throttle", "slowapi",
+            };
+            static const char* kAuthSignals[] = {
+                "requireauth", "authenticate", "isauthenticated", "passport", "login_required",
+                "permission_classes", "preauthorize", "authorize", "useguards", "authguard",
+                "verifytoken", "jwt", "depends(get_current_user", "secured", "ensure_authenticated",
+                "current_user",
+            };
+            static const size_t kRateLimitSignalCount = sizeof(kRateLimitSignals) / sizeof(kRateLimitSignals[0]);
+            static const size_t kAuthSignalCount       = sizeof(kAuthSignals) / sizeof(kAuthSignals[0]);
+
+            auto to_lower = [](std::string s) {
+                for (char& c : s) c = (char)tolower((unsigned char)c);
+                return s;
+            };
+            auto find_signal = [](const std::string& lowerLine, const char* const* signals, size_t n) -> std::string {
+                for (size_t i = 0; i < n; ++i)
+                    if (lowerLine.find(signals[i]) != std::string::npos) return signals[i];
+                return "";
+            };
+
+            static const std::set<std::string> kSkipDirs = {
+                "node_modules", ".git", ".svn", "dist", "build",
+                "out", ".next", "target", "vendor", "__pycache__",
+            };
+            static constexpr size_t kMaxFileSize  = 2 * 1024 * 1024;
+            static constexpr size_t kMaxLines     = 8000;
+            static constexpr size_t kMaxFindings  = 300;
+            static constexpr int    kBeforeWindow = 6;
+            static constexpr int    kAfterWindow  = 4;
+
+            json results = json::array();
+
+            for (auto it = fs::recursive_directory_iterator(
+                    captured_path,
+                    fs::directory_options::skip_permission_denied);
+                 it != fs::recursive_directory_iterator() && results.size() < kMaxFindings; ++it) {
+
+                if (it->is_directory()) {
+                    if (kSkipDirs.count(it->path().filename().string()))
+                        it.disable_recursion_pending();
+                    continue;
+                }
+                if (!it->is_regular_file()) continue;
+
+                std::error_code ec;
+                auto fsize = fs::file_size(it->path(), ec);
+                if (ec || fsize == 0 || fsize > kMaxFileSize) continue;
+
+                std::string ext = it->path().extension().string();
+                for (char& c : ext) c = (char)tolower((unsigned char)c);
+
+                std::vector<size_t> applicable;
+                for (size_t pi = 0; pi < kPatternCount; ++pi) {
+                    std::string exts = kPatterns[pi].extensions;
+                    size_t pos = 0;
+                    while (pos < exts.size()) {
+                        auto comma = exts.find(',', pos);
+                        auto cand  = comma == std::string::npos ? exts.substr(pos) : exts.substr(pos, comma - pos);
+                        if (cand == ext) { applicable.push_back(pi); break; }
+                        if (comma == std::string::npos) break;
+                        pos = comma + 1;
+                    }
+                }
+                if (applicable.empty()) continue;
+
+                std::ifstream f(it->path(), std::ios::binary);
+                if (!f) continue;
+
+                std::vector<std::string> lines;
+                std::string raw;
+                while (lines.size() < kMaxLines && std::getline(f, raw)) {
+                    if (!raw.empty() && raw.back() == '\r') raw.pop_back();
+                    lines.push_back(raw);
+                }
+                if (lines.empty()) continue;
+
+                std::vector<std::string> lowerLines;
+                lowerLines.reserve(lines.size());
+                for (auto& l : lines) lowerLines.push_back(to_lower(l));
+
+                // Pass 1: file-level global middleware registration (e.g. app.use(...)).
+                bool globalRateLimit = false, globalAuth = false;
+                std::string globalRateLimitEvidence, globalAuthEvidence;
+                for (auto& ll : lowerLines) {
+                    if (ll.find(".use(") == std::string::npos) continue;
+                    if (!globalRateLimit) {
+                        auto sig = find_signal(ll, kRateLimitSignals, kRateLimitSignalCount);
+                        if (!sig.empty()) { globalRateLimit = true; globalRateLimitEvidence = sig; }
+                    }
+                    if (!globalAuth) {
+                        auto sig = find_signal(ll, kAuthSignals, kAuthSignalCount);
+                        if (!sig.empty()) { globalAuth = true; globalAuthEvidence = sig; }
+                    }
+                    if (globalRateLimit && globalAuth) break;
+                }
+
+                // Pass 2: per-line endpoint detection + local security context.
+                for (size_t li = 0; li < lines.size() && results.size() < kMaxFindings; ++li) {
+                    for (size_t pi : applicable) {
+                        std::smatch m;
+                        if (!std::regex_search(lines[li], m, kCompiled[pi])) continue;
+
+                        const auto& pat = kPatterns[pi];
+
+                        std::string method;
+                        if (pat.method_group > 0 && (size_t)pat.method_group < m.size() && m[pat.method_group].matched) {
+                            method = m[pat.method_group].str();
+                            for (char& c : method) c = (char)toupper((unsigned char)c);
+                            if (method == "ROUTE" || method == "REQUEST" || method == "ALL")
+                                method = "ANY";
+                        } else {
+                            method = pat.fixed_method ? pat.fixed_method : "ANY";
+                        }
+
+                        std::string path = "/";
+                        if (pat.path_group > 0 && (size_t)pat.path_group < m.size()
+                            && m[pat.path_group].matched && !m[pat.path_group].str().empty()) {
+                            path = m[pat.path_group].str();
+                        }
+
+                        int from = (int)li - kBeforeWindow; if (from < 0) from = 0;
+                        int to   = (int)li + kAfterWindow;  if (to >= (int)lines.size()) to = (int)lines.size() - 1;
+
+                        bool localRateLimit = false, localAuth = false;
+                        std::string localRateLimitEvidence, localAuthEvidence;
+                        for (int wi = from; wi <= to; ++wi) {
+                            if (!localRateLimit) {
+                                auto sig = find_signal(lowerLines[wi], kRateLimitSignals, kRateLimitSignalCount);
+                                if (!sig.empty()) { localRateLimit = true; localRateLimitEvidence = sig; }
+                            }
+                            if (!localAuth) {
+                                auto sig = find_signal(lowerLines[wi], kAuthSignals, kAuthSignalCount);
+                                if (!sig.empty()) { localAuth = true; localAuthEvidence = sig; }
+                            }
+                        }
+
+                        bool hasRateLimit = localRateLimit || globalRateLimit;
+                        bool hasAuth      = localAuth || globalAuth;
+                        std::string rlEvidence   = localRateLimit ? localRateLimitEvidence
+                                                  : (globalRateLimit ? globalRateLimitEvidence + " (global)" : "");
+                        std::string authEvidence = localAuth ? localAuthEvidence
+                                                  : (globalAuth ? globalAuthEvidence + " (global)" : "");
+
+                        std::string severity = !hasAuth ? "high" : (!hasRateLimit ? "medium" : "info");
+
+                        std::string snippet = lines[li];
+                        size_t sp = snippet.find_first_not_of(" \t");
+                        if (sp != std::string::npos) snippet = snippet.substr(sp);
+                        if (snippet.size() > 160) snippet = snippet.substr(0, 160) + "...";
+
+                        json item;
+                        item["framework"]           = pat.framework;
+                        item["method"]              = method;
+                        item["path"]               = path;
+                        item["file"]               = it->path().u8string();
+                        item["line"]               = (int)li + 1;
+                        item["col"]                = (int)m.position(0) + 1;
+                        item["snippet"]            = snippet;
+                        item["has_rate_limit"]     = hasRateLimit;
+                        item["has_auth"]           = hasAuth;
+                        item["rate_limit_evidence"] = rlEvidence;
+                        item["auth_evidence"]       = authEvidence;
+                        item["severity"]           = severity;
+                        results.push_back(std::move(item));
+                        break; // one finding per line is enough
+                    }
+                }
+            }
+
+            d->resolve_ok(captured_seq, results);
+          } catch (const std::exception& e) {
+            d->resolve_err(captured_seq, std::string("endpoint scan error: ") + e.what());
+          } catch (...) {
+            d->resolve_err(captured_seq, "endpoint scan error");
           }
         }).detach();
         return;

@@ -68,7 +68,7 @@ const GROUP_LABELS: Record<string, string> = {
   database:   'Databases',
   debug:      'Debug',
   config:     'Settings',
-  ports:      'Ports',
+  ports:      'Ports & Endpoints',
   perf:       'Performance',
   fullscreen: 'Fullscreen',
   plugins:    'Plugins',

@@ -65,7 +65,7 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/explorer',        desc: 'open native file explorer' },
   { cmd: '/pack',            desc: 'zip current directory' },
   { cmd: '/pack --dryrun',   desc: 'preview what would be zipped' },
-  { cmd: '/ports',           desc: 'open ports monitor tab' },
+  { cmd: '/ports',           desc: 'open ports & endpoints tab' },
   { cmd: '/performance',     desc: 'open performance monitor tab' },
   { cmd: '/fullscreen',      desc: 'open fullscreen IDE explorer' },
   { cmd: '/fs',              desc: 'open fullscreen IDE explorer (alias)' },

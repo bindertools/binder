@@ -213,6 +213,9 @@ function textToB64(text: string): string {
 
       ScanCWE: (path: string) =>
         invoke('problems.cwe', { path }),
+
+      ScanEndpoints: (path: string) =>
+        invoke('endpoints.scan', { path }),
     },
   },
 }

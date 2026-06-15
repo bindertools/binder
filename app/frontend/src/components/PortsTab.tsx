@@ -2,14 +2,36 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { PortInfo } from '../types'
 import { GetSystemPorts, KillPort } from '../../wailsjs/go/main/App'
 import { Skeleton } from './Skeleton'
+import EndpointsTab from './EndpointsTab'
 import './PortsTab.scss'
 
 interface Props {
   tabId: string
   active: boolean
+  cwd: string
 }
 
 type ProtoFilter = 'all' | 'tcp' | 'udp'
+type MainTab = 'open-ports' | 'endpoints'
+
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+const IconPlug = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <path d="M5 1.5V5M11 1.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path d="M3.5 5h9v2.5a4.5 4.5 0 01-9 0V5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M8 12v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconEndpoint = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <circle cx="4" cy="4" r="2" stroke="currentColor" strokeWidth="1.3"/>
+    <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M5.5 5.5L10.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path d="M9 3.5h3.5V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -31,7 +53,8 @@ function PortsSkeleton() {
   )
 }
 
-export default function PortsTab({ active }: Props) {
+export default function PortsTab({ active, cwd }: Props) {
+  const [mainTab, setMainTab] = useState<MainTab>('open-ports')
   const [ports, setPorts] = useState<PortInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -50,11 +73,11 @@ export default function PortsTab({ active }: Props) {
   }, [])
 
   useEffect(() => {
-    if (!active) return
+    if (!active || mainTab !== 'open-ports') return
     refresh()
     const id = setInterval(refresh, 5000)
     return () => clearInterval(id)
-  }, [active, refresh])
+  }, [active, mainTab, refresh])
 
   const handleSort = (key: keyof PortInfo) => {
     if (sortKey === key) setSortAsc(a => !a)
@@ -105,75 +128,100 @@ export default function PortsTab({ active }: Props) {
 
   return (
     <div className="ports">
-      <div className="ports__toolbar">
-        <input
-          className="ports__filter"
-          placeholder="filter ports…"
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-        />
-        <select
-          className="ports__select"
-          value={protoFilter}
-          onChange={e => setProtoFilter(e.target.value as ProtoFilter)}
-          title="Filter by protocol"
+      <div className="ports__tab-switcher">
+        <button
+          className={`ports__main-tab${mainTab === 'open-ports' ? ' active' : ''}`}
+          onClick={() => setMainTab('open-ports')}
         >
-          <option value="all">All protocols</option>
-          <option value="tcp">TCP</option>
-          <option value="udp">UDP</option>
-        </select>
-        <select
-          className="ports__select"
-          value={stateFilter}
-          onChange={e => setStateFilter(e.target.value)}
-          title="Filter by state"
+          <IconPlug />
+          Open Ports
+        </button>
+        <button
+          className={`ports__main-tab${mainTab === 'endpoints' ? ' active' : ''}`}
+          onClick={() => setMainTab('endpoints')}
         >
-          <option value="all">All states</option>
-          {states.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <button className="ports__refresh" onClick={refresh}>↻ refresh</button>
-        {message && <span className="ports__msg">{message}</span>}
+          <IconEndpoint />
+          Endpoints
+        </button>
       </div>
-      {loading ? <PortsSkeleton /> : (
-        <div className="ports__table-wrap">
-          <table className="ports__table">
-            <thead>
-              <tr>
-                <Col k="port"     label="Port" />
-                <Col k="protocol" label="Proto" />
-                <Col k="state"    label="State" />
-                <Col k="pid"      label="PID" />
-                <Col k="process"  label="Process" />
-                <Col k="address"  label="Address" />
-                <th className="ports__th">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((p, i) => (
-                <tr key={i} className="ports__row">
-                  <td className="ports__port">{p.port}</td>
-                  <td className="ports__proto">{p.protocol}</td>
-                  <td className={`ports__state ports__state--${p.state.toLowerCase()}`}>{p.state || '—'}</td>
-                  <td className="ports__pid">{p.pid || '—'}</td>
-                  <td className="ports__process">{p.process || '—'}</td>
-                  <td className="ports__addr">{p.address}</td>
-                  <td className="ports__action">
-                    <button
-                      className="ports__kill"
-                      disabled={killing === String(p.port)}
-                      onClick={() => handleKill(p)}
-                    >
-                      {killing === String(p.port) ? '…' : 'kill'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {sorted.length === 0 && (
-                <tr><td colSpan={7} className="ports__empty">no ports match your filters</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+
+      {mainTab === 'open-ports' && (
+        <>
+          <div className="ports__toolbar">
+            <input
+              className="ports__filter"
+              placeholder="filter ports…"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+            />
+            <select
+              className="ports__select"
+              value={protoFilter}
+              onChange={e => setProtoFilter(e.target.value as ProtoFilter)}
+              title="Filter by protocol"
+            >
+              <option value="all">All protocols</option>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
+            <select
+              className="ports__select"
+              value={stateFilter}
+              onChange={e => setStateFilter(e.target.value)}
+              title="Filter by state"
+            >
+              <option value="all">All states</option>
+              {states.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="ports__refresh" onClick={refresh}>↻ refresh</button>
+            {message && <span className="ports__msg">{message}</span>}
+          </div>
+          {loading ? <PortsSkeleton /> : (
+            <div className="ports__table-wrap">
+              <table className="ports__table">
+                <thead>
+                  <tr>
+                    <Col k="port"     label="Port" />
+                    <Col k="protocol" label="Proto" />
+                    <Col k="state"    label="State" />
+                    <Col k="pid"      label="PID" />
+                    <Col k="process"  label="Process" />
+                    <Col k="address"  label="Address" />
+                    <th className="ports__th">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((p, i) => (
+                    <tr key={i} className="ports__row">
+                      <td className="ports__port">{p.port}</td>
+                      <td className="ports__proto">{p.protocol}</td>
+                      <td className={`ports__state ports__state--${p.state.toLowerCase()}`}>{p.state || '—'}</td>
+                      <td className="ports__pid">{p.pid || '—'}</td>
+                      <td className="ports__process">{p.process || '—'}</td>
+                      <td className="ports__addr">{p.address}</td>
+                      <td className="ports__action">
+                        <button
+                          className="ports__kill"
+                          disabled={killing === String(p.port)}
+                          onClick={() => handleKill(p)}
+                        >
+                          {killing === String(p.port) ? '…' : 'kill'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {sorted.length === 0 && (
+                    <tr><td colSpan={7} className="ports__empty">no ports match your filters</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {mainTab === 'endpoints' && (
+        <EndpointsTab cwd={cwd} active={active && mainTab === 'endpoints'} />
       )}
     </div>
   )

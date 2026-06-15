@@ -372,7 +372,7 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
           <DebugIcon />
         </SidebarBtn>
-        <SidebarBtn active={activePage === 'ports'} label="Ports" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
+        <SidebarBtn active={activePage === 'ports'} label="Ports & Endpoints" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
           <PortsIcon />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
