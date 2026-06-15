@@ -357,14 +357,14 @@ function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
       <div className="prob-cwe-detail-section">
         <div className="prob-cwe-detail-section-label">Impact</div>
         <div className="prob-cwe-impact">
-          {item.cwe_id === 'CWE-78'  && 'Network / Local — Attacker can execute arbitrary OS commands'}
-          {item.cwe_id === 'CWE-79'  && "Network — Attacker can inject and execute scripts in victim's browser"}
-          {item.cwe_id === 'CWE-89'  && 'Network — Attacker can read, modify, or delete database records'}
-          {item.cwe_id === 'CWE-120' && 'Local / Network — Memory corruption may lead to arbitrary code execution'}
-          {item.cwe_id === 'CWE-134' && 'Network — Format string exploitation can overwrite stack memory'}
-          {item.cwe_id === 'CWE-95'  && 'Network — Arbitrary JavaScript execution in the application context'}
-          {item.cwe_id === 'CWE-502' && 'Network — Deserialization of attacker-controlled data can execute arbitrary code'}
-          {!['CWE-78','CWE-79','CWE-89','CWE-120','CWE-134','CWE-95','CWE-502'].includes(item.cwe_id) && 'Variable — See MITRE reference for full impact details'}
+          {item.cwe_id === 'CWE-78'  && 'Network / Local: attacker can execute arbitrary OS commands'}
+          {item.cwe_id === 'CWE-79'  && "Network: attacker can inject and execute scripts in victim's browser"}
+          {item.cwe_id === 'CWE-89'  && 'Network: attacker can read, modify, or delete database records'}
+          {item.cwe_id === 'CWE-120' && 'Local / Network: memory corruption may lead to arbitrary code execution'}
+          {item.cwe_id === 'CWE-134' && 'Network: format string exploitation can overwrite stack memory'}
+          {item.cwe_id === 'CWE-95'  && 'Network: arbitrary JavaScript execution in the application context'}
+          {item.cwe_id === 'CWE-502' && 'Network: deserialization of attacker-controlled data can execute arbitrary code'}
+          {!['CWE-78','CWE-79','CWE-89','CWE-120','CWE-134','CWE-95','CWE-502'].includes(item.cwe_id) && 'Variable: see MITRE reference for full impact details'}
         </div>
       </div>
 
@@ -715,7 +715,7 @@ export default function Problems({
                           key={idx}
                           className={`prob-item ${sevClass}`}
                           onClick={() => onOpenFile(item.file, item.line, item.col)}
-                          title={`Open ${name} — line ${item.line}, col ${item.col}`}
+                          title={`Open ${name}, line ${item.line}, col ${item.col}`}
                         >
                           <div className="prob-item-row">
                             <span className={`prob-sev-icon ${sevClass}`}>
@@ -842,7 +842,7 @@ export default function Problems({
           {!cweScanning && cweCounts.all > 0 && (
             <div className="prob-cwe-disclaimer">
               <IconInfo />
-              Static pattern matching — verify findings manually before acting on them.
+              Static pattern matching: verify findings manually before acting on them.
               <a
                 href="https://cwe.mitre.org"
                 target="_blank"
