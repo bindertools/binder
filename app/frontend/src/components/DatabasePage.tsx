@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { SearchFiles } from '../../wailsjs/go/main/App'
 import Database from './Database'
 import { SearchResult } from '../types'
+import SidebarPanel from './shared/SidebarPanel'
+import { PageSidebarNavItem } from './shared/PageSidebarNav'
 import './DatabasePage.scss'
 
 interface Props {
@@ -58,62 +60,52 @@ export default function DatabasePage({ terminalId, cwd, initialDbPath, privacyMo
 
   const displayCwd = cwd.replace(/\\/g, '/')
 
+  const fileItems: PageSidebarNavItem[] = dbFiles.map(path => {
+    const parts = path.replace(/\\/g, '/').split('/')
+    const name  = parts.pop() ?? path
+    const dir   = parts.join('/')
+    return {
+      id: path,
+      label: name,
+      icon: <DBFileIcon size={14} />,
+      subtitle: dir || undefined,
+    }
+  })
+
   return (
     <div className="dbp-root">
 
       {/* ── Left: file list ───────────────────────────────────────────────── */}
-      <aside className="dbp-sidebar">
-        <div className="dbp-sidebar-header">
-          <span>Database Files</span>
-          {loading && <span className="dbp-scanning-icon"><ScanIcon /></span>}
-        </div>
-
-        <div className="dbp-sidebar-body">
-
-          {!loading && !terminalId && (
-            <div className="dbp-sidebar-msg">No active terminal.</div>
-          )}
-
-          {!loading && terminalId && dbFiles.length === 0 && (
-            <div className="dbp-no-files">
-              <div className="dbp-no-files-icon"><DBFileIcon size={18} /></div>
-              <span className="dbp-no-files-title">No databases found</span>
-              {displayCwd && (
-                <span className="dbp-no-files-path">{displayCwd}</span>
-              )}
-            </div>
-          )}
-
-          {dbFiles.map(path => {
-            const parts = path.replace(/\\/g, '/').split('/')
-            const name  = parts.pop() ?? path
-            const dir   = parts.join('/')
-            const isActive = selectedDb === path
-            return (
-              <button
-                key={path}
-                className={`dbp-file-item${isActive ? ' is-active' : ''}`}
-                onClick={() => setSelectedDb(path)}
-              >
-                <span className="dbp-file-icon"><DBFileIcon size={14} /></span>
-                <div className="dbp-file-info">
-                  <span className="dbp-file-name">{name}</span>
-                  {dir && <span className="dbp-file-dir">{dir}</span>}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        {displayCwd && (
-          <div className="dbp-cwd-bar" title={displayCwd}>
-            <span className="dbp-cwd-text">{displayCwd}</span>
+      <SidebarPanel
+        title="Database Files"
+        headerRight={loading && <span className="flex items-center text-accent animate-spin"><ScanIcon /></span>}
+        items={fileItems}
+        activeId={selectedDb}
+        onSelect={setSelectedDb}
+        footer={displayCwd && (
+          <div className="px-3.5 py-2 overflow-hidden" title={displayCwd}>
+            <span className="block text-[10px] font-mono text-[var(--info-bar-color)] opacity-40 whitespace-nowrap overflow-hidden text-ellipsis">
+              {displayCwd}
+            </span>
           </div>
         )}
-      </aside>
+      >
+        {!loading && !terminalId && (
+          <div className="px-2.5 py-3 text-[12px] text-[var(--info-bar-color)] opacity-45 italic">No active terminal.</div>
+        )}
 
-      {/* ── Divider ───────────────────────────────────────────────────────── */}
-      <div className="dbp-divider" />
+        {!loading && terminalId && dbFiles.length === 0 && (
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-surface-raised text-[var(--info-bar-color)] opacity-35 mb-1">
+              <DBFileIcon size={18} />
+            </div>
+            <span className="text-[12px] font-medium text-[var(--info-bar-hover-color)] opacity-55">No databases found</span>
+            {displayCwd && (
+              <span className="text-[10.5px] font-mono text-[var(--info-bar-color)] opacity-40 break-all leading-[1.4]">{displayCwd}</span>
+            )}
+          </div>
+        )}
+      </SidebarPanel>
 
       {/* ── Right: database viewer ────────────────────────────────────────── */}
       <main className="dbp-main">
