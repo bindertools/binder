@@ -81,6 +81,25 @@
   --color-info:    #5AC8FA;
   --dot-running:   #e6e6e6;
 
+  /* Semantic alpha backgrounds (status pills/badges) */
+  --color-success-bg: rgba(48,209,88,0.1);
+  --color-warning-bg: rgba(255,159,10,0.1);
+  --color-error-bg:   rgba(255,69,58,0.1);
+
+  /* Severity palette — shared by Debug/CWE and Endpoints security findings */
+  --color-severity-critical: var(--color-error);
+  --color-severity-high:     #FF6B35;
+  --color-severity-medium:   var(--color-warning);
+  --color-severity-low:      var(--color-success);
+  --color-severity-info:     #636366;
+
+  /* Misc accents */
+  --color-purple: #BF5AF2;
+
+  /* Git diff colors — Workflows run status, Version Control diff viewer */
+  --color-git-add:    #4ade80;
+  --color-git-remove: #f87171;
+
   /* Surfaces */
   --surface-raised:   rgba(255,255,255,0.04);
   --surface-overlay:  rgba(255,255,255,0.07);
