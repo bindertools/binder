@@ -144,17 +144,6 @@ function extractSymbols(content: string, language: string): SymbolEntry[] {
   return out
 }
 
-const KIND_LABEL: Record<SymbolEntry['kind'], string> = {
-  class:       'C',
-  function:    'f',
-  method:      'm',
-  constructor: 'c',
-  interface:   'I',
-  enum:        'E',
-  struct:      'S',
-  type:        'T',
-}
-
 const KIND_CSS: Record<SymbolEntry['kind'], string> = {
   class:       'sv-kind--class',
   function:    'sv-kind--fn',
@@ -164,6 +153,27 @@ const KIND_CSS: Record<SymbolEntry['kind'], string> = {
   enum:        'sv-kind--enum',
   struct:      'sv-kind--struct',
   type:        'sv-kind--type',
+}
+
+function KindIcon({ kind }: { kind: SymbolEntry['kind'] }) {
+  switch (kind) {
+    case 'class':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor"><rect x="1" y="1" width="12" height="12" rx="2"/></svg>
+    case 'function':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor"><circle cx="7" cy="7" r="6"/></svg>
+    case 'method':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="7" cy="7" r="5"/></svg>
+    case 'constructor':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor"><polygon points="7,1 13,13 1,13"/></svg>
+    case 'interface':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="1" width="12" height="12" rx="2"/></svg>
+    case 'enum':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor"><polygon points="7,1 13,7 7,13 1,7"/></svg>
+    case 'struct':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor"><rect x="1" y="1" width="5" height="5"/><rect x="8" y="1" width="5" height="5"/><rect x="1" y="8" width="5" height="5"/><rect x="8" y="8" width="5" height="5"/></svg>
+    case 'type':
+      return <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="7,1 13,7 7,13 1,7"/></svg>
+  }
 }
 
 const ROW_H = 22
@@ -203,7 +213,7 @@ export default function StructureView({ content, language, onGotoLine }: Props) 
               onClick={() => onGotoLine(sym.line)}
               title={`${sym.kind} ${sym.name} — line ${sym.line}`}
             >
-              <span className={`sv-kind ${KIND_CSS[sym.kind]}`}>{KIND_LABEL[sym.kind]}</span>
+              <span className={`sv-kind ${KIND_CSS[sym.kind]}`}><KindIcon kind={sym.kind} /></span>
               <span className="sv-name">{sym.name}</span>
               <span className="sv-line">{sym.line}</span>
             </div>
