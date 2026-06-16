@@ -339,8 +339,8 @@ export default function VersionControlPanel({ cwd, active }: Props) {
     </div>
   )
 
-  const staged   = status?.staged   ?? []
-  const unstaged = status?.unstaged ?? []
+  const staged    = status?.staged    ?? []
+  const unstaged  = status?.unstaged  ?? []
   const untracked = status?.untracked ?? []
   const totalChanges = staged.length + unstaged.length + untracked.length
 
@@ -365,250 +365,238 @@ export default function VersionControlPanel({ cwd, active }: Props) {
         }
       />
 
-      {/* ── Branch bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--border-color)] shrink-0">
-        <BranchIcon />
-        <div className="relative flex-1 min-w-0" ref={branchRef}>
-          <button
-            className="flex items-center gap-1 text-[12px] font-medium text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer hover:text-accent truncate max-w-full"
-            onClick={() => setShowBranches(v => !v)}
-            title="Switch branch"
-          >
-            <span className="truncate">{status?.branch ?? '…'}</span>
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M2 3.5l3 3 3-3"/>
-            </svg>
-          </button>
-          {showBranches && branches.length > 0 && (
-            <div className="absolute left-0 top-full mt-0.5 z-50 bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 min-w-[180px] shadow-overlay max-h-[240px] overflow-auto">
-              {branches.map(b => (
-                <button
-                  key={b}
-                  className={[
-                    'block w-full text-left px-3 py-1.5 text-[11px] bg-transparent border-0 cursor-pointer hover:bg-surface-raised',
-                    b === status?.branch ? 'text-accent font-medium' : 'text-[var(--tab-color-hover)]',
-                  ].join(' ')}
-                  onClick={() => {
-                    setShowBranches(false)
-                    if (b !== status?.branch) void run(() => git.checkout(cwd, b))
-                  }}
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    {b === status?.branch && <CurrentDotIcon />}
-                    {b}
-                  </span>
-                </button>
-              ))}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* ── Left sidebar ──────────────────────────────────────────────────── */}
+        <aside className="w-[260px] shrink-0 flex flex-col border-r border-[var(--sep)] overflow-hidden bg-[var(--app-bg)]">
+
+          {/* Branch header */}
+          <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-[var(--sep)] shrink-0">
+            <BranchIcon />
+            <div className="relative flex-1 min-w-0" ref={branchRef}>
+              <button
+                className="flex items-center gap-1 text-[12px] font-medium text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer hover:text-accent truncate max-w-full"
+                onClick={() => setShowBranches(v => !v)}
+                title="Switch branch"
+              >
+                <span className="truncate">{status?.branch ?? '…'}</span>
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <path d="M2 3.5l3 3 3-3"/>
+                </svg>
+              </button>
+              {showBranches && branches.length > 0 && (
+                <div className="absolute left-0 top-full mt-0.5 z-50 bg-[var(--info-bar-bg)] border border-sep-strong rounded-md py-1 min-w-[180px] shadow-overlay max-h-[240px] overflow-auto">
+                  {branches.map(b => (
+                    <button
+                      key={b}
+                      className={[
+                        'block w-full text-left px-3 py-1.5 text-[11px] bg-transparent border-0 cursor-pointer hover:bg-surface-raised',
+                        b === status?.branch ? 'text-accent font-medium' : 'text-[var(--tab-color-hover)]',
+                      ].join(' ')}
+                      onClick={() => {
+                        setShowBranches(false)
+                        if (b !== status?.branch) void run(() => git.checkout(cwd, b))
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        {b === status?.branch && <CurrentDotIcon />}
+                        {b}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* ahead/behind badges */}
-        {(status?.ahead ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] text-[var(--color-git-add)] font-mono shrink-0"><ArrowUpIcon />{status!.ahead}</span>
-        )}
-        {(status?.behind ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] text-yellow-400 font-mono shrink-0"><ArrowDownIcon />{status!.behind}</span>
-        )}
-      </div>
-
-      {/* ── Scrollable body ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-
-        {loading && !status && (
-          <div className="flex items-center justify-center py-8 text-[var(--tab-color)] text-[11px] opacity-50">
-            loading…
+            {(status?.ahead ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-[var(--color-git-add)] font-mono shrink-0"><ArrowUpIcon />{status!.ahead}</span>
+            )}
+            {(status?.behind ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-yellow-400 font-mono shrink-0"><ArrowDownIcon />{status!.behind}</span>
+            )}
           </div>
-        )}
 
-        {/* Staged */}
-        {staged.length > 0 && (
-          <div>
-            <SectionHeader label="Staged" count={staged.length}>
-              <TextBtn label="Unstage All" onClick={() => run(() => git.reset(cwd))} disabled={pending} />
-            </SectionHeader>
-            {staged.map(({ file, status: code }) => (
-              <FileRow
-                key={file + '-staged'}
-                file={file}
-                statusCode={code}
-                selected={selFile?.file === file && selFile?.staged}
-                onSelect={() => selectFile(file, true)}
-                actionIcon={<MinusIcon />}
-                actionTitle="Unstage"
-                onAction={() => run(() => git.reset(cwd, file))}
-                disabled={pending}
-              />
-            ))}
-          </div>
-        )}
+          {/* Scrollable file list */}
+          <div className="flex-1 overflow-y-auto min-h-0 thin-scrollbar">
+            {loading && !status && (
+              <div className="flex items-center justify-center py-8 text-[var(--tab-color)] text-[11px] opacity-50">loading…</div>
+            )}
 
-        {/* Unstaged */}
-        {unstaged.length > 0 && (
-          <div>
-            <SectionHeader label="Changes" count={unstaged.length}>
-              <TextBtn label="Stage All" onClick={() => run(() => git.add(cwd))} disabled={pending} />
-            </SectionHeader>
-            {unstaged.map(({ file, status: code }) => (
-              <FileRow
-                key={file + '-unstaged'}
-                file={file}
-                statusCode={code}
-                selected={selFile?.file === file && !selFile?.staged}
-                onSelect={() => selectFile(file, false)}
-                actionIcon={<DiscardIcon />}
-                actionTitle="Discard"
-                onAction={() => run(() => git.discard(cwd, file))}
-                actionIcon2={<PlusIcon />}
-                actionTitle2="Stage"
-                onAction2={() => run(() => git.add(cwd, file))}
-                disabled={pending}
-              />
-            ))}
-          </div>
-        )}
+            {unstaged.length > 0 && (
+              <div>
+                <SectionHeader label="Changes" count={unstaged.length}>
+                  <TextBtn label="Stage All" onClick={() => run(() => git.add(cwd))} disabled={pending} />
+                </SectionHeader>
+                {unstaged.map(({ file, status: code }) => (
+                  <FileRow
+                    key={file + '-unstaged'}
+                    file={file} statusCode={code}
+                    selected={selFile?.file === file && !selFile?.staged}
+                    onSelect={() => selectFile(file, false)}
+                    actionIcon={<DiscardIcon />} actionTitle="Discard"
+                    onAction={() => run(() => git.discard(cwd, file))}
+                    actionIcon2={<PlusIcon />} actionTitle2="Stage"
+                    onAction2={() => run(() => git.add(cwd, file))}
+                    disabled={pending}
+                  />
+                ))}
+              </div>
+            )}
 
-        {/* Untracked */}
-        {untracked.length > 0 && (
-          <div>
-            <SectionHeader label="Untracked" count={untracked.length}>
-              <TextBtn label="Stage All" onClick={() => run(() => git.add(cwd))} disabled={pending} />
-            </SectionHeader>
-            {untracked.map(file => (
-              <FileRow
-                key={file + '-untracked'}
-                file={file}
-                statusCode="?"
-                selected={selFile?.file === file && !selFile?.staged}
-                onSelect={() => selectFile(file, false)}
-                actionIcon={<DiscardIcon />}
-                actionTitle="Delete file"
-                onAction={() => run(() => git.discard(cwd, file, true))}
-                actionIcon2={<PlusIcon />}
-                actionTitle2="Stage"
-                onAction2={() => run(() => git.add(cwd, file))}
-                disabled={pending}
-              />
-            ))}
-          </div>
-        )}
+            {staged.length > 0 && (
+              <div>
+                <SectionHeader label="Staged" count={staged.length}>
+                  <TextBtn label="Unstage All" onClick={() => run(() => git.reset(cwd))} disabled={pending} />
+                </SectionHeader>
+                {staged.map(({ file, status: code }) => (
+                  <FileRow
+                    key={file + '-staged'}
+                    file={file} statusCode={code}
+                    selected={selFile?.file === file && selFile?.staged}
+                    onSelect={() => selectFile(file, true)}
+                    actionIcon={<MinusIcon />} actionTitle="Unstage"
+                    onAction={() => run(() => git.reset(cwd, file))}
+                    disabled={pending}
+                  />
+                ))}
+              </div>
+            )}
 
-        {status && totalChanges === 0 && (
-          <div className="flex items-center justify-center py-6 text-[var(--tab-color)] text-[11px] opacity-40">
-            no changes
-          </div>
-        )}
+            {untracked.length > 0 && (
+              <div>
+                <SectionHeader label="Untracked" count={untracked.length}>
+                  <TextBtn label="Stage All" onClick={() => run(() => git.add(cwd))} disabled={pending} />
+                </SectionHeader>
+                {untracked.map(file => (
+                  <FileRow
+                    key={file + '-untracked'}
+                    file={file} statusCode="?"
+                    selected={selFile?.file === file && !selFile?.staged}
+                    onSelect={() => selectFile(file, false)}
+                    actionIcon={<DiscardIcon />} actionTitle="Delete file"
+                    onAction={() => run(() => git.discard(cwd, file, true))}
+                    actionIcon2={<PlusIcon />} actionTitle2="Stage"
+                    onAction2={() => run(() => git.add(cwd, file))}
+                    disabled={pending}
+                  />
+                ))}
+              </div>
+            )}
 
-        {/* ── Commit panel ──────────────────────────────────────────────────── */}
-        <div className="border-t border-[var(--border-color)] px-3 py-2 shrink-0">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tab-color)] opacity-60 mb-1.5">
-            Commit
-          </div>
-          <textarea
-            className="w-full bg-surface-raised border border-sep-strong rounded text-[11px] text-[var(--tab-color-hover)] placeholder:text-[var(--tab-color)] placeholder:opacity-40 p-1.5 resize-none focus:outline-none focus:border-accent font-ui"
-            rows={3}
-            placeholder="commit message…"
-            value={commitMsg}
-            onChange={e => setCommitMsg(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && commitMsg.trim()) {
-                void run(() => git.commit(cwd, commitMsg.trim()))
-                setCommitMsg('')
-              }
-            }}
-          />
-          <div className="flex gap-1.5 mt-1.5">
-            <TextBtn
-              label="Commit"
-              variant="primary"
-              disabled={!commitMsg.trim() || pending}
-              onClick={() => {
-                const msg = commitMsg.trim()
-                if (!msg) return
-                void run(() => git.commit(cwd, msg))
-                setCommitMsg('')
-              }}
-            />
-            <TextBtn
-              label="Commit & Push"
-              disabled={!commitMsg.trim() || pending}
-              onClick={async () => {
-                const msg = commitMsg.trim()
-                if (!msg) return
-                setPending(true)
-                try {
-                  await git.commit(cwd, msg)
-                  setCommitMsg('')
-                  await git.push(cwd)
-                  flash('pushed')
-                  await refresh()
-                } catch (e: any) {
-                  flash(e?.message ?? 'error')
-                } finally {
-                  setPending(false)
-                }
-              }}
-            />
-          </div>
-        </div>
+            {status && totalChanges === 0 && (
+              <div className="flex items-center justify-center py-6 text-[var(--tab-color)] text-[11px] opacity-40">no changes</div>
+            )}
 
-        {/* ── Stash panel ───────────────────────────────────────────────────── */}
-        <div className="border-t border-[var(--border-color)]">
-          <SectionHeader label="Stashes" count={stashes.length}>
-            <TextBtn
-              label="Stash"
-              disabled={pending || totalChanges === 0}
-              onClick={() => {
-                void run(() => git.stash(cwd, stashMsg.trim() || undefined as any))
-                setStashMsg('')
-              }}
-            />
-          </SectionHeader>
-          {stashes.length > 0 && (
-            <div className="px-3 mb-2 flex flex-col gap-0.5">
+            <div className="border-t border-[var(--sep)]">
+              <SectionHeader label="Stashes" count={stashes.length}>
+                <TextBtn
+                  label="Stash"
+                  disabled={pending || totalChanges === 0}
+                  onClick={() => { void run(() => git.stash(cwd, stashMsg.trim() || undefined as any)); setStashMsg('') }}
+                />
+              </SectionHeader>
               {stashes.map(s => (
-                <div key={s.ref} className="flex items-center gap-1.5 group">
+                <div key={s.ref} className="flex items-center gap-1.5 group px-3 py-[3px]">
                   <span className="flex-1 min-w-0 truncate text-[11px] text-[var(--tab-color)]" title={s.message}>
-                    <span className="text-[var(--tab-color)] opacity-50 font-mono">{s.ref.replace('stash@{', '').replace(/\}/g, '')} </span>
+                    <span className="opacity-50 font-mono">{s.ref.replace('stash@{', '').replace(/\}/g, '')} </span>
                     {s.message}
                   </span>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-                    <IconBtn title="Pop stash" onClick={() => run(() => git.stashPop(cwd, s.ref))} disabled={pending}>
-                      <PlusIcon />
-                    </IconBtn>
-                    <IconBtn title="Drop stash" onClick={() => run(() => git.stashDrop(cwd, s.ref))} disabled={pending}>
-                      <DiscardIcon />
-                    </IconBtn>
+                    <IconBtn title="Pop stash" onClick={() => run(() => git.stashPop(cwd, s.ref))} disabled={pending}><PlusIcon /></IconBtn>
+                    <IconBtn title="Drop stash" onClick={() => run(() => git.stashDrop(cwd, s.ref))} disabled={pending}><DiscardIcon /></IconBtn>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* ── Op message ────────────────────────────────────────────────────── */}
-        {opMsg && (
-          <div className="mx-3 mb-2 p-2 rounded bg-surface-raised border border-sep-strong text-[10px] text-[var(--tab-color)] font-mono break-all">
-            {opMsg}
           </div>
-        )}
 
-        {/* ── Diff viewer ───────────────────────────────────────────────────── */}
-        <div className="border-t border-[var(--border-color)]">
-          <SectionHeader label="Diff" count={0}>
-            {selFile && (
-              <button
-                className="inline-flex items-center text-[10px] text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer"
-                onClick={() => { setSelFile(null); setDiff('') }}
-              >
-                <CloseIcon />
-              </button>
+          {/* Commit footer */}
+          <div className="border-t border-[var(--sep)] px-3 py-2.5 shrink-0">
+            <textarea
+              className="w-full bg-surface-raised border border-sep rounded text-[11px] text-[var(--tab-color-hover)] placeholder:text-[var(--tab-color)] placeholder:opacity-40 p-1.5 resize-none focus:outline-none focus:border-accent font-ui"
+              rows={3}
+              placeholder="commit message…"
+              value={commitMsg}
+              onChange={e => setCommitMsg(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && commitMsg.trim()) {
+                  void run(() => git.commit(cwd, commitMsg.trim()))
+                  setCommitMsg('')
+                }
+              }}
+            />
+            <div className="flex gap-1.5 mt-1.5">
+              <TextBtn
+                label="Commit" variant="primary"
+                disabled={!commitMsg.trim() || pending}
+                onClick={() => {
+                  const msg = commitMsg.trim()
+                  if (!msg) return
+                  void run(() => git.commit(cwd, msg))
+                  setCommitMsg('')
+                }}
+              />
+              <TextBtn
+                label="Commit & Push"
+                disabled={!commitMsg.trim() || pending}
+                onClick={async () => {
+                  const msg = commitMsg.trim()
+                  if (!msg) return
+                  setPending(true)
+                  try {
+                    await git.commit(cwd, msg)
+                    setCommitMsg('')
+                    await git.push(cwd)
+                    flash('pushed')
+                    await refresh()
+                  } catch (e: any) {
+                    flash(e?.message ?? 'error')
+                  } finally {
+                    setPending(false)
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+        </aside>
+
+        {/* ── Right: diff viewer ───────────────────────────────────────────── */}
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+          {/* Diff header */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--sep)] shrink-0 min-h-[36px]">
+            {selFile ? (
+              <>
+                <StatusBadge code={
+                  selFile.staged
+                    ? (staged.find(f => f.file === selFile.file)?.status ?? 'M')
+                    : (unstaged.find(f => f.file === selFile.file)?.status ?? (untracked.includes(selFile.file) ? '?' : 'M'))
+                } />
+                <span className="flex-1 min-w-0 text-[11.5px] font-mono text-[var(--tab-color-hover)] truncate">{selFile.file}</span>
+                <span className="text-[10px] text-[var(--tab-color)] opacity-50 shrink-0">{selFile.staged ? 'staged' : 'unstaged'}</span>
+                <button
+                  className="flex items-center p-1 text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] bg-transparent border-0 cursor-pointer"
+                  onClick={() => { setSelFile(null); setDiff('') }}
+                >
+                  <CloseIcon />
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-[var(--tab-color)] opacity-40">select a file to view diff</span>
             )}
-          </SectionHeader>
-          <div className="h-[280px] px-3 pb-3">
+            {opMsg && (
+              <span className="ml-auto text-[10px] font-mono text-[var(--tab-color)] bg-surface-raised border border-sep-strong rounded px-2 py-0.5 max-w-[220px] truncate shrink-0" title={opMsg}>
+                {opMsg}
+              </span>
+            )}
+          </div>
+
+          {/* Diff body */}
+          <div className="flex-1 min-h-0 overflow-auto thin-scrollbar px-4 py-3">
             <DiffViewer diff={diff} />
           </div>
-        </div>
+
+        </main>
 
       </div>
     </div>
