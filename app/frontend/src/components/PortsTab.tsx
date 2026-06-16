@@ -3,6 +3,7 @@ import { PortInfo } from '../types'
 import { GetSystemPorts, KillPort } from '../../wailsjs/go/main/App'
 import { Skeleton } from './Skeleton'
 import EndpointsTab from './EndpointsTab'
+import SubNavTabs from './shared/SubNavTabs'
 import './PortsTab.scss'
 
 interface Props {
@@ -150,21 +151,15 @@ export default function PortsTab({ active, cwd }: Props) {
 
   return (
     <div className="ports">
-      <div className="ports__tab-switcher">
-        <button
-          className={`ports__main-tab${mainTab === 'open-ports' ? ' active' : ''}`}
-          onClick={() => setMainTab('open-ports')}
-        >
-          <IconPlug />
-          Open Ports
-        </button>
-        <button
-          className={`ports__main-tab${mainTab === 'endpoints' ? ' active' : ''}`}
-          onClick={() => setMainTab('endpoints')}
-        >
-          <IconEndpoint />
-          Endpoints
-        </button>
+      <div className="flex items-center px-3 py-1.5 border-b border-sep shrink-0">
+        <SubNavTabs
+          items={[
+            { id: 'open-ports', label: 'Open Ports', icon: <IconPlug /> },
+            { id: 'endpoints', label: 'Endpoints', icon: <IconEndpoint /> },
+          ]}
+          activeId={mainTab}
+          onSelect={id => setMainTab(id as MainTab)}
+        />
       </div>
 
       {mainTab === 'open-ports' && (
