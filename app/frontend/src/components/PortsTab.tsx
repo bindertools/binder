@@ -151,7 +151,7 @@ export default function PortsTab({ active, cwd }: Props) {
 
   return (
     <div className="ports">
-      <div className="flex items-center px-3 py-1.5 border-b border-sep shrink-0">
+      <div className="flex items-stretch border-b border-sep shrink-0">
         <SubNavTabs
           items={[
             { id: 'open-ports', label: 'Open Ports', icon: <IconPlug /> },
