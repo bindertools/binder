@@ -12,52 +12,6 @@
   font-size: 13px;
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────────── */
-.endpoints__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--sep);
-  flex-shrink: 0;
-}
-.endpoints__toolbar--muted { opacity: 0.6; }
-
-.endpoints__filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--info-bar-color);
-  font-size: 11.5px;
-  font-family: var(--font-ui);
-  cursor: pointer;
-  transition: background 100ms, color 100ms;
-}
-.endpoints__filter-btn:hover  { color: var(--info-bar-hover-color); background: var(--surface-raised); }
-.endpoints__filter-btn.active { color: var(--info-bar-hover-color); background: var(--surface-overlay); }
-.endpoints__filter-btn:disabled { cursor: default; }
-
-.endpoints__filter-count {
-  font-size: 10px;
-  background: var(--surface-overlay);
-  padding: 1px 5px;
-  border-radius: 8px;
-  opacity: 0.75;
-  min-width: 14px;
-  text-align: center;
-}
-
-.endpoints__toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-}
-
 .endpoints__status-dim {
   font-size: 11.5px;
   color: var(--info-bar-color);

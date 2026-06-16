@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { EndpointItem } from '../types'
 import { ScanEndpoints } from '../../wailsjs/go/main/App'
 import { Skeleton } from './Skeleton'
+import SubNavTabs from './shared/SubNavTabs'
 import './EndpointsTab.scss'
 
 interface Props {
@@ -148,34 +149,27 @@ export default function EndpointsTab({ cwd, active }: Props) {
 
   return (
     <div className="endpoints">
-      <div className={`endpoints__toolbar${scanning ? ' endpoints__toolbar--muted' : ''}`}>
-        <button
-          className={`endpoints__filter-btn${sevFilter === 'all' ? ' active' : ''}`}
-          onClick={() => setSevFilter('all')}
-          disabled={scanning}
-        >
-          All
-          {!scanning && <span className="endpoints__filter-count">{counts.all}</span>}
-        </button>
-        {!scanning && (['high', 'medium', 'info'] as const).map(sev => {
-          const count = counts[sev]
-          if (count === 0 && sevFilter !== sev) return null
-          const m = SEV_META[sev]
-          return (
-            <button
-              key={sev}
-              className={`endpoints__filter-btn${sevFilter === sev ? ' active' : ''}`}
-              onClick={() => setSevFilter(sev)}
-            >
-              <span style={{ color: m.color, display: 'flex', alignItems: 'center' }}>
-                <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="currentColor"/></svg>
-              </span>
-              {m.label}
-              <span className="endpoints__filter-count">{count}</span>
-            </button>
-          )
-        })}
-        <div className="endpoints__toolbar-right">
+      <div className={`flex items-stretch border-b border-sep shrink-0${scanning ? ' opacity-60 pointer-events-none' : ''}`}>
+        <SubNavTabs
+          size="compact"
+          items={[
+            { id: 'all', label: 'All', count: !scanning ? counts.all : undefined },
+            ...(!scanning
+              ? (['high', 'medium', 'info'] as const)
+                  .filter(sev => counts[sev] > 0 || sevFilter === sev)
+                  .map(sev => ({
+                    id: sev,
+                    label: SEV_META[sev].label,
+                    icon: <span style={{ color: SEV_META[sev].color, display: 'flex', alignItems: 'center' }}><svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="currentColor"/></svg></span>,
+                    count: counts[sev],
+                  }))
+              : []
+            ),
+          ]}
+          activeId={sevFilter}
+          onSelect={id => setSevFilter(id as SevFilter)}
+        />
+        <div className="ml-auto flex items-center gap-2.5 px-3 shrink-0">
           {scanning ? (
             <span className="endpoints__status-dim">Analyzing…</span>
           ) : items.length > 0 ? (
