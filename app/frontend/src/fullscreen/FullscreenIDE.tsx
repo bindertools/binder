@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile, WatchDir, UnwatchDir } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
@@ -591,21 +592,18 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     >
       {collapsed ? (
         <button className="ide-explorer__expand-btn" onClick={() => setCollapsed(false)} title="Expand">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M6 2l6 6-6 6V2z"/>
-          </svg>
+          <PanelLeftOpen size={14} strokeWidth={1.8} />
         </button>
       ) : (
         <>
           {/* ── Explorer section ── */}
           <div className="ide-sec-head" onClick={() => setExplorerOpen(o => !o)}>
-            <svg
+            <ChevronRight
               className="ide-sec-chevron"
               style={{ transform: explorerOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-              width="10" height="10" viewBox="0 0 16 16" fill="currentColor"
-            >
-              <path d="M5 2l8 6-8 6V2z"/>
-            </svg>
+              size={12}
+              strokeWidth={2}
+            />
             <span className="ide-sec-name">Explorer</span>
             <div className="ide-sec-actions">
               <button
@@ -613,18 +611,14 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
                 title="Move explorer"
                 onClick={e => { e.stopPropagation(); setExplorerPos(p => p === 'left' ? 'right' : 'left') }}
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm7 1H3v10h7V3zm1 0v10h2V3h-2z"/>
-                </svg>
+                <PanelLeft size={12} strokeWidth={1.8} />
               </button>
               <button
                 className="ide-sec-action-btn"
                 title="Collapse sidebar"
                 onClick={e => { e.stopPropagation(); setCollapsed(true) }}
               >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M10 2L4 8l6 6V2z"/>
-                </svg>
+                <PanelLeftClose size={12} strokeWidth={1.8} />
               </button>
             </div>
           </div>
@@ -653,13 +647,12 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
 
           {/* ── Structure section ── */}
           <div className="ide-sec-head" onClick={() => setStructureOpen(o => !o)}>
-            <svg
+            <ChevronRight
               className="ide-sec-chevron"
               style={{ transform: structureOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-              width="10" height="10" viewBox="0 0 16 16" fill="currentColor"
-            >
-              <path d="M5 2l8 6-8 6V2z"/>
-            </svg>
+              size={12}
+              strokeWidth={2}
+            />
             <span className="ide-sec-name">Structure</span>
           </div>
           <div
