@@ -124,6 +124,31 @@ function Spinner({ size = 16 }: { size?: number }) {
   )
 }
 
+const WFSKEL = [
+  { name: 62, sub: 78 }, { name: 48, sub: 64 }, { name: 72, sub: 52 },
+  { name: 55, sub: 80 }, { name: 66, sub: 44 },
+]
+
+function WorkflowSidebarSkeleton() {
+  return (
+    <div className="flex flex-col">
+      {WFSKEL.map((w, i) => (
+        <div
+          key={i}
+          className="flex items-start gap-2.5 py-[11px] pl-[14px] pr-3 border-b border-b-[var(--sep)]"
+          style={{ animationDelay: `${i * 70}ms` }}
+        >
+          <Skeleton width={14} height={14} radius="50%" />
+          <div className="flex flex-col gap-[5px] flex-1 min-w-0">
+            <Skeleton width={`${w.name}%`} height={12} />
+            <Skeleton width={`${w.sub}%`} height={10} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function CodeSkeleton() {
   const widths = ['40%', '70%', '55%', '85%', '30%', '65%', '50%', '90%', '45%', '60%']
   return (
@@ -536,9 +561,9 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
         emptyMessage={!loading && !error ? 'No workflows found in .github/workflows' : undefined}
       >
         {loading && list.length === 0
-          ? <div className="px-2.5 py-4 text-[12px] text-[var(--info-bar-color)] opacity-50 italic">Loading…</div>
+          ? <WorkflowSidebarSkeleton />
           : error
-            ? <div className="px-2.5 py-3 text-[12px] text-[var(--color-error)]">{error}</div>
+            ? <div className="px-3.5 py-3 text-[12px] text-[var(--color-error)]">{error}</div>
             : undefined
         }
       </SidebarPanel>
