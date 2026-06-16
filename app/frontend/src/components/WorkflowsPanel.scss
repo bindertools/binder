@@ -39,59 +39,6 @@
   }
 }
 
-.wf-sidebar {
-  width: 420px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.wf-sidebar__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 2px;
-  flex-shrink: 0;
-}
-
-.wf-sidebar__title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--tab-color);
-  opacity: 0.7;
-}
-
-.wf-sidebar__count {
-  opacity: 0.6;
-  font-weight: 400;
-  margin-left: 4px;
-}
-
-.wf-sidebar__checking {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 6px;
-  vertical-align: middle;
-  opacity: 0.7;
-}
-
-.wf-sidebar__list {
-  @extend %wf-scroll;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 2px;
-  padding-right: 10px;
-  margin: -2px;
-}
-
 .wf-main {
   flex: 1;
   min-width: 0;
@@ -316,46 +263,6 @@
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
-}
-
-.wf-detail-nav {
-  width: fit-content;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: row;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
-}
-
-.wf-detail-nav__btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--tab-color);
-  font-size: 12.5px;
-  font-weight: 500;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background .12s, color .12s, border-color .12s;
-}
-
-.wf-detail-nav__btn:hover {
-  color: var(--tab-color-hover);
-  background: var(--app-bg);
-}
-
-.wf-detail-nav__btn--active {
-  color: var(--tab-color-hover);
-  background: var(--accent-dim);
-  border-color: var(--accent-border);
 }
 
 .wf-detail-content {
@@ -718,39 +625,6 @@
 .wf-empty__icon {
   opacity: 0.6;
   margin-bottom: 4px;
-}
-
-.wf-sidebar__empty {
-  padding: 30px 16px;
-  text-align: center;
-  color: var(--tab-color);
-  opacity: 0.5;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.wf-sidebar__refresh {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-sm);
-  border: 0;
-  background: transparent;
-  color: var(--tab-color);
-  cursor: pointer;
-  transition: background .1s, color .1s;
-}
-
-.wf-sidebar__refresh:hover {
-  background: var(--surface-raised);
-  color: var(--tab-color-hover);
-}
-
-.wf-sidebar__refresh:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 // ── Skeletons ──────────────────────────────────────────────────────────────

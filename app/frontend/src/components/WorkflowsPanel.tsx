@@ -7,6 +7,8 @@ import {
 import { Skeleton } from './Skeleton'
 import GpuEditor from './GpuEditor'
 import WorkflowEventsMap from './WorkflowEventsMap'
+import SubNavTabs from './shared/SubNavTabs'
+import SidebarPanel from './shared/SidebarPanel'
 import type { GpuEditorColors } from '../themes'
 import './WorkflowsPanel.scss'
 
@@ -545,44 +547,43 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
   return (
     <div className="wf-page">
       {/* ── Left: workflow list ─────────────────────────────────────────────── */}
-      <aside className="wf-sidebar">
-        <div className="wf-sidebar__header">
-          <span className="wf-sidebar__title">
-            Workflows{list.length > 0 && <span className="wf-sidebar__count">({list.length})</span>}
-            {checking && (
-              <span className="wf-sidebar__checking" title="Checking for new workflows…">
-                <Spinner size={10} />
-              </span>
+      <SidebarPanel
+        title="Workflows"
+        headerRight={
+          <div className="flex items-center gap-2">
+            {list.length > 0 && !checking && (
+              <span className="text-[11px] text-[var(--info-bar-color)] opacity-55">{list.length}</span>
             )}
-          </span>
-          <button className="wf-sidebar__refresh" title="Refresh" onClick={() => void refresh()} disabled={loading}>
-            <RefreshIcon />
-          </button>
-        </div>
-
-        <div className="wf-sidebar__list">
-          {loading && list.length === 0 && (
-            Array.from({ length: 4 }).map((_, i) => <WorkflowCardSkeleton key={i} />)
-          )}
-
-          {error && (
-            <div className="wf-sidebar__empty">{error}</div>
-          )}
-
-          {!loading && !error && list.length === 0 && (
-            <div className="wf-sidebar__empty">No workflows found in .github/workflows</div>
-          )}
-
-          {list.map(wf => (
-            <WorkflowCard
-              key={wf.file}
-              wf={wf}
-              selected={selectedFile === wf.file}
-              onSelect={() => selectWorkflow(wf)}
-            />
-          ))}
-        </div>
-      </aside>
+            {checking && <Spinner size={10} />}
+            <button
+              className="flex items-center p-1 rounded text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] hover:bg-[var(--surface-raised)] transition-colors disabled:opacity-30"
+              title="Refresh"
+              onClick={() => void refresh()}
+              disabled={loading}
+            >
+              <RefreshIcon />
+            </button>
+          </div>
+        }
+      >
+        {loading && list.length === 0 && (
+          Array.from({ length: 4 }).map((_, i) => <WorkflowCardSkeleton key={i} />)
+        )}
+        {error && (
+          <div className="px-2.5 py-3 text-[12px] text-[var(--color-error)]">{error}</div>
+        )}
+        {!loading && !error && list.length === 0 && (
+          <div className="px-2.5 py-4 text-[12px] text-[var(--info-bar-color)] opacity-60 italic">No workflows found in .github/workflows</div>
+        )}
+        {list.map(wf => (
+          <WorkflowCard
+            key={wf.file}
+            wf={wf}
+            selected={selectedFile === wf.file}
+            onSelect={() => selectWorkflow(wf)}
+          />
+        ))}
+      </SidebarPanel>
 
       {/* ── Right: selected workflow details ────────────────────────────────── */}
       <main className="wf-main">
@@ -608,32 +609,18 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
             </div>
 
             <div className="wf-detail-body">
-              <nav className="wf-detail-nav">
-                <button
-                  onClick={() => selectSection('code')}
-                  className={`wf-detail-nav__btn${section === 'code' ? ' wf-detail-nav__btn--active' : ''}`}
-                >
-                  <CodeIcon /> Code
-                </button>
-                <button
-                  onClick={() => selectSection('events')}
-                  className={`wf-detail-nav__btn${section === 'events' ? ' wf-detail-nav__btn--active' : ''}`}
-                >
-                  <WorkflowIcon /> Events Map
-                </button>
-                <button
-                  onClick={() => selectSection('history')}
-                  className={`wf-detail-nav__btn${section === 'history' ? ' wf-detail-nav__btn--active' : ''}`}
-                >
-                  <ClockIcon /> History
-                </button>
-                <button
-                  onClick={() => selectSection('console')}
-                  className={`wf-detail-nav__btn${section === 'console' ? ' wf-detail-nav__btn--active' : ''}`}
-                >
-                  <ConsoleIcon /> Console
-                </button>
-              </nav>
+              <div className="flex items-center px-3 py-1.5 border-b border-sep shrink-0">
+                <SubNavTabs
+                  items={[
+                    { id: 'code',    label: 'Code',       icon: <CodeIcon /> },
+                    { id: 'events',  label: 'Events Map', icon: <WorkflowIcon /> },
+                    { id: 'history', label: 'History',    icon: <ClockIcon /> },
+                    { id: 'console', label: 'Console',    icon: <ConsoleIcon /> },
+                  ]}
+                  activeId={section}
+                  onSelect={id => selectSection(id as Section)}
+                />
+              </div>
 
               <div className="wf-detail-content">
                 {section === 'code' && (
