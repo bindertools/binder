@@ -16,6 +16,7 @@ import VersionControlPanel from './components/VersionControlPanel'
 import NotepadPage from './components/NotepadPage'
 import WorkflowsPanel from './components/WorkflowsPanel'
 import WorkflowRunToasts from './components/WorkflowRunToasts'
+import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
@@ -36,6 +37,8 @@ import {
   ScanProblems, ScanCWE, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate,
 } from '../wailsjs/go/main/App'
 import { useDragRegions } from './lib/useDragRegions'
+import { addBackgroundTask, removeBackgroundTask } from './lib/backgroundTaskStore'
+import { useWorkflowRuns } from './lib/workflowRunsStore'
 import { useShortcuts, loadKeybindings, saveKeybindings, type ShortcutHandlers } from './lib/useShortcuts'
 import { getTheme, customColorsToTheme, themeToGpuColors } from './themes'
 import './App.css'
@@ -1057,6 +1060,37 @@ export default function App() {
   useEffect(() => { setProbItems([]); setProbSources([]) }, [activeCwd])
   useEffect(() => { setCweItems([]) }, [activeCwd])
 
+  // ── Background task tracking ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!probScanning) return
+    const id = addBackgroundTask('Scanning for problems')
+    return () => removeBackgroundTask(id)
+  }, [probScanning])
+
+  useEffect(() => {
+    if (!cweScanning) return
+    const id = addBackgroundTask('Scanning CWE vulnerabilities')
+    return () => removeBackgroundTask(id)
+  }, [cweScanning])
+
+  const workflowRuns = useWorkflowRuns()
+  const wfTaskIdsRef = useRef<Map<string, string>>(new Map())
+  useEffect(() => {
+    const taskIds = wfTaskIdsRef.current
+    for (const run of workflowRuns) {
+      if (run.status === 'running' && !taskIds.has(run.runId)) {
+        taskIds.set(run.runId, addBackgroundTask(`Workflow: ${run.name}`))
+      }
+    }
+    const activeRunIds = new Set(workflowRuns.filter(r => r.status === 'running').map(r => r.runId))
+    for (const [runId, taskId] of taskIds) {
+      if (!activeRunIds.has(runId)) {
+        removeBackgroundTask(taskId)
+        taskIds.delete(runId)
+      }
+    }
+  }, [workflowRuns])
+
   const handleCweScan = useCallback(async (scanCwd: string) => {
     setCweScanning(true)
     try { setCweItems(Array.isArray(await ScanCWE(scanCwd)) ? await ScanCWE(scanCwd) as CweItem[] : []) }
@@ -1262,6 +1296,7 @@ export default function App() {
 
   const windowControls = useMemo(() => (
     <div className="flex items-center gap-0.5 px-1.5">
+      <TaskProgressIndicator />
       {updateTag && (
         <>
           <button

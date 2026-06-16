@@ -258,6 +258,16 @@
   flex-shrink: 0;
 }
 
+@keyframes task-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+.task-progress-spinner {
+  border-radius: 50%;
+  animation: task-progress-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
 .term-cwd {
   flex-shrink: 1;
   min-width: 0;
