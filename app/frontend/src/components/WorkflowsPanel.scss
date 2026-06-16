@@ -3,9 +3,6 @@
   display: flex;
   height: 100%;
   overflow: hidden;
-  gap: 20px;
-  padding: 20px;
-  box-sizing: border-box;
   font-family: var(--font-ui);
   background: var(--app-bg);
   color: var(--tab-color-hover);
@@ -46,84 +43,7 @@
   flex-direction: column;
   gap: 16px;
   overflow: hidden;
-}
-
-// ── Workflow list cards ───────────────────────────────────────────────────
-.wf-workflow-card {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 14px 16px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
-  cursor: pointer;
-  user-select: none;
-  transition: border-color .12s, background .12s;
-  flex-shrink: 0;
-}
-
-.wf-workflow-card:hover {
-  border-color: var(--sep-strong);
-}
-
-.wf-workflow-card--selected {
-  border-color: var(--accent-border);
-  background: var(--accent-dim);
-}
-
-.wf-workflow-card__title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.wf-workflow-card__icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-md);
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.wf-workflow-card__title {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tab-color-hover);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wf-workflow-card__badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.wf-workflow-card__path {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--tab-color);
-  opacity: 0.55;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wf-workflow-card__commit {
-  font-size: 11px;
-  color: var(--tab-color);
-  opacity: 0.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 16px 20px;
 }
 
 // ── Trigger badge ──────────────────────────────────────────────────────────
@@ -625,18 +545,6 @@
 .wf-empty__icon {
   opacity: 0.6;
   margin-bottom: 4px;
-}
-
-// ── Skeletons ──────────────────────────────────────────────────────────────
-.wf-workflow-card-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
-  flex-shrink: 0;
 }
 
 // ── Events map ─────────────────────────────────────────────────────────────

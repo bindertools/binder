@@ -9,6 +9,7 @@ import GpuEditor from './GpuEditor'
 import WorkflowEventsMap from './WorkflowEventsMap'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
+import { type PageSidebarNavItem } from './shared/PageSidebarNav'
 import type { GpuEditorColors } from '../themes'
 import './WorkflowsPanel.scss'
 
@@ -110,10 +111,6 @@ const EditIcon = () => (
 
 // ── Small UI bits ─────────────────────────────────────────────────────────────
 
-function TriggerBadge({ label }: { label: string }) {
-  return <span className="wf-badge">{label}</span>
-}
-
 function Spinner({ size = 16 }: { size?: number }) {
   return (
     <div
@@ -124,51 +121,6 @@ function Spinner({ size = 16 }: { size?: number }) {
         borderTopColor: 'var(--accent)',
       }}
     />
-  )
-}
-
-// ── Workflow list card ────────────────────────────────────────────────────────
-
-function WorkflowCard({ wf, selected, onSelect }: { wf: WorkflowFile; selected: boolean; onSelect: () => void }) {
-  return (
-    <div
-      className={`wf-workflow-card${selected ? ' wf-workflow-card--selected' : ''}`}
-      onClick={onSelect}
-    >
-      <div className="wf-workflow-card__title-row">
-        <span className="wf-workflow-card__icon"><WorkflowIcon /></span>
-        <span className="wf-workflow-card__title">{wf.name}</span>
-        <ChevronRightIcon />
-      </div>
-      {wf.triggers.length > 0 && (
-        <div className="wf-workflow-card__badges">
-          {wf.triggers.map(t => <TriggerBadge key={t} label={t} />)}
-        </div>
-      )}
-      <div className="wf-workflow-card__path">{wf.path}</div>
-      {wf.lastCommit && (
-        <div className="wf-workflow-card__commit">
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{wf.lastCommit.hash}</span>
-          {' · '}{wf.lastCommit.message}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function WorkflowCardSkeleton() {
-  return (
-    <div className="wf-workflow-card-skeleton">
-      <div className="flex items-center gap-2.5">
-        <Skeleton width={28} height={28} radius={8} />
-        <Skeleton width="55%" height={13} />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Skeleton width={50} height={18} radius={6} />
-        <Skeleton width={64} height={18} radius={6} />
-      </div>
-      <Skeleton width="80%" height={11} />
-    </div>
   )
 }
 
@@ -565,24 +517,30 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
             </button>
           </div>
         }
+        items={(!loading && !error && list.length > 0) ? list.map((wf): PageSidebarNavItem => ({
+          id: wf.file,
+          label: wf.name,
+          icon: <WorkflowIcon />,
+          badge: wf.triggers.length > 0 ? (
+            <span className="text-[9.5px] font-mono text-[var(--info-bar-color)] opacity-45 shrink-0">
+              {wf.triggers[0]}{wf.triggers.length > 1 ? ` +${wf.triggers.length - 1}` : ''}
+            </span>
+          ) : undefined,
+          subtitle: wf.path,
+        })) : []}
+        activeId={selectedFile}
+        onSelect={(!loading && !error && list.length > 0) ? (id => {
+          const wf = list.find(w => w.file === id)
+          if (wf) selectWorkflow(wf)
+        }) : undefined}
+        emptyMessage={!loading && !error ? 'No workflows found in .github/workflows' : undefined}
       >
-        {loading && list.length === 0 && (
-          Array.from({ length: 4 }).map((_, i) => <WorkflowCardSkeleton key={i} />)
-        )}
-        {error && (
-          <div className="px-2.5 py-3 text-[12px] text-[var(--color-error)]">{error}</div>
-        )}
-        {!loading && !error && list.length === 0 && (
-          <div className="px-2.5 py-4 text-[12px] text-[var(--info-bar-color)] opacity-60 italic">No workflows found in .github/workflows</div>
-        )}
-        {list.map(wf => (
-          <WorkflowCard
-            key={wf.file}
-            wf={wf}
-            selected={selectedFile === wf.file}
-            onSelect={() => selectWorkflow(wf)}
-          />
-        ))}
+        {loading && list.length === 0
+          ? <div className="px-2.5 py-4 text-[12px] text-[var(--info-bar-color)] opacity-50 italic">Loading…</div>
+          : error
+            ? <div className="px-2.5 py-3 text-[12px] text-[var(--color-error)]">{error}</div>
+            : undefined
+        }
       </SidebarPanel>
 
       {/* ── Right: selected workflow details ────────────────────────────────── */}
@@ -609,7 +567,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
             </div>
 
             <div className="wf-detail-body">
-              <div className="flex items-center px-3 py-1.5 border-b border-sep shrink-0">
+              <div className="flex items-stretch border-b border-sep shrink-0">
                 <SubNavTabs
                   items={[
                     { id: 'code',    label: 'Code',       icon: <CodeIcon /> },
