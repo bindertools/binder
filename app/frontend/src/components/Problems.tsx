@@ -2,6 +2,7 @@
 import { ProbItem } from '../types'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
+import { type PageSidebarNavItem } from './shared/PageSidebarNav'
 import './Problems.scss'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -258,51 +259,6 @@ function SeverityBadge({ severity }: { severity: CweItem['severity'] }) {
     >
       {m.label}
     </span>
-  )
-}
-
-interface ListRowProps {
-  item:      CweItem
-  cwd:       string
-  selected:  boolean
-  onSelect:  () => void
-  onDismiss: () => void
-}
-
-function CweListRow({ item, cwd, selected, onSelect, onDismiss }: ListRowProps) {
-  const { name: fileName } = splitPath(cwd, item.file)
-  const m = SEV_META[item.severity]
-
-  return (
-    <div
-      className={`prob-cwe-list-row${selected ? ' selected' : ''}`}
-      style={{ '--sev-color': m.color } as React.CSSProperties}
-      onClick={onSelect}
-      title={`${item.cwe_id}: ${item.name}`}
-    >
-      <span className="prob-cwe-list-dot" style={{ background: m.color }} />
-
-      <div className="prob-cwe-list-body">
-        <div className="prob-cwe-list-id-line">
-          <span className="prob-cwe-list-id" style={{ color: m.color }}>{item.cwe_id}</span>
-          <span className="prob-cwe-list-sev">{m.label}</span>
-        </div>
-        <div className="prob-cwe-list-name">{item.name}</div>
-        <div className="prob-cwe-list-loc">
-          <span className="prob-cwe-list-filename">{fileName}</span>
-          <span className="prob-cwe-list-lineno">:{item.line}</span>
-        </div>
-      </div>
-
-      <button
-        className="prob-cwe-list-dismiss"
-        onClick={e => { e.stopPropagation(); onDismiss() }}
-        title="Dismiss this finding"
-        aria-label="Dismiss finding"
-      >
-        <IconDismiss />
-      </button>
-    </div>
   )
 }
 
@@ -776,26 +732,47 @@ export default function Problems({
           <div className="prob-cwe-split">
 
             {/* ── Left: findings list ────────────────────────────────────────── */}
-            <SidebarPanel title="CWE Findings">
-              {cweScanning ? (
-                <CweListSkeleton />
-              ) : filteredCwe.length === 0 ? (
-                <CweListEmpty
-                  dismissedCount={dismissedCount}
-                  onRestore={handleRestoreAll}
-                />
-              ) : (
-                filteredCwe.map(item => (
-                  <CweListRow
-                    key={cweKey(item)}
-                    item={item}
-                    cwd={cwd}
-                    selected={selectedKey === cweKey(item)}
-                    onSelect={() => setSelectedKey(cweKey(item))}
-                    onDismiss={() => handleDismiss(item)}
-                  />
-                ))
-              )}
+            <SidebarPanel
+              title="CWE Findings"
+              items={!cweScanning && filteredCwe.length > 0
+                ? filteredCwe.map((item): PageSidebarNavItem => {
+                    const { name: fileName } = splitPath(cwd, item.file)
+                    const m = SEV_META[item.severity]
+                    return {
+                      id: cweKey(item),
+                      icon: (
+                        <span style={{ color: m.color, display: 'flex', alignItems: 'center' }}>
+                          <svg width="8" height="8" viewBox="0 0 8 8">
+                            <circle cx="4" cy="4" r="3.5" fill="currentColor"/>
+                          </svg>
+                        </span>
+                      ),
+                      label: item.name,
+                      badge: <SeverityBadge severity={item.severity} />,
+                      subtitle: `${item.cwe_id} · ${fileName}:${item.line}`,
+                      action: (
+                        <button
+                          className="flex items-center justify-center w-4 h-4 rounded border-none bg-transparent text-[var(--info-bar-color)] cursor-pointer hover:text-[var(--tab-color-hover)] transition-colors"
+                          onClick={e => { e.stopPropagation(); handleDismiss(item) }}
+                          title="Dismiss finding"
+                          aria-label="Dismiss finding"
+                        >
+                          <IconDismiss />
+                        </button>
+                      ),
+                    }
+                  })
+                : []
+              }
+              activeId={selectedKey}
+              onSelect={key => setSelectedKey(key)}
+            >
+              {cweScanning
+                ? <CweListSkeleton />
+                : filteredCwe.length === 0
+                  ? <CweListEmpty dismissedCount={dismissedCount} onRestore={handleRestoreAll} />
+                  : undefined
+              }
             </SidebarPanel>
 
             {/* ── Right: detail panel ────────────────────────────────────────── */}
