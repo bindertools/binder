@@ -189,13 +189,17 @@ export default function TaskProgressIndicator() {
   const workflowRuns = allWorkflowRuns.filter(r => !r.dismissed)
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
   const [, tick] = useState(0)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!menuOpen) return
     function onDown(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        const dropdown = document.getElementById('task-dropdown')
+        if (dropdown && dropdown.contains(e.target as Node)) return
         setMenuOpen(false)
       }
     }
@@ -209,6 +213,14 @@ export default function TaskProgressIndicator() {
     const id = setInterval(() => tick(n => n + 1), 10_000)
     return () => clearInterval(id)
   }, [menuOpen])
+
+  function handleToggle() {
+    if (!menuOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+    }
+    setMenuOpen(o => !o)
+  }
 
   const isRunning = tasks.length > 0
   const currentTaskNum = completedInBatch + 1
@@ -234,9 +246,10 @@ export default function TaskProgressIndicator() {
       style={{ ['--wails-draggable' as any]: 'no-drag' }}
     >
       <button
+        ref={buttonRef}
         className="flex items-center gap-1.5 px-2 h-[22px] rounded text-[11px] hover:bg-surface-raised transition-[background] duration-[100ms] cursor-pointer border-0 bg-transparent font-ui whitespace-nowrap"
         style={{ color: 'var(--accent)' }}
-        onClick={() => setMenuOpen(o => !o)}
+        onClick={handleToggle}
         title="Background tasks"
       >
         {textShown && isRunning && <Spinner />}
@@ -250,8 +263,15 @@ export default function TaskProgressIndicator() {
 
       {menuOpen && (
         <div
-          className="absolute top-[calc(100%+4px)] right-0 min-w-[260px] max-w-[340px] bg-[var(--app-bg)] border border-[var(--border-color)] rounded-md shadow-lg z-50 overflow-hidden"
-          style={{ ['--wails-draggable' as any]: 'no-drag' }}
+          id="task-dropdown"
+          className="min-w-[260px] max-w-[340px] bg-[var(--app-bg)] border border-[var(--border-color)] rounded-md shadow-lg overflow-hidden"
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            right: dropdownPos.right,
+            zIndex: 99999,
+            ['--wails-draggable' as any]: 'no-drag',
+          }}
         >
           <div className="px-3 py-2 border-b border-[var(--border-color)] text-[10.5px] text-[var(--tab-color)] opacity-60 uppercase tracking-wide font-semibold">
             Background Tasks
