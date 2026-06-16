@@ -1,5 +1,7 @@
 ﻿import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { ProbItem } from '../types'
+import SubNavTabs from './shared/SubNavTabs'
+import SidebarPanel from './shared/SidebarPanel'
 import './Problems.scss'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -591,26 +593,14 @@ export default function Problems({
           {sources.map(s => <span key={s} className="prob-source-pill">{s}</span>)}
         </div>
 
-        <div className="prob-tab-switcher">
-          <button
-            className={`prob-main-tab${mainTab === 'diagnostics' ? ' active' : ''}`}
-            onClick={() => setMainTab('diagnostics')}
-          >
-            <IconError />
-            Diagnostics
-            <span className="prob-main-tab-count">{items.length}</span>
-          </button>
-          <button
-            className={`prob-main-tab${mainTab === 'cwe' ? ' active' : ''}`}
-            onClick={() => setMainTab('cwe')}
-          >
-            <IconShield />
-            CWE Analysis
-            {cweCounts.all > 0 && (
-              <span className="prob-main-tab-count cwe">{cweCounts.all}</span>
-            )}
-          </button>
-        </div>
+        <SubNavTabs
+          items={[
+            { id: 'diagnostics', label: 'Diagnostics', icon: <IconError />, count: items.length },
+            { id: 'cwe', label: 'CWE Analysis', icon: <IconShield />, count: cweCounts.all > 0 ? cweCounts.all : undefined },
+          ]}
+          activeId={mainTab}
+          onSelect={id => setMainTab(id as MainTab)}
+        />
 
         <div className="prob-toolbar-actions">
           {mainTab === 'diagnostics' && (
@@ -640,21 +630,16 @@ export default function Problems({
       {mainTab === 'diagnostics' && (
         <>
           <div className="prob-filter-bar">
-            {(['all', 'errors', 'warnings'] as DiagFilter[]).map(f => {
-              const count = f === 'all' ? items.length : f === 'errors' ? errCount : warnCount
-              return (
-                <button
-                  key={f}
-                  className={`prob-filter-btn${diagFilter === f ? ' active' : ''}`}
-                  onClick={() => setDiagFilter(f)}
-                >
-                  {f === 'errors'   && <span className="err"><IconError /></span>}
-                  {f === 'warnings' && <span className="warn"><IconWarning /></span>}
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                  <span className="prob-filter-count">{count}</span>
-                </button>
-              )
-            })}
+            <SubNavTabs
+              size="compact"
+              items={[
+                { id: 'all',      label: 'All',      count: items.length },
+                { id: 'errors',   label: 'Errors',   icon: <span className="text-[var(--color-error)] flex"><IconError /></span>,   count: errCount },
+                { id: 'warnings', label: 'Warnings', icon: <span className="text-[var(--color-warning)] flex"><IconWarning /></span>, count: warnCount },
+              ]}
+              activeId={diagFilter}
+              onSelect={id => setDiagFilter(id as DiagFilter)}
+            />
             <div className="prob-filter-right">
               {scanning ? (
                 <span className="prob-status-dim">Scanning…</span>
@@ -798,7 +783,7 @@ export default function Problems({
           <div className="prob-cwe-split">
 
             {/* ── Left: findings list ────────────────────────────────────────── */}
-            <div className="prob-cwe-list-panel">
+            <SidebarPanel title="CWE Findings">
               {cweScanning ? (
                 <CweListSkeleton />
               ) : filteredCwe.length === 0 ? (
@@ -818,7 +803,7 @@ export default function Problems({
                   />
                 ))
               )}
-            </div>
+            </SidebarPanel>
 
             {/* ── Right: detail panel ────────────────────────────────────────── */}
             <div className="prob-cwe-detail-panel">
