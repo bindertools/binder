@@ -3,6 +3,7 @@ import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile, WatchDir, UnwatchDir } from '../../wailsjs/go/main/App'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
+import StructureView from './StructureView'
 import IDETabBar, { OpenFile } from './IDETabBar'
 import MenuBar from './MenuBar'
 import GpuEditor, { type GpuEditorHandle } from '../components/GpuEditor'
@@ -118,6 +119,9 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   const [explorerW,   setExplorerW]   = useState(285)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
   const [collapsed,   setCollapsed]   = useState(false)
+  const [explorerOpen,  setExplorerOpen]  = useState(true)
+  const [structureOpen, setStructureOpen] = useState(false)
+  const [structureH,    setStructureH]    = useState(200)
 
   // ── tab multi-select ─────────────────────────────────────────────────────────
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
@@ -153,9 +157,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   useEffect(() => { openFilesRef.current    = openFiles     }, [openFiles])
 
   // ── divider drag ref ──────────────────────────────────────────────────────────
-  const draggingExplorer = useRef(false)
-  const draggingSplit    = useRef(false)
-  const containerRef     = useRef<HTMLDivElement>(null)
+  const draggingExplorer  = useRef(false)
+  const draggingSplit     = useRef(false)
+  const draggingStructure = useRef(false)
+  const containerRef      = useRef<HTMLDivElement>(null)
 
   // ── derived ───────────────────────────────────────────────────────────────────
   const activeFile    = focusedPanel === 'left' ? leftActive : rightActive
@@ -490,6 +495,32 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     document.addEventListener('mouseup', onUp)
   }, [explorerW, explorerPos, collapsed])
 
+  // ── structure section resize ──────────────────────────────────────────────────
+  const onStructureDividerDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    draggingStructure.current = true
+    const startY = e.clientY
+    const startH = structureH
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingStructure.current) return
+      // Moving mouse up (negative ev.clientY delta) expands structure
+      setStructureH(Math.max(60, Math.min(500, startH + startY - ev.clientY)))
+    }
+    const onUp = () => {
+      draggingStructure.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [structureH])
+
+  // Navigate the focused panel's editor to a symbol line
+  const handleStructureGotoLine = useCallback((line: number) => {
+    const ref = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    ref?.goToLine(line)
+  }, [])
+
   // ── render helpers ────────────────────────────────────────────────────────────
   const leftFileObj  = openFiles.find(f => f.path === leftActive)
   const rightFileObj = openFiles.find(f => f.path === rightActive)
@@ -566,30 +597,86 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
         </button>
       ) : (
         <>
-          <div className="ide-explorer__toolbar">
-            <span className="ide-explorer__title">Explorer</span>
-            <div className="ide-explorer__actions">
-              <button title="Move explorer" onClick={() => setExplorerPos(p => p === 'left' ? 'right' : 'left')}>
+          {/* ── Explorer section ── */}
+          <div className="ide-sec-head" onClick={() => setExplorerOpen(o => !o)}>
+            <svg
+              className="ide-sec-chevron"
+              style={{ transform: explorerOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+              width="10" height="10" viewBox="0 0 16 16" fill="currentColor"
+            >
+              <path d="M5 2l8 6-8 6V2z"/>
+            </svg>
+            <span className="ide-sec-name">Explorer</span>
+            <div className="ide-sec-actions">
+              <button
+                className="ide-sec-action-btn"
+                title="Move explorer"
+                onClick={e => { e.stopPropagation(); setExplorerPos(p => p === 'left' ? 'right' : 'left') }}
+              >
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm7 1H3v10h7V3zm1 0v10h2V3h-2z"/>
                 </svg>
               </button>
-              <button title="Collapse" onClick={() => setCollapsed(true)}>
+              <button
+                className="ide-sec-action-btn"
+                title="Collapse sidebar"
+                onClick={e => { e.stopPropagation(); setCollapsed(true) }}
+              >
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M10 2L4 8l6 6V2z"/>
                 </svg>
               </button>
             </div>
           </div>
-          <FileExplorer
-            root={treeRoot}
-            selectedPath={activeFile ?? ''}
-            onSelect={node => openFile(node)}
-            onRefresh={refreshGitStatus}
-            onLoadDir={loadDir}
-            gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
-            onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
-          />
+          <div
+            className="ide-sec-body"
+            style={explorerOpen
+              ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+              : { display: 'none' }
+            }
+          >
+            <FileExplorer
+              root={treeRoot}
+              selectedPath={activeFile ?? ''}
+              onSelect={node => openFile(node)}
+              onRefresh={refreshGitStatus}
+              onLoadDir={loadDir}
+              gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
+              onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
+            />
+          </div>
+
+          {/* ── Resize handle between sections (only when both open) ── */}
+          {explorerOpen && structureOpen && (
+            <div className="ide-sec-resize" onMouseDown={onStructureDividerDown} />
+          )}
+
+          {/* ── Structure section ── */}
+          <div className="ide-sec-head" onClick={() => setStructureOpen(o => !o)}>
+            <svg
+              className="ide-sec-chevron"
+              style={{ transform: structureOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+              width="10" height="10" viewBox="0 0 16 16" fill="currentColor"
+            >
+              <path d="M5 2l8 6-8 6V2z"/>
+            </svg>
+            <span className="ide-sec-name">Structure</span>
+          </div>
+          <div
+            className="ide-sec-body"
+            style={!structureOpen
+              ? { display: 'none' }
+              : explorerOpen
+                ? { height: structureH, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+                : { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+            }
+          >
+            <StructureView
+              content={activeFileObj?.content ?? ''}
+              language={activeFileObj?.language ?? 'plaintext'}
+              onGotoLine={handleStructureGotoLine}
+            />
+          </div>
         </>
       )}
     </div>

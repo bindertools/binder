@@ -57,6 +57,7 @@ export interface GpuEditorHandle {
   redo: () => void
   selectAll: () => void
   openFind: (mode: 'find' | 'replace') => void
+  goToLine: (line: number) => void
 }
 
 interface Props {
@@ -1886,7 +1887,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     redo: () => { void redo() },
     selectAll: () => { void selectAll() },
     openFind,
-  }), [save, undo, redo, selectAll, openFind])
+    goToLine: (line: number) => {
+      void setCursorTo(Math.max(0, line - 1), 0, false).then(() => {
+        textareaRef.current?.focus()
+      })
+    },
+  }), [save, undo, redo, selectAll, openFind, setCursorTo])
 
   return (
     <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">

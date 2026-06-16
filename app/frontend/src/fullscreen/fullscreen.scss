@@ -105,6 +105,137 @@
   color: var(--ide-fg);
 }
 
+/* ── Sidebar section headers (Explorer / Structure) ──────────────────────────── */
+.ide-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px 0 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--ide-border);
+
+  &:hover { background: color-mix(in srgb, var(--ide-fg) 5%, transparent); }
+}
+
+.ide-sec-chevron {
+  flex-shrink: 0;
+  color: var(--ide-text-lo);
+  transition: transform 0.15s ease;
+  display: block;
+}
+
+.ide-sec-name {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ide-text-hi);
+  flex: 1;
+}
+
+.ide-sec-actions {
+  display: flex;
+  gap: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.ide-sec-head:hover .ide-sec-actions { opacity: 1; }
+
+.ide-sec-action-btn {
+  background: none;
+  border: none;
+  color: var(--ide-text-lo);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+
+  &:hover { background: var(--ide-border-lo); color: var(--ide-fg); }
+}
+
+/* Horizontal resize handle between Explorer and Structure sections */
+.ide-sec-resize {
+  height: 4px;
+  flex-shrink: 0;
+  background: var(--ide-border);
+  cursor: row-resize;
+  transition: background 0.12s;
+
+  &:hover { background: var(--ide-accent); }
+}
+
+/* ── Structure view ───────────────────────────────────────────────────────────── */
+.sv-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 0 8px;
+
+  &::-webkit-scrollbar { width: 8px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb:hover { background: var(--ide-text-lo); }
+}
+
+.sv-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--ide-text-lo);
+}
+
+.sv-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ide-text-hi);
+  white-space: nowrap;
+  overflow: hidden;
+
+  &:hover { background: color-mix(in srgb, var(--ide-fg) 7%, transparent); }
+}
+
+.sv-kind {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sv-kind--class   { background: rgba(198, 120, 221, 0.2); color: #c678dd; }
+.sv-kind--fn      { background: rgba(97, 175, 239, 0.2);  color: #61afef; }
+.sv-kind--method  { background: rgba(97, 175, 239, 0.15); color: #61afef; }
+.sv-kind--ctor    { background: rgba(224, 108, 117, 0.2); color: #e06c75; }
+.sv-kind--iface   { background: rgba(86, 182, 194, 0.2);  color: #56b6c2; }
+.sv-kind--enum    { background: rgba(229, 192, 123, 0.2); color: #e5c07b; }
+.sv-kind--struct  { background: rgba(198, 120, 221, 0.15);color: #c678dd; }
+.sv-kind--type    { background: rgba(86, 182, 194, 0.15); color: #56b6c2; }
+
+.sv-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sv-line {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--ide-text-lo);
+  opacity: 0.7;
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+}
+
 /* ── File tree ────────────────────────────────────────────────────────────────── */
 .fe-root {
   display: flex;
