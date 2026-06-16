@@ -592,16 +592,6 @@ export default function Problems({
           {sources.length > 0 && <span className="prob-breadcrumb-sep">·</span>}
           {sources.map(s => <span key={s} className="prob-source-pill">{s}</span>)}
         </div>
-
-        <SubNavTabs
-          items={[
-            { id: 'diagnostics', label: 'Diagnostics', icon: <IconError />, count: items.length },
-            { id: 'cwe', label: 'CWE Analysis', icon: <IconShield />, count: cweCounts.all > 0 ? cweCounts.all : undefined },
-          ]}
-          activeId={mainTab}
-          onSelect={id => setMainTab(id as MainTab)}
-        />
-
         <div className="prob-toolbar-actions">
           {mainTab === 'diagnostics' && (
             <button
@@ -624,6 +614,18 @@ export default function Problems({
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── Tab switcher ──────────────────────────────────────────────────────── */}
+      <div className="flex items-stretch border-b border-sep shrink-0">
+        <SubNavTabs
+          items={[
+            { id: 'diagnostics', label: 'Diagnostics', icon: <IconError />, count: items.length },
+            { id: 'cwe', label: 'CWE Analysis', icon: <IconShield />, count: cweCounts.all > 0 ? cweCounts.all : undefined },
+          ]}
+          activeId={mainTab}
+          onSelect={id => setMainTab(id as MainTab)}
+        />
       </div>
 
       {/* ── Diagnostics panel ─────────────────────────────────────────────────── */}
