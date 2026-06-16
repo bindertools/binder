@@ -15,7 +15,6 @@ import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
 import NotepadPage from './components/NotepadPage'
 import WorkflowsPanel from './components/WorkflowsPanel'
-import WorkflowRunToasts from './components/WorkflowRunToasts'
 import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
 import PluginStore from './plugins/PluginStore'
@@ -1349,7 +1348,6 @@ export default function App() {
       )}
 
       <ZoomIndicator enabled={appConfig.zoom_insights} defaultZoom={appConfig.default_zoom} onZoomChange={setCurrentZoom} />
-      <WorkflowRunToasts />
 
       {/* ── Body: sidebar + pane tree ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden flex">
