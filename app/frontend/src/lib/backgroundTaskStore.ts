@@ -6,24 +6,35 @@ export interface BackgroundTask {
   startedAt: number
 }
 
-export interface BackgroundTaskSnapshot {
-  tasks: BackgroundTask[]
-  batchTotal: number
-  completedInBatch: number
-  shown: boolean
+export interface CompletedTask {
+  id: string
+  label: string
+  completedAt: number
 }
 
+export interface BackgroundTaskSnapshot {
+  tasks: BackgroundTask[]
+  completedTasks: CompletedTask[]
+  batchTotal: number
+  completedInBatch: number
+  textShown: boolean
+}
+
+const MAX_COMPLETED_HISTORY = 20
+const TEXT_HIDE_DELAY = 7000
+
 let activeTasks: BackgroundTask[] = []
+let completedTasks: CompletedTask[] = []
 let batchTotal = 0
 let completedInBatch = 0
-let shown = false
-let hideTimer: ReturnType<typeof setTimeout> | null = null
+let textShown = false
+let hideTextTimer: ReturnType<typeof setTimeout> | null = null
 
-let snapshot: BackgroundTaskSnapshot = { tasks: [], batchTotal: 0, completedInBatch: 0, shown: false }
+let snapshot: BackgroundTaskSnapshot = { tasks: [], completedTasks: [], batchTotal: 0, completedInBatch: 0, textShown: false }
 const listeners = new Set<() => void>()
 
 function emit() {
-  snapshot = { tasks: activeTasks, batchTotal, completedInBatch, shown }
+  snapshot = { tasks: activeTasks, completedTasks, batchTotal, completedInBatch, textShown }
   listeners.forEach(l => l())
 }
 
@@ -41,17 +52,17 @@ export function useBackgroundTaskStore(): BackgroundTaskSnapshot {
 }
 
 export function addBackgroundTask(label: string): string {
-  if (hideTimer !== null) {
-    clearTimeout(hideTimer)
-    hideTimer = null
+  if (hideTextTimer !== null) {
+    clearTimeout(hideTextTimer)
+    hideTextTimer = null
   }
 
   const id = crypto.randomUUID()
 
-  if (!shown) {
+  if (!textShown) {
     batchTotal = 0
     completedInBatch = 0
-    shown = true
+    textShown = true
   }
 
   batchTotal++
@@ -61,18 +72,25 @@ export function addBackgroundTask(label: string): string {
 }
 
 export function removeBackgroundTask(id: string): void {
-  if (!activeTasks.some(t => t.id === id)) return
+  const task = activeTasks.find(t => t.id === id)
+  if (!task) return
+
   activeTasks = activeTasks.filter(t => t.id !== id)
   completedInBatch++
 
+  completedTasks = [
+    { id: task.id, label: task.label, completedAt: Date.now() },
+    ...completedTasks,
+  ].slice(0, MAX_COMPLETED_HISTORY)
+
   if (activeTasks.length === 0) {
-    hideTimer = setTimeout(() => {
-      hideTimer = null
-      shown = false
+    hideTextTimer = setTimeout(() => {
+      hideTextTimer = null
+      textShown = false
       batchTotal = 0
       completedInBatch = 0
       emit()
-    }, 5000)
+    }, TEXT_HIDE_DELAY)
   }
 
   emit()
