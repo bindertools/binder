@@ -376,7 +376,7 @@ const GUTTER_PIN_PAD = 8
 const GUTTER_FOLD_PAD = 8
 
 // Placeholder shown after a collapsed line's text.
-const FOLD_PLACEHOLDER = ' ⋯'
+const FOLD_PLACEHOLDER = ' ...'
 
 // Total width of the gutter (line numbers, pin-dot column, indicator bar,
 // and fold glyph), including padding. Shared by drawing, hit-testing, and
