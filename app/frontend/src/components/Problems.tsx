@@ -742,32 +742,23 @@ export default function Problems({
         <>
           {/* Filter bar */}
           <div className={`prob-filter-bar${cweScanning ? ' prob-filter-bar--muted' : ''}`}>
-            <button
-              className={`prob-filter-btn${cweSevFilter === 'all' ? ' active' : ''}`}
-              onClick={() => !cweScanning && setCweSevFilter('all')}
-              disabled={cweScanning}
-            >
-              All
-              {!cweScanning && <span className="prob-filter-count">{cweCounts.all}</span>}
-            </button>
-            {!cweScanning && (Object.keys(SEV_META) as CweItem['severity'][]).map(sev => {
-              const count = cweCounts[sev] ?? 0
-              if (count === 0 && cweSevFilter !== sev) return null
-              const m = SEV_META[sev]
-              return (
-                <button
-                  key={sev}
-                  className={`prob-filter-btn${cweSevFilter === sev ? ' active' : ''}`}
-                  onClick={() => setCweSevFilter(sev)}
-                >
-                  <span style={{ color: m.color, display: 'flex', alignItems: 'center' }}>
-                    <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="currentColor"/></svg>
-                  </span>
-                  {m.label}
-                  <span className="prob-filter-count">{count}</span>
-                </button>
-              )
-            })}
+            <SubNavTabs
+              size="compact"
+              items={[
+                { id: 'all', label: 'All', count: !cweScanning ? cweCounts.all : undefined },
+                ...(!cweScanning
+                  ? (Object.keys(SEV_META) as CweItem['severity'][]).filter(sev => (cweCounts[sev] ?? 0) > 0 || cweSevFilter === sev).map(sev => ({
+                      id: sev,
+                      label: SEV_META[sev].label,
+                      icon: <span style={{ color: SEV_META[sev].color, display: 'flex', alignItems: 'center' }}><svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" fill="currentColor"/></svg></span>,
+                      count: cweCounts[sev] ?? 0,
+                    }))
+                  : []
+                ),
+              ]}
+              activeId={cweSevFilter}
+              onSelect={id => !cweScanning && setCweSevFilter(id as CweItem['severity'] | 'all')}
+            />
             <div className="prob-filter-right">
               {cweScanning ? (
                 <span className="prob-status-dim">Analyzing…</span>

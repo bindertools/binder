@@ -146,36 +146,6 @@
 }
 .prob-filter-bar--muted { opacity: 0.5; pointer-events: none; }
 
-.prob-filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--info-bar-color);
-  font-size: 11.5px;
-  font-family: var(--font-ui);
-  cursor: pointer;
-  transition: background 100ms, color 100ms;
-}
-.prob-filter-btn:hover  { color: var(--info-bar-hover-color); background: var(--surface-raised); }
-.prob-filter-btn.active { color: var(--info-bar-hover-color); background: var(--surface-overlay); }
-.prob-filter-btn .err  { color: var(--color-error,  #ff453a); display: flex; }
-.prob-filter-btn .warn { color: var(--color-warning, #ffa800); display: flex; }
-
-.prob-filter-count {
-  font-size: 10px;
-  background: var(--surface-overlay);
-  padding: 1px 5px;
-  border-radius: 8px;
-  opacity: 0.75;
-  min-width: 14px;
-  text-align: center;
-  font-weight: 600;
-}
-
 .prob-filter-right {
   margin-left: auto;
   display: flex;
