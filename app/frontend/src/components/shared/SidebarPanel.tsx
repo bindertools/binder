@@ -23,7 +23,7 @@ export default function SidebarPanel({
           {headerRight}
         </div>
       )}
-      <div className="flex-1 overflow-y-auto thin-scrollbar px-2 py-1.5">
+      <div className="flex-1 overflow-y-auto thin-scrollbar">
         {children}
         {items.length > 0 && onSelect ? (
           <PageSidebarNav items={items} activeId={activeId} onSelect={onSelect} />
