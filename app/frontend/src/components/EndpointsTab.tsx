@@ -3,6 +3,7 @@ import { EndpointItem } from '../types'
 import { ScanEndpoints } from '../../wailsjs/go/main/App'
 import { Skeleton } from './Skeleton'
 import SubNavTabs from './shared/SubNavTabs'
+import { addBackgroundTask, removeBackgroundTask } from '../lib/backgroundTaskStore'
 import './EndpointsTab.scss'
 
 interface Props {
@@ -116,10 +117,14 @@ export default function EndpointsTab({ cwd, active }: Props) {
     if (!cwd) return
     setScanning(true)
     setExpanded(null)
+    const taskId = addBackgroundTask('Scanning endpoints…')
     ScanEndpoints(cwd)
       .then(r => setItems(Array.isArray(r) ? r as EndpointItem[] : []))
       .catch(() => setItems([]))
-      .finally(() => setScanning(false))
+      .finally(() => {
+        setScanning(false)
+        removeBackgroundTask(taskId)
+      })
   }, [cwd])
 
   useEffect(() => {
