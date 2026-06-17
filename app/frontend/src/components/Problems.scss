@@ -353,14 +353,11 @@
 .prob-cwe-detail-panel {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sep-strong) transparent;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.prob-cwe-detail-panel::-webkit-scrollbar       { width: 5px; }
-.prob-cwe-detail-panel::-webkit-scrollbar-track { background: transparent; }
-.prob-cwe-detail-panel::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
 
 /* Detail empty state */
 .prob-cwe-detail-empty {
@@ -392,8 +389,37 @@
 /* ── Detail view ─────────────────────────────────────────────────────────────── */
 
 .prob-cwe-detail-view {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.prob-cwe-detail-meta {
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 55%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+}
+.prob-cwe-detail-meta::-webkit-scrollbar       { width: 5px; }
+.prob-cwe-detail-meta::-webkit-scrollbar-track { background: transparent; }
+.prob-cwe-detail-meta::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
+
+.prob-cwe-detail-code {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--sep);
+  padding: 0 24px 16px;
+}
+
+.prob-cwe-detail-code-label {
+  padding-top: 16px;
+  padding-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .prob-cwe-detail-header {
@@ -633,7 +659,8 @@
 /* ── GPU editor block ────────────────────────────────────────────────────────── */
 
 .prob-cwe-editor-block {
-  height: 220px;
+  flex: 1;
+  min-height: 0;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--sep);

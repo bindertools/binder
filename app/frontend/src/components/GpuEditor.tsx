@@ -78,6 +78,7 @@ interface Props {
   // Diagnostics for this file (lint/type-check errors and warnings), drawn
   // as gutter bars. `line` is 1-based to match ProbItem/gotoLine convention.
   diagnostics?: { line: number; sev: number }[]
+  gitGutter?: boolean
   onCursorChange?: (line: number, col: number) => void
   onLineCountChange?: (count: number) => void
   onDirtyChange?: (dirty: boolean) => void
@@ -399,7 +400,7 @@ function pinDotX(gutterWidth: number, cw: number): number {
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, viewKey,
-  showHeader = true, diagnostics, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
+  showHeader = true, diagnostics, gitGutter = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1056,8 +1057,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     await invoke('editor.save', { bufferId: bufferIdRef.current })
     setStatus('')
     notifyDirty(false)
-    void fetchGitGutter()
-  }, [notifyDirty, fetchGitGutter])
+    if (gitGutter) void fetchGitGutter()
+  }, [notifyDirty, fetchGitGutter, gitGutter])
 
   // ── Find / replace ──────────────────────────────────────────────────────────
 
@@ -1507,7 +1508,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
       recomputeViewport()
       setReady(true)
-      void fetchGitGutter()
+      if (gitGutter) void fetchGitGutter()
       // Read-only instances (e.g. the workflow code preview, which stays
       // mounted in a background overlay) must never grab keyboard focus —
       // doing so on every filePath change steals focus from whichever
