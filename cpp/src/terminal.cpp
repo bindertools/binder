@@ -173,8 +173,14 @@ void Terminal::ReadLoop() {
         on_output_(id_, base64::encode(buf.data(), n));
     }
     if (running_.exchange(false)) {
-        spdlog::info("[{}] Process exited", id_);
-        on_exit_(id_, 0);
+        int exitCode = 0;
+        if (process_ != INVALID_HANDLE_VALUE) {
+            DWORD code = 0;
+            if (GetExitCodeProcess(process_, &code) && code != STILL_ACTIVE)
+                exitCode = static_cast<int>(code);
+        }
+        spdlog::info("[{}] Process exited (code={})", id_, exitCode);
+        on_exit_(id_, exitCode);
     }
 }
 

@@ -737,6 +737,81 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             }
         }
 
+        // ── Interactive-CLI detection: route through ConPTY so child sees a real TTY ──
+        // These commands always require interactive console I/O (claude, vim, ssh, etc.).
+        // Non-interactive commands (git, npm, node script.js) keep the block-based path.
+#ifdef _WIN32
+        {
+            // Extract the basename of the first token to match against the list.
+            std::string first = cmd;
+            auto sp = first.find_first_of(" \t");
+            if (sp != std::string::npos) first.resize(sp);
+            auto sl = first.find_last_of("/\\");
+            if (sl != std::string::npos) first = first.substr(sl + 1);
+            for (char& c : first) c = (char)tolower((unsigned char)c);
+            if (first.size() > 4 && first.compare(first.size()-4, 4, ".exe") == 0)
+                first.resize(first.size() - 4);
+
+            static const std::set<std::string> kPtyCmds = {
+                "claude", "codex",
+                "vim", "vi", "nvim", "nano", "emacs",
+                "ssh", "sftp",
+                "top", "htop", "btop",
+                "less", "more", "man",
+                "fzf",
+            };
+
+            if (kPtyCmds.count(first)) {
+                const char* comspec = std::getenv("COMSPEC");
+                std::string shell = comspec ? comspec : "cmd.exe";
+                std::string full_cmd = shell + " /d /q /c " + cmd;
+                std::string cap_id = id, cap_cwd = cwd;
+
+                auto term = std::make_unique<Terminal>(
+                    id,
+                    [this, cap_id](const std::string&, const std::string& b64) {
+                        std::string raw = base64::decode(b64);
+                        emit("terminal:output:" + cap_id, json(raw));
+                    },
+                    [this, cap_id, cap_cwd](const std::string&, int code) {
+                        emit("terminal:pty:end:" + cap_id, json(nullptr));
+                        emit_prompt(cap_id, cap_cwd, code);
+                        // Defer destruction so we don't join reader_ from inside reader_.
+                        std::thread([this, cap_id]() {
+                            std::unique_ptr<Terminal> t;
+                            {
+                                std::lock_guard<std::mutex> lk(terminals_mu_);
+                                auto it = terminals_.find(cap_id);
+                                if (it != terminals_.end()) {
+                                    t = std::move(it->second);
+                                    terminals_.erase(it);
+                                }
+                            }
+                        }).detach();
+                    }
+                );
+
+                emit("terminal:pty:start:" + id, json(nullptr));
+
+                if (!term->Start(full_cmd, cwd, 80, 24)) {
+                    emit("terminal:pty:end:" + id, json(nullptr));
+                    emit("terminal:output:" + id, json(std::string(
+                        "\r\n\x1b[31m'" + cmd + "' is not recognized\x1b[0m\r\n")));
+                    emit_prompt(id, cwd, 1);
+                    resolve_ok(seq, true);
+                    return;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lk(terminals_mu_);
+                    terminals_[id] = std::move(term);
+                }
+                resolve_ok(seq, true);
+                return;
+            }
+        }
+#endif
+
         int exitCode = run_command(id, cmd, cwd);
         emit_prompt(id, cwd, exitCode);
         resolve_ok(seq, true);
