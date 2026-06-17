@@ -296,6 +296,13 @@ export default function Terminal({
     let ctrlCTimer: ReturnType<typeof setTimeout> | null = null
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown' || !e.ctrlKey || e.key !== 'c') return true
+      // While a real interactive program owns the terminal (claude, vim, ssh, …),
+      // Ctrl+C must always reach it immediately — a stale selection left over
+      // from an earlier copy must never swallow the interrupt.
+      if (ptyModeRef.current) {
+        ctrlCCopies = 0
+        return true
+      }
       const selection = term.getSelection()
       if (selection) {
         ctrlCCopies++
