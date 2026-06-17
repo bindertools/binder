@@ -3,6 +3,8 @@ import { ProbItem } from '../types'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
 import { type PageSidebarNavItem } from './shared/PageSidebarNav'
+import GpuEditor from './GpuEditor'
+import type { GpuEditorColors } from '../themes'
 import './Problems.scss'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,6 +34,7 @@ interface Props {
   scanning:     boolean
   cweItems?:    CweItem[]
   cweScanning?: boolean
+  gpuColors?:   GpuEditorColors
   onRescan:     (tabId: string, cwd: string) => void
   onOpenFile:   (path: string, line: number, col: number) => void
   onCweScan?:   (cwd: string) => void
@@ -263,13 +266,14 @@ function SeverityBadge({ severity }: { severity: CweItem['severity'] }) {
 }
 
 interface DetailProps {
-  item:      CweItem
-  cwd:       string
-  onOpen:    () => void
-  onDismiss: () => void
+  item:       CweItem
+  cwd:        string
+  gpuColors?: GpuEditorColors
+  onOpen:     () => void
+  onDismiss:  () => void
 }
 
-function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
+function CweDetailView({ item, cwd, gpuColors, onOpen, onDismiss }: DetailProps) {
   const { dir, name: fileName } = splitPath(cwd, item.file)
   const m = SEV_META[item.severity]
 
@@ -348,27 +352,20 @@ function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
       </div>
 
       {/* ── Code ──────────────────────────────────────────────────────────────── */}
-      {item.snippet && (
-        <div className="prob-cwe-detail-section">
-          <div className="prob-cwe-detail-section-label">Code</div>
-          <div className="prob-cwe-snippet-block">
-            {item.snippet.split('\n').map((codeLine, idx) => {
-              const matchIdx = item.snippet_match_idx ?? 0
-              const isHighlight = idx === matchIdx
-              const lineNo = item.line - matchIdx + idx
-              return (
-                <div
-                  key={idx}
-                  className={`prob-cwe-snippet-line${isHighlight ? ' prob-cwe-snippet-line--highlight' : ''}`}
-                >
-                  <span className="prob-cwe-snippet-lineno">{lineNo}</span>
-                  <span className="prob-cwe-snippet-code">{codeLine}</span>
-                </div>
-              )
-            })}
-          </div>
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">Code</div>
+        <div className="prob-cwe-editor-block">
+          <GpuEditor
+            filePath={item.file}
+            gotoLine={item.line}
+            colors={gpuColors}
+            readOnly
+            showHeader={false}
+            minimap={false}
+            indentGuides={false}
+          />
         </div>
-      )}
+      </div>
 
       {/* ── Remediation ───────────────────────────────────────────────────────── */}
       {item.remediation && (
@@ -437,6 +434,7 @@ function CweListEmpty({ dismissedCount, onRestore }: { dismissedCount: number; o
 export default function Problems({
   tabId, cwd, sources, items, scanning,
   cweItems = [], cweScanning = false,
+  gpuColors,
   onRescan, onOpenFile, onCweScan,
 }: Props) {
   const [mainTab,      setMainTab]      = useState<MainTab>('diagnostics')
@@ -783,6 +781,7 @@ export default function Problems({
                 <CweDetailView
                   item={selectedItem}
                   cwd={cwd}
+                  gpuColors={gpuColors}
                   onOpen={() => onOpenFile(selectedItem.file, selectedItem.line, selectedItem.col)}
                   onDismiss={() => handleDismiss(selectedItem)}
                 />

@@ -630,6 +630,15 @@
 }
 .prob-cwe-mitre-link:hover { opacity: 1; }
 
+/* ── GPU editor block ────────────────────────────────────────────────────────── */
+
+.prob-cwe-editor-block {
+  height: 220px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--sep);
+}
+
 /* ── Enhanced code snippet block ─────────────────────────────────────────────── */
 
 .prob-cwe-snippet-block {
