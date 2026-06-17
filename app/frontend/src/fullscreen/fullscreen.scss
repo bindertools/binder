@@ -190,8 +190,8 @@
 .sv-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 10px;
+  gap: 2px;
+  padding: 0 8px 0 4px;
   cursor: pointer;
   font-size: 12.5px;
   color: var(--ide-text-hi);
@@ -199,6 +199,30 @@
   overflow: hidden;
 
   &:hover { background: color-mix(in srgb, var(--ide-fg) 7%, transparent); }
+}
+
+/* Thin vertical guide line, absolutely positioned within a row */
+.sv-tree-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--ide-fg) 12%, transparent);
+  pointer-events: none;
+}
+
+/* Expand/collapse chevron — fixed width so icon/name stay aligned */
+.sv-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ide-text-lo);
+  border-radius: 3px;
+
+  &:hover { color: var(--ide-fg); background: color-mix(in srgb, var(--ide-fg) 10%, transparent); }
 }
 
 .sv-kind {
@@ -210,27 +234,29 @@
   align-items: center;
   justify-content: center;
 }
-.sv-kind--class   { background: rgba(198, 120, 221, 0.2); color: #c678dd; }
-.sv-kind--fn      { background: rgba(97, 175, 239, 0.2);  color: #61afef; }
-.sv-kind--method  { background: rgba(97, 175, 239, 0.15); color: #61afef; }
-.sv-kind--ctor    { background: rgba(224, 108, 117, 0.2); color: #e06c75; }
-.sv-kind--iface   { background: rgba(86, 182, 194, 0.2);  color: #56b6c2; }
-.sv-kind--enum    { background: rgba(229, 192, 123, 0.2); color: #e5c07b; }
-.sv-kind--struct  { background: rgba(198, 120, 221, 0.15);color: #c678dd; }
-.sv-kind--type    { background: rgba(86, 182, 194, 0.15); color: #56b6c2; }
+.sv-kind--class   { color: #c678dd; }
+.sv-kind--fn      { color: #61afef; }
+.sv-kind--method  { color: #61afef; }
+.sv-kind--ctor    { color: #e06c75; }
+.sv-kind--iface   { color: #56b6c2; }
+.sv-kind--enum    { color: #e5c07b; }
+.sv-kind--struct  { color: #c678dd; }
+.sv-kind--type    { color: #56b6c2; }
 
 .sv-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: 2px;
 }
 
 .sv-line {
   flex-shrink: 0;
   font-size: 10.5px;
   color: var(--ide-text-lo);
-  opacity: 0.7;
+  opacity: 0.6;
   font-family: 'Consolas', 'Cascadia Code', monospace;
+  padding-left: 4px;
 }
 
 /* ── File tree ────────────────────────────────────────────────────────────────── */
