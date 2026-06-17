@@ -1780,7 +1780,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       void addCursorAt(pos.line, pos.col)
       return
     }
-    if (e.detail >= 2) return // double-click: let onDoubleClick handle word selection
+    if (e.detail >= 2) { draggingRef.current = true; return } // double-click: let onDoubleClick handle word selection, but allow drag-to-extend
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
   }, [addCursorAt, pixelToPos, setCursorTo, togglePin])
