@@ -484,7 +484,7 @@ export default function App() {
   // id — set when e.g. the Workflows page's "Edit Workflow" button switches a
   // pane to the editor page and asks it to open a specific file. `token`
   // changes on every request so FullscreenIDE re-opens even the same path.
-  const [pendingEditorOpen, setPendingEditorOpen] = useState<Record<string, { path: string; token: number }>>({})
+  const [pendingEditorOpen, setPendingEditorOpen] = useState<Record<string, { path: string; token: number; line?: number }>>({})
 
   const updateLayout = useCallback((workspaceId: string, fn: (l: Layout) => Layout) => {
     setLayouts(prev => {
@@ -947,13 +947,13 @@ export default function App() {
   // Switches the given pane to the Code Editor page and asks its FullscreenIDE
   // to open `filePath` — used by the Workflows page's "Edit Workflow" button so
   // it edits the YAML in-place rather than opening a separate editor tab.
-  const handleEditFileInPane = useCallback((wsId: string, leafId: string, filePath: string) => {
+  const handleEditFileInPane = useCallback((wsId: string, leafId: string, filePath: string, line?: number) => {
     updateLayout(wsId, l => ({
       ...l,
       focusedPaneId: leafId,
       root: updateLeafInTree(l.root, leafId, leaf => ({ ...leaf, activePage: 'editor' })),
     }))
-    setPendingEditorOpen(prev => ({ ...prev, [leafId]: { path: filePath, token: Date.now() } }))
+    setPendingEditorOpen(prev => ({ ...prev, [leafId]: { path: filePath, token: Date.now(), line } }))
   }, [updateLayout])
 
   const handleSelectRecentPath = useCallback((path: string) => {
@@ -1167,9 +1167,8 @@ export default function App() {
               } catch { /* ignore */ }
               setProbScanning(false)
             }}
-            onOpenFile={(path, line, col) => {
-              void handleOpenFileAtLine(path, line, col)
-              updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, pane.id, lf => ({ ...lf, activePage: 'terminal' })) }))
+            onOpenFile={(path, line) => {
+              handleEditFileInPane(activeWorkspaceId, pane.id, path, line)
             }}
             onCweScan={cwd => { void handleCweScan(cwd) }}
           />

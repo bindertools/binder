@@ -92,7 +92,7 @@ interface Props {
   minimap: boolean
   wordWrap: boolean
   defaultZoom: number
-  openFileRequest?: { path: string; token: number }
+  openFileRequest?: { path: string; token: number; line?: number }
 }
 
 interface PaneStatus {
@@ -109,6 +109,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
   const [rightActive,setRightActive]= useState<string | null>(null)
+  const [pendingGotoLine, setPendingGotoLine] = useState<{ path: string; line: number } | null>(null)
 
   // ── panel / layout state ─────────────────────────────────────────────────────
   const [focusedPanel, setFocusedPanel] = useState<'left' | 'right'>('left')
@@ -312,6 +313,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     const name = path.split('/').pop() ?? path
     const dot = name.lastIndexOf('.')
     const ext = dot > 0 ? name.slice(dot + 1) : ''
+    if (openFileRequest.line != null) setPendingGotoLine({ path, line: openFileRequest.line })
     void openFile({ name, path, isDir: false, ext })
   }, [openFileRequest, openFile])
 
@@ -545,6 +547,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
       )
     }
     const setStatus = viewKey === 'left' ? setLeftStatus : setRightStatus
+    const gotoLine = pendingGotoLine?.path === fileObj.path ? pendingGotoLine.line : undefined
     return (
       <GpuEditor
         key={fileObj.path}
@@ -556,7 +559,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
         indentGuides={indentGuides}
         viewKey={viewKey}
         showHeader={false}
-        onCursorChange={(line, col) => setStatus(s => ({ ...s, line: line + 1, col: col + 1 }))}
+        gotoLine={gotoLine}
+        onCursorChange={(line, col) => { setStatus(s => ({ ...s, line: line + 1, col: col + 1 })); if (gotoLine != null) setPendingGotoLine(null) }}
         onLineCountChange={n => setStatus(s => ({ ...s, totalLines: n }))}
         onEolChange={eol => setStatus(s => ({ ...s, eol }))}
         onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>
