@@ -1441,59 +1441,101 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     std::ifstream f(it->path(), std::ios::binary);
                     if (!f) continue;
 
-                    // Buffer to hold a rolling window of lines for context
-                    std::deque<std::string> lineBuffer;
-                    std::string line;
-                    int lineNo = 0;
-                    while (std::getline(f, line) && results.size() < kMaxFindings) {
-                        ++lineNo;
-                        // Trim trailing \r
-                        if (!line.empty() && line.back() == '\r') line.pop_back();
-                        lineBuffer.push_back(line);
-                        if (lineBuffer.size() > 3) lineBuffer.pop_front();
+                    // Read entire file into memory for block-aware extraction
+                    std::vector<std::string> allLines;
+                    {
+                        std::string ln;
+                        while (std::getline(f, ln)) {
+                            if (!ln.empty() && ln.back() == '\r') ln.pop_back();
+                            allLines.push_back(std::move(ln));
+                        }
+                    }
+                    int totalLines = (int)allLines.size();
 
+                    for (int li = 0; li < totalLines && results.size() < kMaxFindings; ++li) {
+                        const std::string& curLine = allLines[li];
                         for (auto* pat : applicable) {
-                            auto col = line.find(pat->pattern);
+                            auto col = curLine.find(pat->pattern);
                             if (col == std::string::npos) continue;
 
-                            // Collect context: up to 2 lines before (already in buffer)
-                            // plus 2 lines after (read ahead)
-                            std::vector<std::string> ctxLines(lineBuffer.begin(), lineBuffer.end());
-                            int matchIdxInCtx = (int)ctxLines.size() - 1; // matching line is last so far
-                            for (int ai = 0; ai < 2; ++ai) {
-                                std::string after;
-                                if (std::getline(f, after)) {
-                                    if (!after.empty() && after.back() == '\r') after.pop_back();
-                                    ctxLines.push_back(after);
-                                    lineBuffer.push_back(after);
-                                    if (lineBuffer.size() > 3) lineBuffer.pop_front();
-                                    ++lineNo;
+                            // Walk braces backward from the match line to find
+                            // the opening of the containing function/class block.
+                            int blockStart = li;
+                            {
+                                int depth = 0;
+                                bool found = false;
+                                for (int i = li; i >= 0 && !found; --i) {
+                                    const std::string& l = allLines[i];
+                                    for (int j = (int)l.size() - 1; j >= 0; --j) {
+                                        char c = l[j];
+                                        if (c == '}') { ++depth; }
+                                        else if (c == '{') {
+                                            if (depth == 0) { blockStart = i; found = true; break; }
+                                            --depth;
+                                        }
+                                    }
                                 }
                             }
 
-                            // Build multi-line snippet (trim leading whitespace per line)
-                            std::string snippet;
-                            for (size_t si = 0; si < ctxLines.size(); ++si) {
-                                const std::string& sl = ctxLines[si];
+                            // Walk braces forward from blockStart to find the
+                            // matching closing brace of that block.
+                            int blockEnd = li;
+                            {
+                                int depth = 0;
+                                bool opened = false;
+                                bool found = false;
+                                for (int i = blockStart; i < totalLines && !found; ++i) {
+                                    for (char c : allLines[i]) {
+                                        if (c == '{') { ++depth; opened = true; }
+                                        else if (c == '}' && opened) {
+                                            if (--depth == 0) { blockEnd = i; found = true; break; }
+                                        }
+                                    }
+                                }
+                                if (!found) blockEnd = std::min(totalLines - 1, li + 10);
+                            }
+
+                            // Cap at 200 lines centred on the match to avoid
+                            // returning an entire large file.
+                            const int kMaxBlock = 200;
+                            if (blockEnd - blockStart + 1 > kMaxBlock) {
+                                int half = kMaxBlock / 2;
+                                blockStart = std::max(blockStart, li - half);
+                                blockEnd   = std::min(blockEnd,   li + half);
+                            }
+
+                            // Dedent: strip the common leading whitespace so
+                            // the snippet doesn't start with a wall of spaces.
+                            int minIndent = INT_MAX;
+                            for (int i = blockStart; i <= blockEnd; ++i) {
+                                const std::string& sl = allLines[i];
                                 size_t sp = sl.find_first_not_of(" \t");
-                                std::string trimmed = (sp != std::string::npos) ? sl.substr(sp) : sl;
-                                if (trimmed.size() > 120) trimmed = trimmed.substr(0, 120) + "...";
-                                if (si > 0) snippet += "\n";
-                                snippet += trimmed;
+                                if (sp != std::string::npos && (int)sp < minIndent)
+                                    minIndent = (int)sp;
+                            }
+                            if (minIndent == INT_MAX) minIndent = 0;
+
+                            // Build snippet preserving relative indentation.
+                            std::string snippet;
+                            for (int i = blockStart; i <= blockEnd; ++i) {
+                                const std::string& sl = allLines[i];
+                                std::string out = ((int)sl.size() > minIndent) ? sl.substr(minIndent) : sl;
+                                if (i > blockStart) snippet += "\n";
+                                snippet += out;
                             }
 
                             json item;
-                            item["cwe_id"]      = pat->cwe_id;
-                            item["name"]        = pat->name;
-                            item["description"] = pat->description;
-                            item["severity"]    = pat->severity;
-                            item["file"]        = it->path().u8string();
-                            item["line"]        = lineNo - (int)(ctxLines.size() - 1 - matchIdxInCtx);
-                            item["col"]         = (int)(col + 1);
-                            item["snippet"]     = snippet;
-                            item["snippet_match_idx"] = matchIdxInCtx;
-                            item["mitre_url"]   = pat->mitre_url;
-                            item["remediation"] = pat->remediation;
+                            item["cwe_id"]            = pat->cwe_id;
+                            item["name"]              = pat->name;
+                            item["description"]       = pat->description;
+                            item["severity"]          = pat->severity;
+                            item["file"]              = it->path().u8string();
+                            item["line"]              = li + 1;
+                            item["col"]               = (int)(col + 1);
+                            item["snippet"]           = snippet;
+                            item["snippet_match_idx"] = li - blockStart;
+                            item["mitre_url"]         = pat->mitre_url;
+                            item["remediation"]       = pat->remediation;
                             results.push_back(std::move(item));
                             break;
                         }
