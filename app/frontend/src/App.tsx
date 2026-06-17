@@ -90,11 +90,19 @@ function saveRecentPath(newPath: string): string[] {
   } catch { return loadRecentPaths() }
 }
 
+function tabNameFromCwd(cwd: string): string {
+  const parts = cwd.replace(/\\/g, '/').replace(/\/$/, '').split('/').filter(Boolean)
+  if (parts.length === 0) return '~'
+  if (parts.length === 1) return parts[0]
+  return parts.slice(-2).join('/')
+}
+
 function makeTerminalTab(id?: string, initialCwd?: string, parentId?: string): Tab {
   return {
     id: id ?? nextId(),
     type: 'terminal',
-    title: 'terminal',
+    title: initialCwd ? tabNameFromCwd(initialCwd) : 'terminal',
+    autoNamed: true,
     ...(initialCwd ? { initialCwd } : {}),
     ...(parentId   ? { parentId }   : {}),
   }
@@ -159,6 +167,7 @@ type TabAction =
   | { type: 'open-tab';        tabType: string; title: string; terminalId?: string; cwd?: string }
   | { type: 'update-problems'; id: string; sources: string[]; items: ProbItem[]; scanning?: boolean }
   | { type: 'rename-tab';      id: string; title: string }
+  | { type: 'auto-rename-tab'; id: string; title: string }
   | { type: 'set-tab-color';   id: string; color: string | null }
   | { type: 'close';           id: string }
   | { type: 'select';          id: string }
@@ -275,7 +284,13 @@ function tabReducer(state: TabState, action: TabAction): TabState {
     case 'rename-tab': {
       const title = action.title.trim()
       if (!title) return state
-      return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, title } : t) }
+      return { ...state, tabs: state.tabs.map(t => t.id === action.id ? { ...t, title, autoNamed: false } : t) }
+    }
+
+    case 'auto-rename-tab': {
+      return { ...state, tabs: state.tabs.map(t =>
+        t.id === action.id && t.autoNamed !== false ? { ...t, title: action.title, autoNamed: true } : t
+      ) }
     }
 
     case 'set-tab-color':
@@ -1142,6 +1157,7 @@ export default function App() {
       if (dwell >= 60000 || prev.relatedPageVisited) setRecentPaths(saveRecentPath(prev.path))
     }
     pathDwellRef.current.set(tabId, { path: cwd, enteredAt: Date.now(), relatedPageVisited: false })
+    if (cwd) dispatch({ type: 'auto-rename-tab', id: tabId, title: tabNameFromCwd(cwd) })
   }, [])
 
   // ── Render: pane sidebar page ─────────────────────────────────────────────────

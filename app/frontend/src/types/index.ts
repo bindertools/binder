@@ -27,6 +27,7 @@ export interface Tab {
   // terminal-only
   initialCwd?: string
   activePage?: PageId   // last sidebar page seen on this terminal tab
+  autoNamed?: boolean   // true = title was set by CWD auto-namer; false = user manually renamed
   // database-only
   dbPath?: string
   // preview-only
