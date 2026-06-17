@@ -16,7 +16,7 @@ export default function SidebarPanel({
   title, headerRight, items = [], activeId, onSelect, footer, emptyMessage, children,
 }: SidebarPanelProps) {
   return (
-    <aside className="w-[260px] shrink-0 flex flex-col border-r border-[var(--sep)] overflow-hidden bg-[var(--app-bg)]">
+    <aside className="w-[300px] shrink-0 flex flex-col border-r border-[var(--sep)] overflow-hidden bg-[var(--app-bg)]">
       {title && (
         <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-[var(--sep)] shrink-0">
           <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--info-bar-color)]">{title}</span>
