@@ -134,11 +134,6 @@ const IconExternalLink = () => (
   </svg>
 )
 
-const IconFolder = () => (
-  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
-    <path d="M1 4.5A1.5 1.5 0 012.5 3h3.086a1.5 1.5 0 011.06.44l.915.914A1.5 1.5 0 008.62 4.5H11.5A1.5 1.5 0 0113 6v5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11V4.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-  </svg>
-)
 
 const IconDismiss = () => (
   <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
@@ -535,45 +530,11 @@ export default function Problems({
     setDismissed(next)
   }, [])
 
-  const cwdShort = cwd.replace(/\\/g, '/').split('/').slice(-2).join('/')
-
   return (
     <div className="prob-pane">
 
-      {/* ── Top toolbar ───────────────────────────────────────────────────────── */}
-      <div className="prob-toolbar">
-        <div className="prob-breadcrumb">
-          <span className="prob-breadcrumb-icon"><IconFolder /></span>
-          <span className="prob-breadcrumb-path" title={cwd}>{cwdShort || cwd}</span>
-          {sources.length > 0 && <span className="prob-breadcrumb-sep">·</span>}
-          {sources.map(s => <span key={s} className="prob-source-pill">{s}</span>)}
-        </div>
-        <div className="prob-toolbar-actions">
-          {mainTab === 'diagnostics' && (
-            <button
-              className="prob-action-btn"
-              onClick={() => onRescan(tabId, cwd)}
-              disabled={scanning}
-            >
-              <IconRefresh spinning={scanning} />
-              Rescan
-            </button>
-          )}
-          {mainTab === 'cwe' && (
-            <button
-              className="prob-action-btn"
-              onClick={() => onCweScan?.(cwd)}
-              disabled={cweScanning}
-            >
-              <IconRefresh spinning={cweScanning} />
-              Analyze
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Tab switcher ──────────────────────────────────────────────────────── */}
-      <div className="flex items-stretch border-b border-sep shrink-0">
+      {/* ── Tab switcher + inline action ──────────────────────────────────────── */}
+      <div className="flex items-stretch border-b border-[var(--sep)] shrink-0">
         <SubNavTabs
           items={[
             { id: 'diagnostics', label: 'Diagnostics', icon: <IconError />, count: items.length },
@@ -582,6 +543,20 @@ export default function Problems({
           activeId={mainTab}
           onSelect={id => setMainTab(id as MainTab)}
         />
+        <div className="ml-auto flex items-center px-2">
+          {mainTab === 'diagnostics' && (
+            <button className="prob-action-btn" onClick={() => onRescan(tabId, cwd)} disabled={scanning}>
+              <IconRefresh spinning={scanning} />
+              Rescan
+            </button>
+          )}
+          {mainTab === 'cwe' && (
+            <button className="prob-action-btn" onClick={() => onCweScan?.(cwd)} disabled={cweScanning}>
+              <IconRefresh spinning={cweScanning} />
+              Analyze
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Diagnostics panel ─────────────────────────────────────────────────── */}

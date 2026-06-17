@@ -69,52 +69,6 @@
   user-select: none;
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────────── */
-
-.prob-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 0 16px;
-  height: 44px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--surface-raised, rgba(255,255,255,0.02));
-  flex-shrink: 0;
-}
-
-.prob-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--info-bar-color);
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  margin-right: 16px;
-}
-.prob-breadcrumb-icon { display: flex; align-items: center; opacity: 0.5; flex-shrink: 0; }
-.prob-breadcrumb-path {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 200px;
-  opacity: 0.6;
-}
-.prob-breadcrumb-sep { opacity: 0.3; flex-shrink: 0; }
-.prob-source-pill {
-  font-size: 10px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--sep);
-  border-radius: 4px;
-  padding: 1px 6px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.prob-toolbar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 
 .prob-action-btn {
   display: flex;
