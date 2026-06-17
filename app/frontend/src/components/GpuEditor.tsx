@@ -1444,6 +1444,21 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     void updateBracketMatch()
   }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
 
+  // Triple-click — select the entire line.
+  const selectLineAt = useCallback(async (line: number) => {
+    closeCompletions()
+    line = Math.max(0, Math.min(lineCountRef.current - 1, line))
+    const data = await ensureLine(line)
+    const len = data?.text.length ?? 0
+    cursorsRef.current = [{ line, col: len, anchorLine: line, anchorCol: 0 }]
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+
   // Alt+Click — add a new (unselected) cursor at the clicked position.
   const addCursorAt = useCallback(async (line: number, col: number) => {
     closeCompletions()
@@ -1804,8 +1819,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     if (!pos) return
     e.preventDefault()
     textareaRef.current?.focus()
-    void selectWordAt(pos.line, pos.col)
-  }, [pixelToPos, selectWordAt])
+    if (e.detail >= 3) void selectLineAt(pos.line)
+    else void selectWordAt(pos.line, pos.col)
+  }, [pixelToPos, selectLineAt, selectWordAt])
 
   // Drag-selection can extend outside the canvas; a mouseup there wouldn't
   // reach onMouseUp (bound only to the canvas), leaving draggingRef stuck.
