@@ -109,7 +109,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
   const [rightActive,setRightActive]= useState<string | null>(null)
-  const [pendingGotoLine, setPendingGotoLine] = useState<{ path: string; line: number } | null>(null)
+  const [pendingGotoLine, setPendingGotoLine] = useState<{ path: string; line: number; token: number } | null>(null)
 
   // ── panel / layout state ─────────────────────────────────────────────────────
   const [focusedPanel, setFocusedPanel] = useState<'left' | 'right'>('left')
@@ -313,7 +313,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     const name = path.split('/').pop() ?? path
     const dot = name.lastIndexOf('.')
     const ext = dot > 0 ? name.slice(dot + 1) : ''
-    if (openFileRequest.line != null) setPendingGotoLine({ path, line: openFileRequest.line })
+    if (openFileRequest.line != null) setPendingGotoLine({ path, line: openFileRequest.line, token: openFileRequest.token })
     void openFile({ name, path, isDir: false, ext })
   }, [openFileRequest, openFile])
 
@@ -547,7 +547,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
       )
     }
     const setStatus = viewKey === 'left' ? setLeftStatus : setRightStatus
-    const gotoLine = pendingGotoLine?.path === fileObj.path ? pendingGotoLine.line : undefined
+    const pending = pendingGotoLine?.path === fileObj.path ? pendingGotoLine : null
     return (
       <GpuEditor
         key={fileObj.path}
@@ -559,8 +559,9 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
         indentGuides={indentGuides}
         viewKey={viewKey}
         showHeader={false}
-        gotoLine={gotoLine}
-        onCursorChange={(line, col) => { setStatus(s => ({ ...s, line: line + 1, col: col + 1 })); if (gotoLine != null) setPendingGotoLine(null) }}
+        gotoLine={pending?.line}
+        gotoToken={pending?.token}
+        onCursorChange={(line, col) => { setStatus(s => ({ ...s, line: line + 1, col: col + 1 })) }}
         onLineCountChange={n => setStatus(s => ({ ...s, totalLines: n }))}
         onEolChange={eol => setStatus(s => ({ ...s, eol }))}
         onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>

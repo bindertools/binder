@@ -79,6 +79,7 @@ interface Props {
   // as gutter bars. `line` is 1-based to match ProbItem/gotoLine convention.
   diagnostics?: { line: number; sev: number }[]
   gitGutter?: boolean
+  gotoToken?: number
   onCursorChange?: (line: number, col: number) => void
   onLineCountChange?: (count: number) => void
   onDirtyChange?: (dirty: boolean) => void
@@ -399,7 +400,7 @@ function pinDotX(gutterWidth: number, cw: number): number {
 }
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
-  filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, viewKey,
+  filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, gotoToken, viewKey,
   showHeader = true, diagnostics, gitGutter = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1582,10 +1583,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [fontSize, ready, recomputeViewport, draw])
 
-  // Jump to the requested line (1-based) whenever it changes, pinning that
-  // line at the top of the visible area.
+  // Jump to the requested line (1-based) whenever gotoToken changes, pinning
+  // that line at the top of the visible area. Using gotoToken (not gotoLine)
+  // as the change key means repeat navigations to the same line also fire.
+  const lastGotoTokenRef = useRef<number | undefined>(undefined)
   useEffect(() => {
-    if (!ready || gotoLine === undefined || gotoLine === lastGotoLineRef.current) return
+    if (!ready || gotoLine === undefined) return
+    if (gotoToken !== undefined && gotoToken === lastGotoTokenRef.current) return
+    lastGotoTokenRef.current = gotoToken
     lastGotoLineRef.current = gotoLine
     const target = Math.max(0, gotoLine - 1)
     void setCursorTo(target, 0, false).then(() => {
@@ -1594,7 +1599,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       draw()
       textareaRef.current?.focus()
     })
-  }, [gotoLine, ready, setCursorTo, clampScroll, draw])
+  }, [gotoLine, gotoToken, ready, setCursorTo, clampScroll, draw])
 
   // Debounced re-search while the find bar is open and the query/options change.
   useEffect(() => {
