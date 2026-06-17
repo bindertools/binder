@@ -1795,10 +1795,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       void addCursorAt(pos.line, pos.col)
       return
     }
-    if (e.detail >= 2) { draggingRef.current = true; return } // double-click: let onDoubleClick handle word selection, but allow drag-to-extend
+    if (e.detail >= 3) { draggingRef.current = true; void selectLineAt(pos.line); return }
+    if (e.detail >= 2) { draggingRef.current = true; return } // double-click: let onDoubleClick handle word selection
     draggingRef.current = true
     void setCursorTo(pos.line, pos.col, e.shiftKey)
-  }, [addCursorAt, pixelToPos, setCursorTo, togglePin])
+  }, [addCursorAt, pixelToPos, selectLineAt, setCursorTo, togglePin])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
@@ -1815,13 +1816,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const onMouseUp = useCallback(() => { draggingRef.current = false }, [])
 
   const onDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.detail >= 3) return // handled in onMouseDown
     const pos = pixelToPos(e.clientX, e.clientY)
     if (!pos) return
     e.preventDefault()
     textareaRef.current?.focus()
-    if (e.detail >= 3) void selectLineAt(pos.line)
-    else void selectWordAt(pos.line, pos.col)
-  }, [pixelToPos, selectLineAt, selectWordAt])
+    void selectWordAt(pos.line, pos.col)
+  }, [pixelToPos, selectWordAt])
 
   // Drag-selection can extend outside the canvas; a mouseup there wouldn't
   // reach onMouseUp (bound only to the canvas), leaving draggingRef stuck.
