@@ -1529,28 +1529,6 @@ export default function App() {
         </div>{/* end pane column */}
       </div>
 
-      {/* ── Status bar ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center h-[22px] shrink-0 bg-[var(--info-bar-bg)] border-t border-[var(--border-color)] font-ui text-[11px] text-[var(--info-bar-color)] select-none overflow-hidden px-1.5 gap-1">
-        {activeTerminalId && terminalCwds[activeTerminalId] && (
-          <>
-            <button
-              className="flex items-center gap-[5px] py-px px-[7px] rounded-xs bg-transparent border-0 cursor-pointer text-[var(--info-bar-color)] font-ui text-[11px] whitespace-nowrap overflow-hidden text-ellipsis max-w-[400px] transition-[background,color] duration-[100ms] hover:bg-surface-raised hover:text-[var(--info-bar-hover-color)]"
-              onClick={() => window.dispatchEvent(new CustomEvent('terminal:select-dir', { detail: { terminalId: activeTerminalId } }))}
-              title="Click to change directory"
-            >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
-                <path d="M1 4.5A1.5 1.5 0 012.5 3h3.086a1.5 1.5 0 011.06.44l.915.914A1.5 1.5 0 008.62 4.5H13.5A1.5 1.5 0 0115 6v6a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12V4.5z"
-                  stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-              </svg>
-              <span className="overflow-hidden text-ellipsis font-mono">{terminalCwds[activeTerminalId].replace(/\\/g, '/')}</span>
-            </button>
-            <div className="w-px h-3 bg-sep shrink-0" />
-          </>
-        )}
-        <div className="ml-auto flex items-center gap-2 opacity-40 text-[10.5px]">
-          <span>cmdIDE</span>
-        </div>
-      </div>
     </div>
   )
 }
