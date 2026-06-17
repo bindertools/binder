@@ -1582,14 +1582,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [fontSize, ready, recomputeViewport, draw])
 
-  // Jump to the requested line (1-based) whenever it changes.
+  // Jump to the requested line (1-based) whenever it changes, pinning that
+  // line at the top of the visible area.
   useEffect(() => {
     if (!ready || gotoLine === undefined || gotoLine === lastGotoLineRef.current) return
     lastGotoLineRef.current = gotoLine
-    void setCursorTo(Math.max(0, gotoLine - 1), 0, false).then(() => {
+    const target = Math.max(0, gotoLine - 1)
+    void setCursorTo(target, 0, false).then(() => {
+      topLineRef.current = target
+      clampScroll()
+      draw()
       textareaRef.current?.focus()
     })
-  }, [gotoLine, ready, setCursorTo])
+  }, [gotoLine, ready, setCursorTo, clampScroll, draw])
 
   // Debounced re-search while the find bar is open and the query/options change.
   useEffect(() => {
