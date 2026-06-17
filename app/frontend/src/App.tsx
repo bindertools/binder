@@ -1159,7 +1159,6 @@ export default function App() {
             tabId={(paneTerminalId ?? 'prb') + '-' + pane.id}
             cwd={paneCwd} sources={probSources} items={probItems}
             scanning={probScanning} cweItems={cweItems} cweScanning={cweScanning}
-            gpuColors={gpuColors}
             onRescan={async (_, scanCwd) => {
               setProbScanning(true)
               try {
@@ -1214,7 +1213,7 @@ export default function App() {
     if (tab.type === 'debug') {
       return (
         <Problems tabId={tab.id} cwd={tab.problemsCwd!} sources={tab.problemsSources ?? []}
-          items={tab.problemsItems ?? []} scanning={false} gpuColors={gpuColors}
+          items={tab.problemsItems ?? []} scanning={false}
           onRescan={(id, cwd) => { void handleRescanProblems(id, cwd) }}
           onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
       )

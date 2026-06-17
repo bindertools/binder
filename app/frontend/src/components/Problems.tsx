@@ -3,8 +3,6 @@ import { ProbItem } from '../types'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
 import { type PageSidebarNavItem } from './shared/PageSidebarNav'
-import GpuEditor from './GpuEditor'
-import type { GpuEditorColors } from '../themes'
 import './Problems.scss'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,7 +32,6 @@ interface Props {
   scanning:     boolean
   cweItems?:    CweItem[]
   cweScanning?: boolean
-  gpuColors?:   GpuEditorColors
   onRescan:     (tabId: string, cwd: string) => void
   onOpenFile:   (path: string, line: number, col: number) => void
   onCweScan?:   (cwd: string) => void
@@ -266,135 +263,135 @@ function SeverityBadge({ severity }: { severity: CweItem['severity'] }) {
 }
 
 interface DetailProps {
-  item:       CweItem
-  cwd:        string
-  gpuColors?: GpuEditorColors
-  onOpen:     () => void
-  onDismiss:  () => void
+  item:      CweItem
+  cwd:       string
+  onOpen:    () => void
+  onDismiss: () => void
 }
 
-function CweDetailView({ item, cwd, gpuColors, onOpen, onDismiss }: DetailProps) {
+function CweDetailView({ item, cwd, onOpen, onDismiss }: DetailProps) {
   const { dir, name: fileName } = splitPath(cwd, item.file)
   const m = SEV_META[item.severity]
 
   return (
     <div className="prob-cwe-detail-view">
 
-      {/* ── Scrollable metadata ────────────────────────────────────────────────── */}
-      <div className="prob-cwe-detail-meta">
-
-        {/* Header */}
-        <div className="prob-cwe-detail-header" style={{ borderLeftColor: m.color }}>
-          <div className="prob-cwe-detail-header-top">
-            <div className="prob-cwe-detail-id-row">
-              <a
-                href={item.mitre_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="prob-cwe-detail-id-link"
-                title={`Open ${item.cwe_id} on MITRE`}
-                onClick={e => e.stopPropagation()}
-              >
-                <span className="prob-cwe-detail-id" style={{ color: m.color }}>{item.cwe_id}</span>
-                <IconExternalLink />
-              </a>
-              <SeverityBadge severity={item.severity} />
-            </div>
-            <button
-              className="prob-cwe-detail-dismiss-btn"
-              onClick={onDismiss}
-              title="Dismiss this finding locally"
+      {/* ── Header ────────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-header" style={{ borderLeftColor: m.color }}>
+        <div className="prob-cwe-detail-header-top">
+          <div className="prob-cwe-detail-id-row">
+            <a
+              href={item.mitre_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="prob-cwe-detail-id-link"
+              title={`Open ${item.cwe_id} on MITRE`}
+              onClick={e => e.stopPropagation()}
             >
-              <IconDismiss />
-              Dismiss
-            </button>
+              <span className="prob-cwe-detail-id" style={{ color: m.color }}>{item.cwe_id}</span>
+              <IconExternalLink />
+            </a>
+            <SeverityBadge severity={item.severity} />
           </div>
-          <div className="prob-cwe-detail-name">{item.name}</div>
-        </div>
-
-        {/* About */}
-        <div className="prob-cwe-detail-section">
-          <div className="prob-cwe-detail-section-label">About this weakness</div>
-          <p className="prob-cwe-detail-desc">{item.description}</p>
-        </div>
-
-        {/* Impact */}
-        <div className="prob-cwe-detail-section">
-          <div className="prob-cwe-detail-section-label">Impact</div>
-          <div className="prob-cwe-impact">
-            {item.cwe_id === 'CWE-78'  && 'Network / Local: attacker can execute arbitrary OS commands'}
-            {item.cwe_id === 'CWE-79'  && "Network: attacker can inject and execute scripts in victim's browser"}
-            {item.cwe_id === 'CWE-89'  && 'Network: attacker can read, modify, or delete database records'}
-            {item.cwe_id === 'CWE-120' && 'Local / Network: memory corruption may lead to arbitrary code execution'}
-            {item.cwe_id === 'CWE-134' && 'Network: format string exploitation can overwrite stack memory'}
-            {item.cwe_id === 'CWE-95'  && 'Network: arbitrary JavaScript execution in the application context'}
-            {item.cwe_id === 'CWE-502' && 'Network: deserialization of attacker-controlled data can execute arbitrary code'}
-            {!['CWE-78','CWE-79','CWE-89','CWE-120','CWE-134','CWE-95','CWE-502'].includes(item.cwe_id) && 'Variable: see MITRE reference for full impact details'}
-          </div>
-        </div>
-
-        {/* Location */}
-        <div className="prob-cwe-detail-section">
-          <div className="prob-cwe-detail-section-label">Location</div>
-          <div className="prob-cwe-detail-location">
-            <div className="prob-cwe-detail-location-file">
-              <span className="prob-cwe-detail-loc-icon"><IconFile /></span>
-              <span className="prob-cwe-detail-loc-dir">{dir}</span>
-              <span className="prob-cwe-detail-loc-name">{fileName}</span>
-            </div>
-            <div className="prob-cwe-detail-location-meta">
-              <span className="prob-cwe-detail-loc-line">
-                Line <strong>{item.line}</strong>, Col <strong>{item.col}</strong>
-              </span>
-              <button className="prob-cwe-detail-goto-btn" onClick={onOpen}>
-                <IconGoto />
-                Open in editor
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Remediation */}
-        {item.remediation && (
-          <div className="prob-cwe-detail-section">
-            <div className="prob-cwe-detail-section-label">Remediation</div>
-            <div className="prob-cwe-remediation">{item.remediation}</div>
-          </div>
-        )}
-
-        {/* References */}
-        <div className="prob-cwe-detail-section">
-          <div className="prob-cwe-detail-section-label">References</div>
-          <a
-            href={item.mitre_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="prob-cwe-detail-ref-link"
-            onClick={e => e.stopPropagation()}
+          <button
+            className="prob-cwe-detail-dismiss-btn"
+            onClick={onDismiss}
+            title="Dismiss this finding locally"
           >
-            <IconShield />
-            MITRE {item.cwe_id} Database
-            <IconExternalLink />
-          </a>
+            <IconDismiss />
+            Dismiss
+          </button>
         </div>
-
+        <div className="prob-cwe-detail-name">{item.name}</div>
       </div>
 
-      {/* ── Code editor (fills remaining height) ──────────────────────────────── */}
-      <div className="prob-cwe-detail-code">
-        <div className="prob-cwe-detail-section-label prob-cwe-detail-code-label">Code</div>
-        <div className="prob-cwe-editor-block">
-          <GpuEditor
-            filePath={item.file}
-            gotoLine={item.line}
-            colors={gpuColors}
-            readOnly
-            showHeader={false}
-            minimap={false}
-            indentGuides={false}
-            gitGutter={false}
-          />
+      {/* ── About ─────────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">About this weakness</div>
+        <p className="prob-cwe-detail-desc">{item.description}</p>
+      </div>
+
+      {/* ── Impact ────────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">Impact</div>
+        <div className="prob-cwe-impact">
+          {item.cwe_id === 'CWE-78'  && 'Network / Local: attacker can execute arbitrary OS commands'}
+          {item.cwe_id === 'CWE-79'  && "Network: attacker can inject and execute scripts in victim's browser"}
+          {item.cwe_id === 'CWE-89'  && 'Network: attacker can read, modify, or delete database records'}
+          {item.cwe_id === 'CWE-120' && 'Local / Network: memory corruption may lead to arbitrary code execution'}
+          {item.cwe_id === 'CWE-134' && 'Network: format string exploitation can overwrite stack memory'}
+          {item.cwe_id === 'CWE-95'  && 'Network: arbitrary JavaScript execution in the application context'}
+          {item.cwe_id === 'CWE-502' && 'Network: deserialization of attacker-controlled data can execute arbitrary code'}
+          {!['CWE-78','CWE-79','CWE-89','CWE-120','CWE-134','CWE-95','CWE-502'].includes(item.cwe_id) && 'Variable: see MITRE reference for full impact details'}
         </div>
+      </div>
+
+      {/* ── Location ──────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">Location</div>
+        <div className="prob-cwe-detail-location">
+          <div className="prob-cwe-detail-location-file">
+            <span className="prob-cwe-detail-loc-icon"><IconFile /></span>
+            <span className="prob-cwe-detail-loc-dir">{dir}</span>
+            <span className="prob-cwe-detail-loc-name">{fileName}</span>
+          </div>
+          <div className="prob-cwe-detail-location-meta">
+            <span className="prob-cwe-detail-loc-line">
+              Line <strong>{item.line}</strong>, Col <strong>{item.col}</strong>
+            </span>
+            <button className="prob-cwe-detail-goto-btn" onClick={onOpen}>
+              <IconGoto />
+              Open in editor
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Code ──────────────────────────────────────────────────────────────── */}
+      {item.snippet && (
+        <div className="prob-cwe-detail-section">
+          <div className="prob-cwe-detail-section-label">Code</div>
+          <div className="prob-cwe-snippet-block">
+            {item.snippet.split('\n').map((codeLine, idx) => {
+              const matchIdx = item.snippet_match_idx ?? 0
+              const isHighlight = idx === matchIdx
+              const lineNo = item.line - matchIdx + idx
+              return (
+                <div
+                  key={idx}
+                  className={`prob-cwe-snippet-line${isHighlight ? ' prob-cwe-snippet-line--highlight' : ''}`}
+                >
+                  <span className="prob-cwe-snippet-lineno">{lineNo}</span>
+                  <span className="prob-cwe-snippet-code">{codeLine}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Remediation ───────────────────────────────────────────────────────── */}
+      {item.remediation && (
+        <div className="prob-cwe-detail-section">
+          <div className="prob-cwe-detail-section-label">Remediation</div>
+          <div className="prob-cwe-remediation">{item.remediation}</div>
+        </div>
+      )}
+
+      {/* ── References ────────────────────────────────────────────────────────── */}
+      <div className="prob-cwe-detail-section">
+        <div className="prob-cwe-detail-section-label">References</div>
+        <a
+          href={item.mitre_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="prob-cwe-detail-ref-link"
+          onClick={e => e.stopPropagation()}
+        >
+          <IconShield />
+          MITRE {item.cwe_id} Database
+          <IconExternalLink />
+        </a>
       </div>
 
     </div>
@@ -440,7 +437,6 @@ function CweListEmpty({ dismissedCount, onRestore }: { dismissedCount: number; o
 export default function Problems({
   tabId, cwd, sources, items, scanning,
   cweItems = [], cweScanning = false,
-  gpuColors,
   onRescan, onOpenFile, onCweScan,
 }: Props) {
   const [mainTab,      setMainTab]      = useState<MainTab>('diagnostics')
@@ -787,7 +783,6 @@ export default function Problems({
                 <CweDetailView
                   item={selectedItem}
                   cwd={cwd}
-                  gpuColors={gpuColors}
                   onOpen={() => onOpenFile(selectedItem.file, selectedItem.line, selectedItem.col)}
                   onDismiss={() => handleDismiss(selectedItem)}
                 />
