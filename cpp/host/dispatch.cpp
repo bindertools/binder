@@ -58,6 +58,7 @@ static std::wstring dispatch_to_wide(const std::string& s) {
     MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
     return w;
 }
+
 #endif
 
 // ── Constructor / Destructor ──────────────────────────────────────────────────
@@ -793,6 +794,18 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     [this, cap_id](const std::string&, const std::string& b64) {
                         std::string raw = base64::decode(b64);
                         emit("terminal:output:" + cap_id, json(raw));
+#ifdef _WIN32
+                        // cmd.exe's own Ctrl+C handler intercepts the signal meant for
+                        // the program it launched (claude, vim, ...) and shows this
+                        // confirmation instead of forwarding it, leaving the session
+                        // stuck. Auto-answer it so Ctrl+C still ends the session.
+                        if (raw.find("Terminate batch job") != std::string::npos) {
+                            std::lock_guard<std::mutex> lk(terminals_mu_);
+                            auto it = terminals_.find(cap_id);
+                            if (it != terminals_.end())
+                                it->second->Write(base64::encode("Y\r\n", 3));
+                        }
+#endif
                     },
                     [this, cap_id, cap_cwd](const std::string&, int code) {
                         emit("terminal:pty:end:" + cap_id, json(nullptr));
@@ -811,6 +824,13 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                         }).detach();
                     }
                 );
+
+                // claude/codex implement their own "press Ctrl-C again to exit" UX
+                // but never see a real CTRL_C_EVENT through a ConPTY, so that second
+                // press needs a guaranteed fallback. Other tools here (vim, less...)
+                // treat a quick second Ctrl+C as a normal, non-exiting keystroke.
+                static const std::set<std::string> kDoubleCtrlCExit = {"claude", "codex"};
+                if (kDoubleCtrlCExit.count(first)) term->ForceKillOnDoubleCtrlC(true);
 
                 emit("terminal:pty:start:" + id, json(nullptr));
 

@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <cstdlib>
 #include <vector>
+#include <chrono>
 
 Terminal::Terminal(std::string id, OutputCallback on_output, ExitCallback on_exit)
     : id_(std::move(id)),
@@ -31,6 +32,7 @@ std::wstring to_wide(const std::string& s) {
                         w.data(), n);
     return w;
 }
+
 } // namespace
 
 bool Terminal::Start(const std::string& shell, const std::string& cwd,
@@ -119,6 +121,17 @@ bool Terminal::Start(const std::string& shell, const std::string& cwd,
     process_ = pi.hProcess;
     CloseHandle(pi.hThread);
 
+    job_ = CreateJobObjectW(nullptr, nullptr);
+    if (job_) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{};
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &info, sizeof(info));
+        if (!AssignProcessToJobObject(job_, process_)) {
+            CloseHandle(job_);
+            job_ = nullptr;
+        }
+    }
+
     running_.store(true);
     reader_ = std::thread(&Terminal::ReadLoop, this);
     spdlog::info("[{}] Started shell: {}", id_, shell_path);
@@ -129,6 +142,33 @@ bool Terminal::Write(const std::string& b64_data) {
     if (!running_.load() || pty_in_write_ == INVALID_HANDLE_VALUE) return false;
     std::string raw = base64::decode(b64_data);
     if (raw.empty()) return true;
+    // Writing 0x03 alone doesn't reliably raise a real CTRL_C_EVENT for the
+    // process attached to a headless ConPTY console — confirmed empirically
+    // (a plain batch loop never reacted to it). Raw-mode TUIs like claude
+    // read the byte directly and implement their own "press again to exit"
+    // UX, but since the real signal never arrives, that second press never
+    // actually terminates the process either. As a guaranteed fallback, a
+    // second Ctrl+C within the same window the app's own UI uses force-kills
+    // the session so the user always gets back to the normal terminal.
+    if (raw.size() == 1 && raw[0] == '\x03' && force_kill_on_double_ctrlc_) {
+        auto now = std::chrono::steady_clock::now();
+        bool is_double = (now - last_ctrlc_) < std::chrono::milliseconds(1500);
+        last_ctrlc_ = now;
+        if (is_double && process_ != INVALID_HANDLE_VALUE) {
+            // Kill the whole tree (job_), not just the immediate child — e.g.
+            // cmd.exe plus the claude.exe it launched — otherwise the
+            // descendant stays attached to the pseudo console and it never
+            // signals EOF, leaving the session stuck "Running…" forever.
+            if (job_) TerminateJobObject(job_, 1);
+            else      TerminateProcess(process_, 1);
+            // Killing the process tree alone doesn't make conhost close its
+            // end of the output pipe — ReadLoop's ReadFile would block
+            // forever. Closing the pseudoconsole ourselves forces it to
+            // return so on_exit_ actually fires.
+            if (hpc_) { ClosePseudoConsole(hpc_); hpc_ = nullptr; }
+            return true;
+        }
+    }
     DWORD written = 0;
     return WriteFile(pty_in_write_, raw.data(),
                      static_cast<DWORD>(raw.size()), &written, nullptr) != FALSE;
@@ -152,11 +192,13 @@ void Terminal::Stop() {
     if (hpc_) { ClosePseudoConsole(hpc_); hpc_ = nullptr; }
     if (process_ != INVALID_HANDLE_VALUE) {
         if (WaitForSingleObject(process_, 3000) == WAIT_TIMEOUT) {
-            TerminateProcess(process_, 1);
+            if (job_) TerminateJobObject(job_, 1);
+            else      TerminateProcess(process_, 1);
             WaitForSingleObject(process_, 2000);
         }
     }
     if (reader_.joinable()) reader_.join();
+    if (job_) { CloseHandle(job_); job_ = nullptr; }
     if (process_ != INVALID_HANDLE_VALUE) {
         CloseHandle(process_);       process_      = INVALID_HANDLE_VALUE;
     }
