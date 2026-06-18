@@ -38,6 +38,18 @@ interface Props {
   onCwdChange?: (cwd: string) => void
 }
 
+// The native bridge's hand-rolled JSON parser (vendored webview.h) rejects a
+// raw, unescaped DEL byte (0x7F) inside a JSON string — e.g. xterm's onData
+// sends literal DEL for Backspace, which corrupts the whole IPC envelope and
+// silently drops the keystroke. Base64-encoding pty input before it crosses
+// the bridge sidesteps that entirely (Terminal::Write already expects it).
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str)
+  let binary = ''
+  for (const b of bytes) binary += String.fromCharCode(b)
+  return btoa(binary)
+}
+
 // Completion dropdown state (React state for rendering)
 interface MenuState {
   matches: string[]
@@ -681,7 +693,7 @@ export default function Terminal({
       const text = e.clipboardData?.getData('text/plain') ?? ''
       if (!text) return
       if (ptyModeRef.current) {
-        TerminalInput(tabId, text).catch(() => {})
+        TerminalInput(tabId, utf8ToBase64(text)).catch(() => {})
       } else {
         processPaste(text)
       }
@@ -694,7 +706,7 @@ export default function Terminal({
     // full-screen programs); the input row handles everything else.
     term.onData((data: string) => {
       if (!ptyModeRef.current) return
-      TerminalInput(tabId, data).catch(() => {})
+      TerminalInput(tabId, utf8ToBase64(data)).catch(() => {})
     })
 
     // Allow plugins to execute commands in this terminal

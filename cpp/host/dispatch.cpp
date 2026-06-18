@@ -819,13 +819,15 @@ void Dispatcher::dispatch_worker(const std::string& seq,
     }
 
     if (type == "terminal.input") {
-        // Raw PTY input (only used when a ConPTY session is active for interactive programs)
+        // Raw PTY input (only used when a ConPTY session is active for interactive
+        // programs). The frontend base64-encodes this itself before it crosses the
+        // JS<->native bridge — its hand-rolled JSON parser rejects raw bytes in the
+        // 0x7F-0xBF range (e.g. literal DEL for Backspace) inside JSON strings.
         std::string id   = args.value("id",   std::string{});
         std::string data = args.value("data", std::string{});
-        std::string b64  = base64::encode(data);
         std::lock_guard<std::mutex> lk(terminals_mu_);
         auto it = terminals_.find(id);
-        if (it != terminals_.end()) it->second->Write(b64);
+        if (it != terminals_.end()) it->second->Write(data);
         resolve_ok(seq, true);
         return;
     }
