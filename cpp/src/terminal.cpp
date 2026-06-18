@@ -43,6 +43,10 @@ bool Terminal::Start(const std::string& shell, const std::string& cwd,
         shell_path = comspec ? comspec : R"(C:\Windows\System32\cmd.exe)";
     }
 
+    // Console apps (claude, vim, etc.) pick their input keymap based on TERM —
+    // without it some raw-mode TUIs misparse keys like Backspace/Delete.
+    if (!std::getenv("TERM")) _putenv_s("TERM", "xterm-256color");
+
     HANDLE pty_in_read   = INVALID_HANDLE_VALUE;
     HANDLE pty_out_write = INVALID_HANDLE_VALUE;
 
