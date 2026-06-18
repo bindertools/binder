@@ -202,6 +202,27 @@ void Dispatcher::dispatch(const std::string& seq,
         return;
     }
 
+    // terminal.input/resize/interrupt must run synchronously on the caller
+    // thread, not on a freshly spawned detached thread like everything below.
+    // Each keystroke fires its own fire-and-forget IPC call (xterm's onData
+    // isn't awaited), so under the generic thread-per-call model, concurrent
+    // threads racing for terminals_mu_ have no guaranteed relationship to the
+    // order JS actually sent the bytes in — fast typing (or Ctrl+C right
+    // after a keystroke) could reorder at the pty, corrupting the input
+    // stream. These three are just fast, non-blocking native calls (WriteFile
+    // to a pipe, ResizePseudoConsole, …), so there's no I/O-blocking reason
+    // to hand them off to a worker thread in the first place.
+    if (type == "terminal.input" || type == "terminal.resize" || type == "terminal.interrupt") {
+        try {
+            json args_json = args.empty() ? json::object() : json::parse(args);
+            dispatch_worker(seq, type, args_json);
+        } catch (const std::exception& e) {
+            spdlog::error("IPC dispatch error: type={} error={}", type, e.what());
+            resolve_err(seq, std::string("dispatch error: ") + e.what());
+        }
+        return;
+    }
+
     // All other types run on a detached worker thread (may block for I/O, CPU sampling, etc.)
     std::thread([this, seq, type, args]() {
         try {
