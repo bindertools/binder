@@ -18,7 +18,7 @@ interface Props {
   cwd:        string
   active:     boolean
   gpuColors?: GpuEditorColors
-  onEditWorkflow?: (path: string) => void
+  onEditWorkflow?: (path: string, line?: number) => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -510,6 +510,11 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
     onEditWorkflow(`${cwd.replace(/\\/g, '/')}/${selected.path}`)
   }, [selected, cwd, onEditWorkflow])
 
+  const jumpToLine = useCallback((line: number) => {
+    if (!selected || !onEditWorkflow) return
+    onEditWorkflow(`${cwd.replace(/\\/g, '/')}/${selected.path}`, line)
+  }, [selected, cwd, onEditWorkflow])
+
   const latestRun = useLatestRun(allRuns, cwd, selected?.file)
   const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
 
@@ -631,7 +636,14 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                   </div>
                 )}
 
-                {section === 'events' && <EventsMap content={content} loading={contentLoading} />}
+                {section === 'events' && (
+                  <EventsMap
+                    content={content}
+                    loading={contentLoading}
+                    stepEvents={latestRun?.stepEvents}
+                    onEdit={onEditWorkflow ? jumpToLine : undefined}
+                  />
+                )}
 
                 {section === 'history' && <RunHistory cwd={cwd} file={selected.file} />}
 

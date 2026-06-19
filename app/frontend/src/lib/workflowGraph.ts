@@ -9,13 +9,26 @@
 export interface WorkflowTriggerNode {
   id:    string
   label: string
+  /** 1-based line in the source file where this trigger is declared. */
+  line:  number
+}
+
+export interface WorkflowStepNode {
+  label: string
+  /** 1-based line in the source file where this step's `- ` item starts. */
+  line:  number
 }
 
 export interface WorkflowJobNode {
   id:    string
   name:  string
   needs: string[]
-  steps: string[]
+  steps: WorkflowStepNode[]
+  /** 1-based line in the source file where this job's key is declared. */
+  line:  number
+  /** Line to insert a new step item at (after the last existing step, or
+   *  right after `steps:` if there are none yet). */
+  stepsInsertLine: number
 }
 
 export interface WorkflowGraph {
@@ -26,6 +39,8 @@ export interface WorkflowGraph {
 interface Line {
   indent: number
   text:   string
+  /** 1-based line number in the original (untokenized) source file. */
+  lineNo: number
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
@@ -63,11 +78,12 @@ function stripComment(line: string): string {
 
 function tokenize(content: string): Line[] {
   const lines: Line[] = []
-  for (const raw of content.split(/\r?\n/)) {
-    const stripped = stripComment(raw).replace(/\s+$/, '')
+  const raws = content.split(/\r?\n/)
+  for (let i = 0; i < raws.length; i++) {
+    const stripped = stripComment(raws[i]).replace(/\s+$/, '')
     if (!stripped.trim()) continue
     const indent = stripped.length - stripped.trimStart().length
-    lines.push({ indent, text: stripped.trim() })
+    lines.push({ indent, text: stripped.trim(), lineNo: i + 1 })
   }
   return lines
 }
@@ -134,14 +150,13 @@ function parseTriggers(lines: Line[]): WorkflowTriggerNode[] {
   const { value } = splitKeyValue(lines[idx].text)
   if (value) {
     const ids = value.startsWith('[') ? parseFlowList(value) : [unquote(value)]
-    return ids.filter(Boolean).map(id => ({ id, label: triggerLabel(id) }))
+    return ids.filter(Boolean).map(id => ({ id, label: triggerLabel(id), line: lines[idx].lineNo }))
   }
 
   const direct = directChildren(blockChildren(lines, idx))
   return direct
-    .map(l => splitKeyValue(l.text).key)
-    .filter(Boolean)
-    .map(id => ({ id, label: triggerLabel(id) }))
+    .filter(l => splitKeyValue(l.text).key)
+    .map(l => ({ id: splitKeyValue(l.text).key, label: triggerLabel(splitKeyValue(l.text).key), line: l.lineNo }))
 }
 
 function actionLabel(uses: string): string {
@@ -150,9 +165,9 @@ function actionLabel(uses: string): string {
   return parts[parts.length - 1] || uses
 }
 
-function parseSteps(stepsChildren: Line[]): string[] {
+function parseSteps(stepsChildren: Line[]): WorkflowStepNode[] {
   const items = directChildren(stepsChildren)
-  const steps: string[] = []
+  const steps: WorkflowStepNode[] = []
   for (const item of items) {
     const itemIdx = stepsChildren.indexOf(item)
     const itemChildren = directChildren(blockChildren(stepsChildren, itemIdx))
@@ -176,7 +191,7 @@ function parseSteps(stepsChildren: Line[]): string[] {
         if (kv.key === 'run') { label = 'Run script'; break }
       }
     }
-    steps.push(label || 'Step')
+    steps.push({ label: label || 'Step', line: item.lineNo })
   }
   return steps
 }
@@ -199,7 +214,8 @@ function parseJobs(lines: Line[]): WorkflowJobNode[] {
 
     let name = jobId
     let needs: string[] = []
-    let steps: string[] = []
+    let steps: WorkflowStepNode[] = []
+    let stepsInsertLine = jobLine.lineNo + 1
 
     for (const c of directJobChildren) {
       const { key, value } = splitKeyValue(c.text)
@@ -216,11 +232,15 @@ function parseJobs(lines: Line[]): WorkflowJobNode[] {
         }
       } else if (key === 'steps') {
         const cIdx = jobChildren.indexOf(c)
-        steps = parseSteps(blockChildren(jobChildren, cIdx))
+        const stepsBlock = blockChildren(jobChildren, cIdx)
+        steps = parseSteps(stepsBlock)
+        stepsInsertLine = stepsBlock.length > 0
+          ? stepsBlock[stepsBlock.length - 1].lineNo + 1
+          : c.lineNo + 1
       }
     }
 
-    jobs.push({ id: jobId, name, needs, steps })
+    jobs.push({ id: jobId, name, needs, steps, line: jobLine.lineNo, stepsInsertLine })
   }
 
   return jobs

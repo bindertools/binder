@@ -606,6 +606,13 @@
   background: var(--accent-dim);
 }
 
+.ev-map__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .ev-map__card-kicker {
   font-size: 9.5px;
   font-weight: 700;
@@ -625,6 +632,106 @@
 }
 
 .ev-map__card--trigger .ev-map__card-name {
+  color: var(--accent);
+}
+
+.ev-map__icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tab-color);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .1s, background .1s, color .1s;
+}
+
+.ev-map__card:hover .ev-map__icon-btn,
+.ev-map__card--trigger:hover .ev-map__icon-btn,
+.ev-map__step:hover .ev-map__icon-btn--step {
+  opacity: 0.7;
+}
+
+.ev-map__icon-btn:hover {
+  opacity: 1 !important;
+  background: var(--app-bg);
+  color: var(--tab-color-hover);
+}
+
+.ev-map__steps {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.ev-map__step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+}
+
+.ev-map__step-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sep-strong);
+}
+
+.ev-map__step-dot--success {
+  background: var(--color-git-add);
+}
+
+.ev-map__step-dot--failure {
+  background: var(--color-git-remove);
+}
+
+.ev-map__step-dot--running {
+  background: var(--color-warning);
+}
+
+.ev-map__step-dot--skipped {
+  background: var(--sep-strong);
+  opacity: 0.5;
+}
+
+.ev-map__step-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--tab-color-hover);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-map__add-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tab-color);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity .1s, color .1s;
+}
+
+.ev-map__add-step:hover {
+  opacity: 1;
   color: var(--accent);
 }
 
@@ -663,6 +770,19 @@
 .ev-map__chip--fail {
   background: rgba(248, 113, 113, 0.12);
   color: var(--color-git-remove);
+}
+
+.ev-map__chip--running {
+  background: var(--app-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--sep);
+}
+
+.ev-map__chip--idle {
+  background: transparent;
+  color: var(--tab-color);
+  opacity: 0.45;
+  border: 1px solid var(--sep);
 }
 
 // ── History ────────────────────────────────────────────────────────────────

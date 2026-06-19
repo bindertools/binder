@@ -1536,7 +1536,7 @@ export default function App() {
                 }}
               >
                 <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors}
-                  onEditWorkflow={(path) => handleEditFileInPane(wsId, leafId, path)} />
+                  onEditWorkflow={(path, line) => handleEditFileInPane(wsId, leafId, path, line)} />
               </div>
             )
           })}

@@ -1,11 +1,19 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Pencil, Plus } from 'lucide-react'
 import { parseWorkflowYaml, type WorkflowJobNode } from '../lib/workflowGraph'
+import type { WorkflowStepEvent } from '../lib/workflows'
 import { Skeleton } from './Skeleton'
 import './WorkflowsPanel.scss'
 
 interface Props {
-  content: string
-  loading: boolean
+  content:     string
+  loading:     boolean
+  /** Step results from the most recent run, used to overlay live/last-run
+   *  status onto each step instead of just listing them inertly. */
+  stepEvents?: WorkflowStepEvent[]
+  /** Jumps the code editor to a specific line of the workflow file — wired
+   *  up to the edit-pencil and add-step buttons throughout the map. */
+  onEdit?:     (line: number) => void
 }
 
 interface RowJob {
@@ -84,9 +92,41 @@ function bottomCenter(el: HTMLElement, origin: HTMLElement): Point {
   return { x: r.left - o.left + r.width / 2, y: r.bottom - o.top }
 }
 
-export default function EventsMap({ content, loading }: Props) {
+/** Per-job, per-step-index status from the latest run, so the map can show
+ *  real outcomes instead of static placeholders. */
+function buildStepStatus(stepEvents: WorkflowStepEvent[] | undefined) {
+  const byJob = new Map<string, Map<number, WorkflowStepEvent['status']>>()
+  for (const ev of stepEvents ?? []) {
+    let m = byJob.get(ev.job)
+    if (!m) { m = new Map(); byJob.set(ev.job, m) }
+    m.set(ev.stepIndex, ev.status)
+  }
+  return byJob
+}
+
+type JobRunStatus = 'success' | 'failure' | 'running' | undefined
+
+function jobRunStatus(stepCount: number, statuses: Map<number, WorkflowStepEvent['status']> | undefined): JobRunStatus {
+  if (!statuses || statuses.size === 0) return undefined
+  let sawFailure = false
+  let sawRunning = false
+  let allSuccess = stepCount > 0
+  for (let i = 0; i < stepCount; i++) {
+    const s = statuses.get(i)
+    if (s === 'failure') sawFailure = true
+    if (s === 'running') sawRunning = true
+    if (s !== 'success') allSuccess = false
+  }
+  if (sawFailure) return 'failure'
+  if (sawRunning) return 'running'
+  if (allSuccess) return 'success'
+  return undefined
+}
+
+export default function EventsMap({ content, loading, stepEvents, onEdit }: Props) {
   const graph = useMemo(() => parseWorkflowYaml(content), [content])
   const rows = useMemo(() => buildRows(graph.jobs), [graph.jobs])
+  const stepStatusByJob = useMemo(() => buildStepStatus(stepEvents), [stepEvents])
 
   const surfaceRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -174,7 +214,19 @@ export default function EventsMap({ content, loading }: Props) {
           {graph.triggers.length > 0 && (
             <div className="ev-map__row">
               <div className="ev-map__card ev-map__card--trigger" ref={triggerRef}>
-                <div className="ev-map__card-kicker">On</div>
+                <div className="ev-map__card-head">
+                  <div className="ev-map__card-kicker">On</div>
+                  {onEdit && (
+                    <button
+                      type="button"
+                      className="ev-map__icon-btn"
+                      title="Edit triggers"
+                      onClick={() => onEdit(graph.triggers[0].line)}
+                    >
+                      <Pencil size={11} strokeWidth={1.8} />
+                    </button>
+                  )}
+                </div>
                 <div className="ev-map__card-name">{graph.triggers.map(t => t.label).join(', ')}</div>
               </div>
             </div>
@@ -182,25 +234,75 @@ export default function EventsMap({ content, loading }: Props) {
 
           {rows.map((rowJobs, r) => (
             <div className="ev-map__row" key={r}>
-              {rowJobs.map(rj => (
-                <div
-                  key={rj.job.id}
-                  className="ev-map__card"
-                  ref={el => { if (el) cardRefs.current.set(rj.job.id, el); else cardRefs.current.delete(rj.job.id) }}
-                >
-                  <div className="ev-map__card-name">{rj.job.name}</div>
-                  <div className="ev-map__card-meta">{rj.job.steps.length} step{rj.job.steps.length === 1 ? '' : 's'}</div>
-                  {rj.farNeeds.length > 0 && (
-                    <div className="ev-map__card-far">also needs {rj.farNeeds.join(', ')}</div>
-                  )}
-                  {rj.isTerminal && (
-                    <div className="ev-map__card-result">
-                      <span className="ev-map__chip ev-map__chip--pass">Pass</span>
-                      <span className="ev-map__chip ev-map__chip--fail">Fail</span>
+              {rowJobs.map(rj => {
+                const statuses = stepStatusByJob.get(rj.job.id)
+                const runStatus = rj.isTerminal ? jobRunStatus(rj.job.steps.length, statuses) : undefined
+                return (
+                  <div
+                    key={rj.job.id}
+                    className="ev-map__card"
+                    ref={el => { if (el) cardRefs.current.set(rj.job.id, el); else cardRefs.current.delete(rj.job.id) }}
+                  >
+                    <div className="ev-map__card-head">
+                      <div className="ev-map__card-name">{rj.job.name}</div>
+                      {onEdit && (
+                        <button
+                          type="button"
+                          className="ev-map__icon-btn"
+                          title="Edit job"
+                          onClick={() => onEdit(rj.job.line)}
+                        >
+                          <Pencil size={11} strokeWidth={1.8} />
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    <div className="ev-map__steps">
+                      {rj.job.steps.map((s, i) => {
+                        const status = statuses?.get(i)
+                        return (
+                          <div className="ev-map__step" key={i}>
+                            <span className={`ev-map__step-dot${status ? ` ev-map__step-dot--${status}` : ''}`} />
+                            <span className="ev-map__step-label">{s.label}</span>
+                            {onEdit && (
+                              <button
+                                type="button"
+                                className="ev-map__icon-btn ev-map__icon-btn--step"
+                                title="Edit step"
+                                onClick={() => onEdit(s.line)}
+                              >
+                                <Pencil size={10} strokeWidth={1.8} />
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {onEdit && (
+                        <button
+                          type="button"
+                          className="ev-map__add-step"
+                          onClick={() => onEdit(rj.job.stepsInsertLine)}
+                        >
+                          <Plus size={11} strokeWidth={2} /> Add step
+                        </button>
+                      )}
+                    </div>
+
+                    {rj.farNeeds.length > 0 && (
+                      <div className="ev-map__card-far">also needs {rj.farNeeds.join(', ')}</div>
+                    )}
+
+                    {rj.isTerminal && (
+                      <div className="ev-map__card-result">
+                        {runStatus === 'success' && <span className="ev-map__chip ev-map__chip--pass">Pass</span>}
+                        {runStatus === 'failure' && <span className="ev-map__chip ev-map__chip--fail">Fail</span>}
+                        {runStatus === 'running' && <span className="ev-map__chip ev-map__chip--running">Running…</span>}
+                        {!runStatus && <span className="ev-map__chip ev-map__chip--idle">Not run</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>
