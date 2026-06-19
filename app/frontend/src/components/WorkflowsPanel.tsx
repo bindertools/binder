@@ -537,7 +537,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
 
   // Drag-resizable divider between the code editor and the events map, both
   // now living side by side in the merged "Code" section.
-  const [splitRatio, setSplitRatio] = useState(0.45)
+  const [splitRatio, setSplitRatio] = useState(0.6)
   const splitRef = useRef<HTMLDivElement>(null)
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
