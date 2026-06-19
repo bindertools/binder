@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import ReactDOM from 'react-dom'
 import { Pencil, Plus, Workflow } from 'lucide-react'
 import {
   parseWorkflowYaml, insertJob, linkJobs, setJobCondition, edgeCondition,
@@ -124,6 +125,85 @@ function buildStepStatus(stepEvents: WorkflowStepEvent[] | undefined) {
   return byJob
 }
 
+interface CustomConditionState {
+  sourceId:   string
+  targetId:   string
+  targetName: string
+  value:      string
+}
+
+/** Replaces window.prompt for the "Other" link condition — an in-app modal
+ *  matching the look of SplitModal, since the native prompt() dialog can't
+ *  be styled and looks out of place next to the rest of the UI. */
+function CustomConditionModal({
+  state, onApply, onCancel,
+}: {
+  state:    CustomConditionState
+  onApply:  (expr: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(state.value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return ReactDOM.createPortal(
+    <>
+      <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-[2px]" onClick={onCancel} />
+      <div className="fixed z-[10001] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[92vw] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-xl shadow-[var(--shadow-overlay)] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
+          <span className="text-[13px] font-semibold text-[var(--tab-color-hover)]">Custom run condition</span>
+          <button
+            className="flex items-center justify-center w-6 h-6 rounded text-[var(--tab-color)] hover:bg-surface-raised hover:text-[var(--tab-color-hover)] transition-colors"
+            onClick={onCancel}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div className="px-4 py-4 flex flex-col gap-2">
+          <label className="text-[11.5px] text-[var(--tab-color)]">
+            Expression for when <strong className="text-[var(--tab-color-hover)]">{state.targetName}</strong> should run, used as <code className="text-[10.5px] opacity-80">if: ${'{{'} &lt;expr&gt; {'}}'}</code>
+          </label>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onApply(value) }}
+            placeholder="always()"
+            className="w-full px-3 py-2 rounded-md bg-[var(--app-bg)] border border-[var(--border-color)] text-[12.5px] font-mono text-[var(--tab-color-hover)] outline-none focus:border-accent transition-colors"
+          />
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--border-color)]">
+          <button
+            className="px-3 h-7 rounded-md bg-transparent border border-[var(--border-color)] text-[var(--tab-color)] text-[12px] font-medium cursor-pointer hover:text-[var(--tab-color-hover)] hover:border-sep-strong transition-colors duration-[100ms]"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className="px-4 h-7 rounded-md bg-accent text-white text-[12px] font-medium cursor-pointer border-0 hover:bg-accent-hover transition-colors duration-[100ms]"
+            onClick={() => onApply(value)}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body
+  )
+}
+
 type JobRunStatus = 'success' | 'failure' | 'running' | undefined
 
 function jobRunStatus(stepCount: number, statuses: Map<number, WorkflowStepEvent['status']> | undefined): JobRunStatus {
@@ -155,6 +235,7 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
   const [wires, setWires] = useState<Wire[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
+  const [customModal, setCustomModal] = useState<CustomConditionState | null>(null)
 
   const handleAddProcess = useCallback(() => {
     if (!onChange) return
@@ -186,14 +267,18 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
     } else if (next === 'fail') {
       onChange(linkJobs(content, sourceId, targetId, 'fail'))
     } else {
-      const expr = window.prompt(
-        `Custom condition expression for "${target.name}" (used as: if: \${{ <expr> }}):`,
-        current === 'other' ? (target.ifExpr ?? '') : 'always()',
-      )
-      if (expr === null) return
-      onChange(linkJobs(content, sourceId, targetId, 'other', expr))
+      setCustomModal({
+        sourceId, targetId, targetName: target.name,
+        value: current === 'other' ? (target.ifExpr ?? '') : 'always()',
+      })
     }
   }, [content, onChange, jobById])
+
+  const handleCustomApply = useCallback((expr: string) => {
+    if (!onChange || !customModal) return
+    onChange(linkJobs(content, customModal.sourceId, customModal.targetId, 'other', expr))
+    setCustomModal(null)
+  }, [content, onChange, customModal])
 
   useLayoutEffect(() => {
     const surface = surfaceRef.current
@@ -442,6 +527,14 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
           ))}
         </div>
       </div>
+
+      {customModal && (
+        <CustomConditionModal
+          state={customModal}
+          onApply={handleCustomApply}
+          onCancel={() => setCustomModal(null)}
+        />
+      )}
     </div>
   )
 }
