@@ -534,6 +534,140 @@
   margin-bottom: 4px;
 }
 
+// ── Events map: lanes of pill-shaped jobs joined by soft, DOM-measured wires.
+// There's no separate "outcome" column to route a line into from anywhere
+// in the graph — a terminal job carries its own pass/fail marker — so every
+// wire only ever spans one gap between two adjacent lanes. Positions come
+// from actual rendered layout (ResizeObserver + getBoundingClientRect), not
+// from a hand-rolled coordinate grid.
+.ev-map {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+}
+
+.ev-map__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+.ev-map__surface {
+  position: relative;
+  padding: 28px 32px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.ev-map__wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ev-map__wire {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.6;
+}
+
+.ev-map__lanes {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 56px;
+}
+
+.ev-map__lane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ev-map__pill {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--sep);
+}
+
+.ev-map__pill--trigger {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+}
+
+.ev-map__pill-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.ev-map__pill-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+  white-space: nowrap;
+}
+
+.ev-map__pill--trigger .ev-map__pill-name {
+  color: var(--accent);
+}
+
+.ev-map__pill-meta {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--tab-color);
+  opacity: 0.5;
+}
+
+.ev-map__pill-far {
+  font-size: 10px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.ev-map__pill-result {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tab-color);
+}
+
+.ev-map__result-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ev-map__result-dot--pass {
+  background: var(--color-git-add);
+  margin-left: 4px;
+}
+
+.ev-map__result-dot--fail {
+  background: var(--color-git-remove);
+  margin-left: 10px;
+}
+
 // ── History ────────────────────────────────────────────────────────────────
 .wf-history {
   @extend %wf-scroll;
