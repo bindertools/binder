@@ -515,6 +515,19 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
     onEditWorkflow(`${cwd.replace(/\\/g, '/')}/${selected.path}`, line)
   }, [selected, cwd, onEditWorkflow])
 
+  // Events Map editing (add process / link / set condition) computes the
+  // new YAML text itself, then hands it here to persist — applied
+  // optimistically so the map updates immediately, with a re-read to
+  // resync if the write fails.
+  const mutateWorkflow = useCallback((newContent: string) => {
+    if (!selected) return
+    setContent(newContent)
+    const absPath = `${cwd.replace(/\\/g, '/')}/${selected.path}`
+    workflows.write(absPath, newContent).catch(() => {
+      workflows.read(cwd, selected.file).then(r => setContent(r.content)).catch(() => {})
+    })
+  }, [cwd, selected])
+
   const latestRun = useLatestRun(allRuns, cwd, selected?.file)
   const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
 
@@ -642,6 +655,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                     loading={contentLoading}
                     stepEvents={latestRun?.stepEvents}
                     onEdit={onEditWorkflow ? jumpToLine : undefined}
+                    onChange={mutateWorkflow}
                   />
                 )}
 

@@ -1,6 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Plus } from 'lucide-react'
-import { parseWorkflowYaml, type WorkflowJobNode } from '../lib/workflowGraph'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Pencil, Plus, Workflow } from 'lucide-react'
+import {
+  parseWorkflowYaml, insertJob, linkJobs, setJobCondition, edgeCondition,
+  type WorkflowJobNode, type LinkCondition,
+} from '../lib/workflowGraph'
 import type { WorkflowStepEvent } from '../lib/workflows'
 import { Skeleton } from './Skeleton'
 import './WorkflowsPanel.scss'
@@ -14,6 +17,16 @@ interface Props {
   /** Jumps the code editor to a specific line of the workflow file — wired
    *  up to the edit-pencil and add-step buttons throughout the map. */
   onEdit?:     (line: number) => void
+  /** Hands back fully-rewritten YAML after an add-process / link / set-
+   *  condition edit made directly in the map. Omit to make the map
+   *  read-only (no add/link affordances rendered at all). */
+  onChange?:   (newContent: string) => void
+}
+
+const CONDITION_LABEL: Record<LinkCondition, string> = { pass: 'on pass', fail: 'on fail', other: 'on custom' }
+
+function nextCondition(current: LinkCondition): LinkCondition {
+  return current === 'pass' ? 'fail' : current === 'fail' ? 'other' : 'pass'
 }
 
 interface RowJob {
@@ -78,7 +91,14 @@ function buildRows(jobs: WorkflowJobNode[]): RowJob[][] {
 }
 
 interface Point { x: number; y: number }
-interface Wire { from: Point; to: Point }
+interface Wire {
+  from: Point
+  to:   Point
+  /** Present for job→job wires (absent for the trigger→job ones), so the
+   *  condition badge knows which edge it's editing. */
+  sourceId?: string
+  targetId?: string
+}
 
 function topCenter(el: HTMLElement, origin: HTMLElement): Point {
   const r = el.getBoundingClientRect()
@@ -123,16 +143,57 @@ function jobRunStatus(stepCount: number, statuses: Map<number, WorkflowStepEvent
   return undefined
 }
 
-export default function EventsMap({ content, loading, stepEvents, onEdit }: Props) {
+export default function EventsMap({ content, loading, stepEvents, onEdit, onChange }: Props) {
   const graph = useMemo(() => parseWorkflowYaml(content), [content])
   const rows = useMemo(() => buildRows(graph.jobs), [graph.jobs])
   const stepStatusByJob = useMemo(() => buildStepStatus(stepEvents), [stepEvents])
+  const jobById = useMemo(() => new Map(graph.jobs.map(j => [j.id, j])), [graph.jobs])
 
   const surfaceRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef(new Map<string, HTMLDivElement>())
   const [wires, setWires] = useState<Wire[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
+  const [linkFrom, setLinkFrom] = useState<string | null>(null)
+
+  const handleAddProcess = useCallback(() => {
+    if (!onChange) return
+    const name = window.prompt('Name for the new process:', 'New process')
+    if (!name || !name.trim()) return
+    onChange(insertJob(content, name.trim()).content)
+  }, [content, onChange])
+
+  const handlePortClick = useCallback((jobId: string) => {
+    if (!onChange) return
+    if (linkFrom === null) {
+      setLinkFrom(jobId)
+    } else if (linkFrom === jobId) {
+      setLinkFrom(null)
+    } else {
+      onChange(linkJobs(content, linkFrom, jobId, 'pass'))
+      setLinkFrom(null)
+    }
+  }, [content, onChange, linkFrom])
+
+  const cycleCondition = useCallback((sourceId: string, targetId: string) => {
+    if (!onChange) return
+    const target = jobById.get(targetId)
+    if (!target) return
+    const current = edgeCondition(target, sourceId)
+    const next = nextCondition(current)
+    if (next === 'pass') {
+      onChange(setJobCondition(content, targetId, undefined))
+    } else if (next === 'fail') {
+      onChange(linkJobs(content, sourceId, targetId, 'fail'))
+    } else {
+      const expr = window.prompt(
+        `Custom condition expression for "${target.name}" (used as: if: \${{ <expr> }}):`,
+        current === 'other' ? (target.ifExpr ?? '') : 'always()',
+      )
+      if (expr === null) return
+      onChange(linkJobs(content, sourceId, targetId, 'other', expr))
+    }
+  }, [content, onChange, jobById])
 
   useLayoutEffect(() => {
     const surface = surfaceRef.current
@@ -157,7 +218,7 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
             if (!rows[r - 1].some(p => p.job.id === dep)) continue
             const source = cardRefs.current.get(dep)
             if (!source) continue
-            found.push({ from: bottomCenter(source, surface), to: topCenter(target, surface) })
+            found.push({ from: bottomCenter(source, surface), to: topCenter(target, surface), sourceId: dep, targetId: rj.job.id })
           }
         }
       }
@@ -171,6 +232,13 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
     ro.observe(surface)
     return () => ro.disconnect()
   }, [rows])
+
+  useLayoutEffect(() => {
+    if (linkFrom === null) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLinkFrom(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [linkFrom])
 
   if (loading) {
     return (
@@ -196,6 +264,19 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
 
   return (
     <div className="ev-map">
+      {onChange && (
+        <div className="ev-map__toolbar">
+          <button type="button" className="ev-map__add-process" onClick={handleAddProcess}>
+            <Workflow size={12} strokeWidth={1.8} /> Add process
+          </button>
+          {linkFrom && (
+            <span className="ev-map__link-hint">
+              Click another process's dot to link from <strong>{jobById.get(linkFrom)?.name ?? linkFrom}</strong>
+              <button type="button" className="ev-map__link-cancel" onClick={() => setLinkFrom(null)}>Esc to cancel</button>
+            </span>
+          )}
+        </div>
+      )}
       <div className="ev-map__surface" ref={surfaceRef}>
         <svg className="ev-map__wires" width={size.w} height={size.h}>
           {wires.map((w, i) => {
@@ -209,6 +290,25 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
             )
           })}
         </svg>
+
+        {onChange && wires.filter(w => w.sourceId && w.targetId).map((w, i) => {
+          const target = jobById.get(w.targetId!)
+          if (!target) return null
+          const cond = edgeCondition(target, w.sourceId!)
+          const midY = (w.from.y + w.to.y) / 2
+          return (
+            <button
+              type="button"
+              key={i}
+              className={`ev-map__edge-condition ev-map__edge-condition--${cond}`}
+              style={{ left: (w.from.x + w.to.x) / 2, top: midY }}
+              title="Click to change when this should run"
+              onClick={() => cycleCondition(w.sourceId!, w.targetId!)}
+            >
+              {CONDITION_LABEL[cond]}
+            </button>
+          )
+        })}
 
         <div className="ev-map__rows">
           {graph.triggers.length > 0 && (
@@ -243,6 +343,18 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
                     className="ev-map__card"
                     ref={el => { if (el) cardRefs.current.set(rj.job.id, el); else cardRefs.current.delete(rj.job.id) }}
                   >
+                    {onChange && (
+                      <button
+                        type="button"
+                        className={`ev-map__port${linkFrom === rj.job.id ? ' ev-map__port--selected' : ''}`}
+                        title={
+                          linkFrom === rj.job.id ? 'Click to cancel'
+                          : linkFrom ? `Link ${jobById.get(linkFrom)?.name ?? linkFrom} → ${rj.job.name}`
+                          : 'Click, then click another process to link them'
+                        }
+                        onClick={() => handlePortClick(rj.job.id)}
+                      />
+                    )}
                     <div className="ev-map__card-head">
                       <div className="ev-map__card-name">{rj.job.name}</div>
                       {onEdit && (
@@ -289,7 +401,30 @@ export default function EventsMap({ content, loading, stepEvents, onEdit }: Prop
                     </div>
 
                     {rj.farNeeds.length > 0 && (
-                      <div className="ev-map__card-far">also needs {rj.farNeeds.join(', ')}</div>
+                      <div className="ev-map__card-far">
+                        also needs{' '}
+                        {rj.farNeeds.map((dep, i) => {
+                          const cond = edgeCondition(rj.job, dep)
+                          return (
+                            <span key={dep}>
+                              {i > 0 ? ', ' : ''}
+                              {dep}
+                              {onChange ? (
+                                <button
+                                  type="button"
+                                  className="ev-map__far-condition"
+                                  title="Click to change when this should run"
+                                  onClick={() => cycleCondition(dep, rj.job.id)}
+                                >
+                                  ({CONDITION_LABEL[cond]})
+                                </button>
+                              ) : (
+                                cond !== 'pass' ? ` (${CONDITION_LABEL[cond]})` : ''
+                              )}
+                            </span>
+                          )
+                        })}
+                      </div>
                     )}
 
                     {rj.isTerminal && (

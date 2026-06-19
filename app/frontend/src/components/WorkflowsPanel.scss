@@ -554,11 +554,157 @@
   padding: 24px;
 }
 
+// ── Toolbar: add-process button + linking-mode hint ─────────────────────────
+.ev-map__toolbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--sep);
+  background: var(--app-bg);
+}
+
+.ev-map__add-process {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  color: var(--tab-color-hover);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.ev-map__add-process:hover {
+  background: var(--app-bg);
+  border-color: var(--sep-strong);
+}
+
+.ev-map__link-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--tab-color);
+
+  strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+.ev-map__link-cancel {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--sep);
+  background: transparent;
+  color: var(--tab-color);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.ev-map__link-cancel:hover {
+  background: var(--surface-raised);
+  color: var(--tab-color-hover);
+}
+
 .ev-map__surface {
   position: relative;
   padding: 32px;
   display: inline-block;
   min-width: 100%;
+}
+
+// Clickable badge sitting at a wire's midpoint, showing the run condition
+// for that specific job→job edge. Positioned in surface-relative pixel
+// coordinates measured alongside the wires themselves.
+.ev-map__edge-condition {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--sep-strong);
+  background: var(--app-bg);
+  color: var(--tab-color);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+
+.ev-map__edge-condition:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ev-map__edge-condition--fail {
+  color: var(--color-git-remove);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.ev-map__edge-condition--other {
+  color: var(--color-warning);
+  border-color: rgba(250, 204, 21, 0.4);
+}
+
+.ev-map__far-condition {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-style: italic;
+  color: inherit;
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.ev-map__far-condition:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+// Connector dot at the top-center of a job card. Click one, then click
+// another card's dot, to add a `needs:` edge between them.
+.ev-map__port {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--app-bg);
+  background: var(--sep-strong);
+  cursor: pointer;
+  transition: background .12s, transform .12s;
+}
+
+.ev-map__port:hover {
+  background: var(--accent);
+  transform: translateX(-50%) scale(1.2);
+}
+
+.ev-map__port--selected {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .ev-map__wires {

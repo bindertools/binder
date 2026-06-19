@@ -1,5 +1,12 @@
 import { invoke } from './ipc'
 
+function textToB64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binStr = ''
+  for (let i = 0; i < bytes.length; i++) binStr += String.fromCharCode(bytes[i])
+  return btoa(binStr)
+}
+
 export interface WorkflowLastCommit {
   hash:    string
   author:  string
@@ -40,6 +47,13 @@ export const workflows = {
 
   read: (path: string, file: string) =>
     invoke<WorkflowContent>('workflows.read', { path, file }),
+
+  /** Writes the full YAML content back to a workflow file at an absolute
+   *  path — used by the Events Map's add-process/link/condition editing,
+   *  which goes through the same generic file-write IPC the code editor
+   *  uses rather than a workflows-specific endpoint. */
+  write: (absPath: string, content: string) =>
+    invoke<{ ok: boolean }>('fs.writefile', { path: absPath, content: textToB64(content) }),
 
   checkRunner: () =>
     invoke<RunnerStatus>('workflows.checkRunner', {}),
