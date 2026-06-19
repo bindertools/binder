@@ -534,6 +534,137 @@
   margin-bottom: 4px;
 }
 
+// ── Events map: top-to-bottom rows of rectangular cards joined by vertical
+// wires. A terminal job carries its own pass/fail chips directly, so there's
+// no distant outcome row for a wire to reach past anything to get to.
+.ev-map {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+}
+
+.ev-map__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+.ev-map__surface {
+  position: relative;
+  padding: 32px;
+  display: inline-block;
+  min-width: 100%;
+}
+
+.ev-map__wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ev-map__wire {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.6;
+}
+
+.ev-map__rows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 46px;
+}
+
+.ev-map__row {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.ev-map__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 200px;
+  padding: 11px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--sep);
+  border-top: 2px solid var(--sep-strong);
+  background: var(--surface-raised);
+}
+
+.ev-map__card--trigger {
+  border-top-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.ev-map__card-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.ev-map__card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-map__card--trigger .ev-map__card-name {
+  color: var(--accent);
+}
+
+.ev-map__card-meta {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--tab-color);
+  opacity: 0.5;
+}
+
+.ev-map__card-far {
+  font-size: 10px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.ev-map__card-result {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.ev-map__chip {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.ev-map__chip--pass {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--color-git-add);
+}
+
+.ev-map__chip--fail {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--color-git-remove);
+}
+
 // ── History ────────────────────────────────────────────────────────────────
 .wf-history {
   @extend %wf-scroll;

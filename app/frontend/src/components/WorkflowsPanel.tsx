@@ -7,6 +7,7 @@ import {
 } from '../lib/workflowRunsStore'
 import { Skeleton } from './Skeleton'
 import GpuEditor from './GpuEditor'
+import EventsMap from './EventsMap'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
 import { type PageSidebarNavItem } from './shared/PageSidebarNav'
@@ -629,6 +630,8 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                     </div>
                   </div>
                 )}
+
+                {section === 'events' && <EventsMap content={content} loading={contentLoading} />}
 
                 {section === 'history' && <RunHistory cwd={cwd} file={selected.file} />}
 
