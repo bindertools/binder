@@ -277,9 +277,10 @@ interface RunControlsProps {
   cwd:      string
   workflow: WorkflowFile
   run?:     WorkflowRunRecord
+  onRun?:   () => void
 }
 
-function RunControls({ cwd, workflow, run }: RunControlsProps) {
+function RunControls({ cwd, workflow, run, onRun }: RunControlsProps) {
   const running = run?.status === 'running'
 
   const handleClick = useCallback(() => {
@@ -287,8 +288,9 @@ function RunControls({ cwd, workflow, run }: RunControlsProps) {
       if (run) stopWorkflowRun(run.runId)
     } else {
       startWorkflowRun(cwd, workflow.file, workflow.name)
+      onRun?.()
     }
-  }, [running, run, cwd, workflow.file, workflow.name])
+  }, [running, run, cwd, workflow.file, workflow.name, onRun])
 
   return (
     <div className="wf-run-controls">
@@ -533,7 +535,8 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
     const name = window.prompt('Name for the new process:', 'New process')
     if (!name?.trim()) return
     mutateWorkflow(insertJob(content, name.trim()).content)
-  }, [content, mutateWorkflow])
+    selectSection('code')
+  }, [content, mutateWorkflow, selectSection])
 
   // Drag-resizable divider between the code editor and the events map, both
   // now living side by side in the merged "Code" section.
@@ -661,7 +664,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                   >
                     <EditIcon /> Edit Workflow
                   </button>
-                  <RunControls cwd={cwd} workflow={selected} run={latestRun} />
+                  <RunControls cwd={cwd} workflow={selected} run={latestRun} onRun={() => selectSection('console')} />
                 </div>
               </div>
 
