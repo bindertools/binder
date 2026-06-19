@@ -79,11 +79,28 @@
   white-space: nowrap;
 }
 
-// ── Sub-nav row: run controls (left) + section tabs ────────────────────────
-.wf-detail-subnav {
+// ── Detail bar: section tabs (left) + add process / edit / run (right) ─────
+.wf-detail-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-shrink: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sep);
+}
+
+.wf-detail-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wf-detail-bar__action-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
 }
 
 .wf-run-controls {
@@ -91,9 +108,6 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
-  margin-right: 16px;
-  padding-right: 16px;
-  border-right: 1px solid var(--sep);
 }
 
 .wf-run-btn {
@@ -258,40 +272,6 @@
   border: 1px solid var(--sep);
   background: var(--app-bg);
   overflow: hidden;
-}
-
-.wf-code-events__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--sep);
-  flex-shrink: 0;
-}
-
-.wf-code-events__path {
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--tab-color);
-  opacity: 0.6;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wf-code-events__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.wf-code-events__action-btn {
-  flex-shrink: 0;
-  padding: 6px 12px;
-  font-size: 11.5px;
 }
 
 .wf-code-events__split {

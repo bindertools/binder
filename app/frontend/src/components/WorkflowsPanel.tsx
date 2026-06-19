@@ -635,8 +635,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
             </div>
 
             <div className="wf-detail-body">
-              <div className="wf-detail-subnav">
-                <RunControls cwd={cwd} workflow={selected} run={latestRun} />
+              <div className="wf-detail-bar">
                 <SubNavTabs
                   items={[
                     { id: 'code',    label: 'Code',    icon: <CodeIcon /> },
@@ -646,31 +645,29 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                   activeId={section}
                   onSelect={id => selectSection(id as Section)}
                 />
+                <div className="wf-detail-bar__actions">
+                  <button
+                    className="wf-btn wf-btn--ghost wf-detail-bar__action-btn"
+                    onClick={handleAddProcess}
+                    title="Add a new process to this workflow"
+                  >
+                    <Workflow size={12} strokeWidth={1.8} /> Add process
+                  </button>
+                  <button
+                    className="wf-btn wf-btn--ghost wf-detail-bar__action-btn"
+                    onClick={handleEditWorkflow}
+                    disabled={!onEditWorkflow}
+                    title="Open this workflow file in the code editor"
+                  >
+                    <EditIcon /> Edit Workflow
+                  </button>
+                  <RunControls cwd={cwd} workflow={selected} run={latestRun} />
+                </div>
               </div>
 
               <div className="wf-detail-content">
                 {section === 'code' && (
                   <div className="wf-code-events">
-                    <div className="wf-code-events__bar">
-                      <span className="wf-code-events__path">{selected.path}</span>
-                      <div className="wf-code-events__actions">
-                        <button
-                          className="wf-btn wf-btn--ghost wf-code-events__action-btn"
-                          onClick={handleAddProcess}
-                          title="Add a new process to this workflow"
-                        >
-                          <Workflow size={12} strokeWidth={1.8} /> Add process
-                        </button>
-                        <button
-                          className="wf-btn wf-btn--ghost wf-code-events__action-btn"
-                          onClick={handleEditWorkflow}
-                          disabled={!onEditWorkflow}
-                          title="Open this workflow file in the code editor"
-                        >
-                          <EditIcon /> Edit Workflow
-                        </button>
-                      </div>
-                    </div>
                     <div className="wf-code-events__split" ref={splitRef}>
                       <div className="wf-code-events__pane" style={{ width: `calc(${splitRatio * 100}% - 2px)` }}>
                         {contentLoading ? (
