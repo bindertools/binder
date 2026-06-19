@@ -534,10 +534,20 @@
   margin-bottom: 4px;
 }
 
-// ── Events map: a vertical staged pipeline ──────────────────────────────────
-// Stages run top to bottom; jobs within a stage run in parallel and sit side
-// by side. Sequencing is shown by vertical position, not by drawn edges —
-// there is no coordinate math, no node graph, no lines to route.
+// ── Events map: a clean, minimal box-and-line schematic ─────────────────────
+// Hairline borders, no fill tint, no shadows, no decoration — column
+// position and thin connecting lines carry the entire structure.
+.wf-events-map {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  padding: 8px;
+}
+
 .wf-events-map__loading {
   display: flex;
   flex-direction: column;
@@ -545,235 +555,80 @@
   padding: 20px;
 }
 
-.wf-pipeline {
-  @extend %wf-scroll;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24px 20px 32px;
+// ── Edges: thin, single-weight, muted ───────────────────────────────────
+.wf-events-map__edge {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.2;
 }
 
-.wf-pipeline__connector {
-  width: 2px;
-  height: 22px;
-  background: var(--sep-strong);
-  flex-shrink: 0;
+.wf-events-map__edge--success {
+  stroke: rgba(74, 222, 128, 0.4);
 }
 
-// ── Trigger row ──────────────────────────────────────────────────────────
-.wf-pipeline__triggers {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent-border);
+.wf-events-map__edge--failure {
+  stroke: rgba(248, 113, 113, 0.4);
 }
 
-.wf-pipeline__triggers-icon {
-  display: inline-flex;
-  color: var(--accent);
+.wf-events-map__arrowhead {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.wf-pipeline__triggers-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  opacity: 0.8;
+.wf-events-map__arrowhead--success {
+  stroke: rgba(74, 222, 128, 0.5);
 }
 
-.wf-pipeline__chip {
-  font-size: 11.5px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-  color: var(--accent);
-  background: var(--app-bg);
-  border: 1px solid var(--accent-border);
-  border-radius: var(--r-sm);
-  padding: 2px 8px;
+.wf-events-map__arrowhead--failure {
+  stroke: rgba(248, 113, 113, 0.5);
 }
 
-// ── Stage ────────────────────────────────────────────────────────────────
-.wf-pipeline__stage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  max-width: 720px;
+// ── Node: hairline border only, no fill tint, no shadow ─────────────────
+.wf-events-map__node rect {
+  fill: var(--app-bg);
+  stroke: var(--sep);
+  stroke-width: 1.2;
 }
 
-.wf-pipeline__stage-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 10px;
+.wf-events-map__node--trigger rect {
+  stroke: var(--accent-border);
 }
 
-.wf-pipeline__stage-index {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--tab-color-hover);
-  opacity: 0.7;
+.wf-events-map__node--success rect {
+  stroke: rgba(74, 222, 128, 0.4);
 }
 
-.wf-pipeline__stage-meta {
-  font-size: 11px;
-  color: var(--tab-color);
-  opacity: 0.5;
+.wf-events-map__node--failure rect {
+  stroke: rgba(248, 113, 113, 0.4);
 }
 
-.wf-pipeline__jobs {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-}
-
-// ── Job card ─────────────────────────────────────────────────────────────
-.wf-pipeline__job {
-  flex: 1 1 260px;
-  max-width: 100%;
-  border-radius: var(--r-md);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
-  overflow: hidden;
-}
-
-.wf-pipeline__job-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 11px 14px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-}
-
-.wf-pipeline__job-icon {
-  display: inline-flex;
-  color: var(--tab-color);
-  flex-shrink: 0;
-}
-
-.wf-pipeline__job-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--tab-color-hover);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wf-pipeline__job-spacer {
-  flex: 1;
-  min-width: 8px;
-}
-
-.wf-pipeline__job-needs {
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  color: var(--tab-color);
-  opacity: 0.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wf-pipeline__job-steps {
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  color: var(--tab-color);
-  opacity: 0.55;
-  flex-shrink: 0;
-}
-
-.wf-pipeline__job-chevron {
-  display: inline-flex;
-  color: var(--tab-color);
-  opacity: 0.5;
-  flex-shrink: 0;
-  transition: transform .12s;
-}
-
-.wf-pipeline__job-chevron--open {
-  transform: rotate(180deg);
-}
-
-.wf-pipeline__job--open {
-  border-color: var(--sep-strong);
-}
-
-.wf-pipeline__steps {
-  list-style: none;
-  margin: 0;
-  padding: 2px 14px 12px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  border-top: 1px solid var(--sep);
-  padding-top: 9px;
-
-  li {
-    font-size: 11.5px;
-    color: var(--tab-color);
-    opacity: 0.75;
-    position: relative;
-
-    &::before {
-      content: '';
-      position: absolute;
-      left: -14px;
-      top: 7px;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--sep-strong);
-    }
-  }
-}
-
-// ── Outcome ──────────────────────────────────────────────────────────────
-.wf-pipeline__outcome {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-  max-width: 720px;
-}
-
-.wf-pipeline__outcome-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 12px;
-  border-radius: var(--r-md);
+.wf-events-map__label {
+  fill: var(--tab-color-hover);
+  font-family: var(--font-ui);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
-.wf-pipeline__outcome-card--success {
-  background: rgba(74, 222, 128, 0.1);
-  border: 1px solid rgba(74, 222, 128, 0.3);
-  color: var(--color-git-add);
+.wf-events-map__node--trigger .wf-events-map__label {
+  fill: var(--accent);
 }
 
-.wf-pipeline__outcome-card--failure {
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-  color: var(--color-git-remove);
+.wf-events-map__node--success .wf-events-map__label {
+  fill: var(--color-git-add);
+}
+
+.wf-events-map__node--failure .wf-events-map__label {
+  fill: var(--color-git-remove);
+}
+
+.wf-events-map__sublabel {
+  fill: var(--tab-color);
+  opacity: 0.5;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
 }
 
 // ── History ────────────────────────────────────────────────────────────────
