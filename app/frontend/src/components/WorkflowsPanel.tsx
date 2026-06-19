@@ -19,6 +19,8 @@ interface Props {
   cwd:        string
   active:     boolean
   gpuColors?: GpuEditorColors
+  fontSize?: number
+  indentGuides?: boolean
   onEditWorkflow?: (path: string, line?: number) => void
 }
 
@@ -403,7 +405,7 @@ interface SelectionState {
 // from the global workflow-runs store rather than this panel's own state).
 const lastSelection = new Map<string, SelectionState>()
 
-export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow }: Props) {
+export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, indentGuides, onEditWorkflow }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [checking, setChecking] = useState(false)
@@ -679,6 +681,8 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                           <GpuEditor
                             filePath={`${cwd.replace(/\\/g, '/')}/${selected.path}`}
                             colors={gpuColors}
+                            fontSize={fontSize}
+                            indentGuides={indentGuides}
                             readOnly
                           />
                         )}

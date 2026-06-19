@@ -1536,6 +1536,7 @@ export default function App() {
                 }}
               >
                 <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors}
+                  fontSize={Math.round(13 * currentZoom)} indentGuides={appConfig.indent_guides}
                   onEditWorkflow={(path, line) => handleEditFileInPane(wsId, leafId, path, line)} />
               </div>
             )
