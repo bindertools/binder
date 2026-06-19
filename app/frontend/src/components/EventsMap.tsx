@@ -159,7 +159,7 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
   const handleAddProcess = useCallback(() => {
     if (!onChange) return
     const name = window.prompt('Name for the new process:', 'New process')
-    if (!name || !name.trim()) return
+    if (!name?.trim()) return
     onChange(insertJob(content, name.trim()).content)
   }, [content, onChange])
 
