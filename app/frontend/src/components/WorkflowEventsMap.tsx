@@ -8,6 +8,8 @@ const NODE_H = 56
 const H_GAP  = 104
 const V_GAP  = 34
 const PAD    = 36
+const CHAMFER = 9 // corner cut on the node silhouette
+const VIA     = 3 // half-size of the square pad drawn at each trace endpoint
 const PORT_SPAN = 0.6 // fraction of node height used to fan out multiple ports
 const CORRIDOR_TOP = 40 // gap between the lowest node row and the first bus lane
 const LANE_GAP     = 18 // vertical spacing between stacked bus lanes
@@ -40,41 +42,34 @@ function portOffsets(count: number): number[] {
   return Array.from({ length: count }, (_, i) => start + (span * i) / (count - 1))
 }
 
-/** Builds a rounded elbow ("step") connector between two ports, avoiding the
- *  diagonal-bezier crisscross that makes dense dependency graphs read as spaghetti. */
+/** Builds a sharp right-angle ("circuit trace") connector between two ports —
+ *  no curves, no diagonals, just orthogonal segments like a PCB trace. */
 function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
   const midX = (x1 + x2) / 2
   if (Math.abs(y2 - y1) < 0.5) return `M${x1},${y1} H${x2}`
-  const r = Math.min(8, Math.abs(y2 - y1) / 2, (midX - x1) / 2)
-  const dir = y2 > y1 ? 1 : -1
-  return [
-    `M${x1},${y1}`,
-    `H${midX - r}`,
-    `Q${midX},${y1} ${midX},${y1 + r * dir}`,
-    `V${y2 - r * dir}`,
-    `Q${midX},${y2} ${midX + r},${y2}`,
-    `H${x2}`,
-  ].join(' ')
+  return `M${x1},${y1} H${midX} V${y2} H${x2}`
 }
 
 /** Routes an edge that skips one or more columns through a dedicated
  *  horizontal "bus lane" below all node rows, so it never cuts through an
  *  intermediate column's nodes the way a direct elbow would. */
 function busPath(x1: number, y1: number, x2: number, y2: number, laneY: number): string {
-  const r = 8
-  const dir1 = laneY > y1 ? 1 : -1
-  const dir2 = y2 > laneY ? 1 : -1
   return [
     `M${x1},${y1}`,
-    `H${x1 + CORRIDOR_IN - r}`,
-    `Q${x1 + CORRIDOR_IN},${y1} ${x1 + CORRIDOR_IN},${y1 + r * dir1}`,
-    `V${laneY - r * dir1}`,
-    `Q${x1 + CORRIDOR_IN},${laneY} ${x1 + CORRIDOR_IN + r},${laneY}`,
-    `H${x2 - CORRIDOR_IN - r}`,
-    `Q${x2 - CORRIDOR_IN},${laneY} ${x2 - CORRIDOR_IN},${laneY + r * dir2}`,
-    `V${y2 - r * dir2}`,
-    `Q${x2 - CORRIDOR_IN},${y2} ${x2 - CORRIDOR_IN + r},${y2}`,
+    `H${x1 + CORRIDOR_IN}`,
+    `V${laneY}`,
+    `H${x2 - CORRIDOR_IN}`,
+    `V${y2}`,
     `H${x2}`,
+  ].join(' ')
+}
+
+/** Octagonal "chamfered" node silhouette — a deliberately different shape
+ *  language from a rounded card, closer to a schematic component outline. */
+function chamferPath(w: number, h: number, c: number): string {
+  return [
+    `M${c},0`, `H${w - c}`, `L${w},${c}`, `V${h - c}`,
+    `L${w - c},${h}`, `H${c}`, `L0,${h - c}`, `V${c}`, 'Z',
   ].join(' ')
 }
 
@@ -228,8 +223,8 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
       const path = lane === undefined
         ? elbowPath(x1, y1, x2, y2)
         : busPath(x1, y1, x2, y2, colHeight + CORRIDOR_TOP + lane * LANE_GAP)
-      return { ...e, path }
-    }).filter((e): e is LaidOutEdge & { path: string } => e !== null)
+      return { ...e, path, x1, y1, x2, y2 }
+    }).filter((e): e is LaidOutEdge & { path: string; x1: number; y1: number; x2: number; y2: number } => e !== null)
 
     const width  = columns.length * NODE_W + Math.max(0, columns.length - 1) * H_GAP + PAD * 2
     const height = colHeight + (laneCount > 0 ? CORRIDOR_TOP + laneCount * LANE_GAP : 0) + PAD * 2
@@ -263,36 +258,30 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
     <div className="wf-events-map">
       <svg width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}>
         <defs>
-          {(['neutral', 'success', 'failure'] as const).map(k => (
-            <marker
-              key={k}
-              id={`wf-events-map-arrow-${k}`}
-              viewBox="0 0 8 8"
-              refX="6"
-              refY="4"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto-start-reverse"
-            >
-              <path d="M1,1.2 L6.5,4 L1,6.8" className={`wf-events-map__arrowhead wf-events-map__arrowhead--${k}`} />
-            </marker>
-          ))}
+          <pattern id="wf-events-map-grid" width="22" height="22" patternUnits="userSpaceOnUse">
+            <path d="M0,0 H22 M0,0 V22" className="wf-events-map__grid-line" />
+          </pattern>
         </defs>
+        <rect width={layout.width} height={layout.height} fill="url(#wf-events-map-grid)" />
         <g transform={`translate(${PAD},${PAD})`}>
           {layout.edges.map((e, i) => (
-            <path
-              key={`${e.from}->${e.to}-${i}`}
-              d={e.path}
-              markerEnd={`url(#wf-events-map-arrow-${e.kind})`}
-              className={`wf-events-map__edge wf-events-map__edge--${e.kind}`}
-            />
+            <g key={`${e.from}->${e.to}-${i}`}>
+              <path d={e.path} className={`wf-events-map__edge wf-events-map__edge--${e.kind}`} />
+              <rect
+                x={e.x1 - VIA} y={e.y1 - VIA} width={VIA * 2} height={VIA * 2}
+                className={`wf-events-map__via wf-events-map__via--${e.kind}`}
+              />
+              <rect
+                x={e.x2 - VIA} y={e.y2 - VIA} width={VIA * 2} height={VIA * 2}
+                className={`wf-events-map__via wf-events-map__via--${e.kind}`}
+              />
+            </g>
           ))}
           {layout.nodes.map(n => (
             <g key={n.id} transform={`translate(${n.x},${n.y})`} className={`wf-events-map__node wf-events-map__node--${n.kind}`}>
-              <rect className="wf-events-map__card" width={NODE_W} height={NODE_H} rx={4} />
-              <rect className="wf-events-map__accent" x={0} y={7} width={3} height={NODE_H - 14} rx={1.5} />
-              <text x={16} y={n.sub ? 23 : NODE_H / 2 + 5} className="wf-events-map__label">{truncate(n.label, 23)}</text>
-              {n.sub && <text x={16} y={40} className="wf-events-map__sublabel">{n.sub}</text>}
+              <path className="wf-events-map__card" d={chamferPath(NODE_W, NODE_H, CHAMFER)} />
+              <text x={16} y={n.sub ? 24 : NODE_H / 2 + 4} className="wf-events-map__label">{truncate(n.label, 23).toUpperCase()}</text>
+              {n.sub && <text x={16} y={40} className="wf-events-map__sublabel">{n.sub.toUpperCase()}</text>}
             </g>
           ))}
         </g>
