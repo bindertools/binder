@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Workflow as EventsMapIcon } from 'lucide-react'
 import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
@@ -584,21 +585,18 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
             )}
 
             <div className="wf-detail-header">
-              <div className="wf-detail-header__info">
-                <div className="wf-detail-header__title">{selected.name}</div>
-                <div className="wf-detail-header__path">{selected.path}</div>
-              </div>
-              <RunControls cwd={cwd} workflow={selected} run={latestRun} />
+              <div className="wf-detail-header__title">{selected.name}</div>
             </div>
 
             <div className="wf-detail-body">
-              <div className="flex items-stretch border-b border-sep shrink-0">
+              <div className="wf-detail-subnav">
+                <RunControls cwd={cwd} workflow={selected} run={latestRun} />
                 <SubNavTabs
                   items={[
                     { id: 'code',    label: 'Code',       icon: <CodeIcon /> },
-                    { id: 'events',  label: 'Events Map', icon: <WorkflowIcon /> },
-                    { id: 'history', label: 'History',    icon: <ClockIcon /> },
                     { id: 'console', label: 'Console',    icon: <ConsoleIcon /> },
+                    { id: 'events',  label: 'Events Map', icon: <EventsMapIcon size={14} strokeWidth={1.6} /> },
+                    { id: 'history', label: 'History',    icon: <ClockIcon /> },
                   ]}
                   activeId={section}
                   onSelect={id => selectSection(id as Section)}

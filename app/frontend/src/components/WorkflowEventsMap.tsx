@@ -5,19 +5,77 @@ import './WorkflowsPanel.scss'
 
 const NODE_W = 176
 const NODE_H = 56
-const H_GAP  = 72
-const V_GAP  = 22
+const H_GAP  = 88
+const V_GAP  = 26
 const PAD    = 28
+const PORT_SPAN = 0.6 // fraction of node height used to fan out multiple ports
+const CORRIDOR_TOP = 36 // gap between the lowest node row and the first bus lane
+const LANE_GAP     = 16 // vertical spacing between stacked bus lanes
+const CORRIDOR_IN  = 24 // how far an edge travels horizontally before dropping into the corridor
 
 type NodeKind = 'trigger' | 'job' | 'success' | 'failure'
+type EdgeKind = 'neutral' | 'success' | 'failure'
 
 interface PositionedNode {
   id:    string
   x:     number
   y:     number
+  col:   number
   label: string
   sub?:  string
   kind:  NodeKind
+}
+
+interface LaidOutEdge {
+  from: string
+  to:   string
+  kind: EdgeKind
+}
+
+/** Evenly spaced offsets (as a fraction of node height) for `count` ports, centered. */
+function portOffsets(count: number): number[] {
+  if (count <= 1) return [0.5]
+  const span = PORT_SPAN
+  const start = 0.5 - span / 2
+  return Array.from({ length: count }, (_, i) => start + (span * i) / (count - 1))
+}
+
+/** Builds a rounded elbow ("step") connector between two ports, avoiding the
+ *  diagonal-bezier crisscross that makes dense dependency graphs read as spaghetti. */
+function elbowPath(x1: number, y1: number, x2: number, y2: number): string {
+  const midX = (x1 + x2) / 2
+  if (Math.abs(y2 - y1) < 0.5) return `M${x1},${y1} H${x2}`
+  const r = Math.min(10, Math.abs(y2 - y1) / 2, (midX - x1) / 2)
+  const dir = y2 > y1 ? 1 : -1
+  return [
+    `M${x1},${y1}`,
+    `H${midX - r}`,
+    `Q${midX},${y1} ${midX},${y1 + r * dir}`,
+    `V${y2 - r * dir}`,
+    `Q${midX},${y2} ${midX + r},${y2}`,
+    `H${x2}`,
+  ].join(' ')
+}
+
+/** Routes an edge that skips one or more columns through a dedicated
+ *  horizontal "bus lane" below all node rows, so it never cuts through an
+ *  intermediate column's nodes the way a direct diagonal/elbow would. */
+function busPath(x1: number, y1: number, x2: number, y2: number, laneY: number): string {
+  const r = 10
+  const dir1 = laneY > y1 ? 1 : -1
+  const dir2 = y2 > laneY ? 1 : -1
+  return [
+    `M${x1},${y1}`,
+    `H${x1 + CORRIDOR_IN - r}`,
+    `Q${x1 + CORRIDOR_IN},${y1} ${x1 + CORRIDOR_IN},${y1 + r * dir1}`,
+    `V${laneY - r * dir1}`,
+    `Q${x1 + CORRIDOR_IN},${laneY} ${x1 + CORRIDOR_IN + r},${laneY}`,
+    `H${x2 - CORRIDOR_IN - r}`,
+    `Q${x2 - CORRIDOR_IN},${laneY} ${x2 - CORRIDOR_IN},${laneY + r * dir2}`,
+    `V${y2 - r * dir2}`,
+    `Q${x2 - CORRIDOR_IN},${y2} ${x2 - CORRIDOR_IN + r},${y2}`,
+    `H${x2}`,
+  ].join(' ')
 }
 
 function truncate(s: string, max: number): string {
@@ -100,31 +158,83 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
       const colH = col.length * (NODE_H + V_GAP) - V_GAP
       const offsetY = (colHeight - colH) / 2
       col.forEach((n, ri) => {
-        const node: PositionedNode = { ...n, x, y: offsetY + ri * (NODE_H + V_GAP) }
+        const node: PositionedNode = { ...n, x, y: offsetY + ri * (NODE_H + V_GAP), col: ci }
         nodes.push(node)
         nodeById.set(n.id, node)
       })
     })
 
-    const edges: { from: string; to: string }[] = []
+    const edges: LaidOutEdge[] = []
     if (jobs.length > 0) {
       const rootJobs = jobs.filter(j => (layers.get(j.id) ?? 0) === 0)
-      for (const t of triggers) for (const j of rootJobs) edges.push({ from: `trigger:${t.id}`, to: `job:${j.id}` })
+      for (const t of triggers) for (const j of rootJobs) edges.push({ from: `trigger:${t.id}`, to: `job:${j.id}`, kind: 'neutral' })
       for (const j of jobs) {
         for (const dep of j.needs) {
-          if (jobs.some(jj => jj.id === dep)) edges.push({ from: `job:${dep}`, to: `job:${j.id}` })
+          if (jobs.some(jj => jj.id === dep)) edges.push({ from: `job:${dep}`, to: `job:${j.id}`, kind: 'neutral' })
         }
       }
       for (const j of terminalJobs) {
-        edges.push({ from: `job:${j.id}`, to: 'outcome:success' })
-        edges.push({ from: `job:${j.id}`, to: 'outcome:failure' })
+        edges.push({ from: `job:${j.id}`, to: 'outcome:success', kind: 'success' })
+        edges.push({ from: `job:${j.id}`, to: 'outcome:failure', kind: 'failure' })
       }
     }
 
-    const width  = columns.length * NODE_W + Math.max(0, columns.length - 1) * H_GAP + PAD * 2
-    const height = colHeight + PAD * 2
+    // Fan multiple edges out/in across a node's height instead of funneling
+    // them all through its vertical center — the single biggest contributor
+    // to overlapping, "spaghetti" connectors in dense dependency graphs.
+    const outByNode = new Map<string, LaidOutEdge[]>()
+    const inByNode  = new Map<string, LaidOutEdge[]>()
+    for (const e of edges) {
+      if (!outByNode.has(e.from)) outByNode.set(e.from, [])
+      outByNode.get(e.from)!.push(e)
+      if (!inByNode.has(e.to)) inByNode.set(e.to, [])
+      inByNode.get(e.to)!.push(e)
+    }
+    const exitOffset = new Map<LaidOutEdge, number>()
+    const entryOffset = new Map<LaidOutEdge, number>()
+    for (const [, list] of outByNode) {
+      const sorted = [...list].sort((a, b) => (nodeById.get(a.to)?.y ?? 0) - (nodeById.get(b.to)?.y ?? 0))
+      const offsets = portOffsets(sorted.length)
+      sorted.forEach((e, i) => exitOffset.set(e, offsets[i]))
+    }
+    for (const [, list] of inByNode) {
+      const sorted = [...list].sort((a, b) => (nodeById.get(a.from)?.y ?? 0) - (nodeById.get(b.from)?.y ?? 0))
+      const offsets = portOffsets(sorted.length)
+      sorted.forEach((e, i) => entryOffset.set(e, offsets[i]))
+    }
 
-    return { nodes, nodeById, edges, width, height }
+    // Edges that skip one or more columns get a dedicated bus lane below the
+    // node grid instead of a direct elbow — a direct path's midpoint would
+    // otherwise land inside an intermediate column and cut through whatever
+    // node happens to sit there.
+    const skipEdges = edges
+      .filter(e => {
+        const a = nodeById.get(e.from)
+        const b = nodeById.get(e.to)
+        return !!a && !!b && Math.abs(b.col - a.col) > 1
+      })
+      .sort((e1, e2) => (nodeById.get(e1.from)?.col ?? 0) - (nodeById.get(e2.from)?.col ?? 0))
+    const laneOf = new Map<LaidOutEdge, number>()
+    skipEdges.forEach((e, i) => laneOf.set(e, i))
+    const laneCount = skipEdges.length
+
+    const routedEdges = edges.map(e => {
+      const a = nodeById.get(e.from)
+      const b = nodeById.get(e.to)
+      if (!a || !b) return null
+      const x1 = a.x + NODE_W, y1 = a.y + NODE_H * (exitOffset.get(e) ?? 0.5)
+      const x2 = b.x,          y2 = b.y + NODE_H * (entryOffset.get(e) ?? 0.5)
+      const lane = laneOf.get(e)
+      const path = lane === undefined
+        ? elbowPath(x1, y1, x2, y2)
+        : busPath(x1, y1, x2, y2, colHeight + CORRIDOR_TOP + lane * LANE_GAP)
+      return { ...e, path }
+    }).filter((e): e is LaidOutEdge & { path: string } => e !== null)
+
+    const width  = columns.length * NODE_W + Math.max(0, columns.length - 1) * H_GAP + PAD * 2
+    const height = colHeight + (laneCount > 0 ? CORRIDOR_TOP + laneCount * LANE_GAP : 0) + PAD * 2
+
+    return { nodes, nodeById, edges: routedEdges, width, height }
   }, [graph])
 
   if (loading) {
@@ -153,24 +263,16 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
     <div className="wf-events-map">
       <svg width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}>
         <g transform={`translate(${PAD},${PAD})`}>
-          {layout.edges.map((e, i) => {
-            const a = layout.nodeById.get(e.from)
-            const b = layout.nodeById.get(e.to)
-            if (!a || !b) return null
-            const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2
-            const x2 = b.x,          y2 = b.y + NODE_H / 2
-            const mx = (x1 + x2) / 2
-            return (
-              <path
-                key={`${e.from}->${e.to}-${i}`}
-                d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
-                className="wf-events-map__edge"
-              />
-            )
-          })}
+          {layout.edges.map((e, i) => (
+            <path
+              key={`${e.from}->${e.to}-${i}`}
+              d={e.path}
+              className={`wf-events-map__edge wf-events-map__edge--${e.kind}`}
+            />
+          ))}
           {layout.nodes.map(n => (
             <g key={n.id} transform={`translate(${n.x},${n.y})`} className={`wf-events-map__node wf-events-map__node--${n.kind}`}>
-              <rect width={NODE_W} height={NODE_H} rx={10} />
+              <rect width={NODE_W} height={NODE_H} rx={6} />
               <text x={14} y={n.sub ? 23 : NODE_H / 2 + 5} className="wf-events-map__label">{truncate(n.label, 22)}</text>
               {n.sub && <text x={14} y={41} className="wf-events-map__sublabel">{n.sub}</text>}
             </g>

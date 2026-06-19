@@ -61,53 +61,39 @@
   border: 1px solid var(--sep);
 }
 
-// ── Detail header: name + path + run controls only ────────────────────────
+// ── Detail header: name + path, flat — no card chrome ──────────────────────
 .wf-detail-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 22px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
+  align-items: baseline;
+  gap: 10px;
   flex-shrink: 0;
-}
-
-.wf-detail-header__info {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 
 .wf-detail-header__title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--tab-color-hover);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.wf-detail-header__path {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  opacity: 0.5;
-  color: var(--tab-color);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+// ── Sub-nav row: run controls (left) + section tabs ────────────────────────
+.wf-detail-subnav {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-// ── Run controls (visually separated from name/path) ──────────────────────
 .wf-run-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
-  padding-left: 18px;
-  border-left: 1px solid var(--sep);
+  margin-right: 16px;
+  padding-right: 16px;
+  border-right: 1px solid var(--sep);
 }
 
 .wf-run-btn {
@@ -117,11 +103,12 @@
   display: inline-flex;
   align-items: center;
   border: 0;
-  border-radius: var(--r-md);
-  padding: 10px 20px;
-  font-size: 12.5px;
+  border-radius: var(--r-sm);
+  padding: 6px 14px;
+  font-size: 12px;
   font-weight: 700;
   font-family: inherit;
+  line-height: 1.4;
   color: #fff;
   cursor: pointer;
   background: var(--accent);
@@ -570,6 +557,14 @@
   fill: none;
   stroke: var(--sep-strong);
   stroke-width: 1.5;
+}
+
+.wf-events-map__edge--success {
+  stroke: rgba(74, 222, 128, 0.45);
+}
+
+.wf-events-map__edge--failure {
+  stroke: rgba(248, 113, 113, 0.45);
 }
 
 .wf-events-map__node rect {
