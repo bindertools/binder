@@ -706,12 +706,22 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
                 {section === 'console' && (
                   latestRun ? (
                     <div className="wf-console">
-                      <StepTimeline events={latestRun.stepEvents} />
-                      <OutputCard
-                        output={latestRun.output}
-                        running={latestRun.status === 'running'}
-                        preparing={latestRun.status === 'running' && latestRun.output === ''}
-                      />
+                      <div className="wf-console__split">
+                        <div className="wf-console__pane wf-console__pane--output">
+                          <OutputCard
+                            output={latestRun.output}
+                            running={latestRun.status === 'running'}
+                            preparing={latestRun.status === 'running' && latestRun.output === ''}
+                          />
+                        </div>
+                        <div className="wf-console__pane wf-console__pane--steps">
+                          {latestRun.stepEvents.length > 0 ? (
+                            <StepTimeline events={latestRun.stepEvents} />
+                          ) : (
+                            <div className="wf-output-card__placeholder">Waiting for step output…</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="wf-console">
