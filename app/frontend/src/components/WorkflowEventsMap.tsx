@@ -289,7 +289,8 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
           ))}
           {layout.nodes.map(n => (
             <g key={n.id} transform={`translate(${n.x},${n.y})`} className={`wf-events-map__node wf-events-map__node--${n.kind}`}>
-              <rect width={NODE_W} height={NODE_H} rx={4} />
+              <rect className="wf-events-map__card" width={NODE_W} height={NODE_H} rx={4} />
+              <rect className="wf-events-map__accent" x={0} y={7} width={3} height={NODE_H - 14} rx={1.5} />
               <text x={16} y={n.sub ? 23 : NODE_H / 2 + 5} className="wf-events-map__label">{truncate(n.label, 23)}</text>
               {n.sub && <text x={16} y={40} className="wf-events-map__sublabel">{n.sub}</text>}
             </g>

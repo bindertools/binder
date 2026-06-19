@@ -586,30 +586,48 @@
   stroke: rgba(248, 113, 113, 0.5);
 }
 
-// ── Node: hairline border only, no fill tint, no shadow ─────────────────
-.wf-events-map__node rect {
-  fill: var(--app-bg);
+// ── Node: a real (flat) surface, lifted off the canvas by color alone — no
+// shadow, no gradient — plus a short colored bar that identifies the kind
+// at a glance instead of making you read the label first ──────────────────
+.wf-events-map__card {
+  fill: var(--surface-raised);
   stroke: var(--sep);
-  stroke-width: 1.2;
+  stroke-width: 1.3;
 }
 
-.wf-events-map__node--trigger rect {
+.wf-events-map__accent {
+  fill: var(--sep-strong);
+}
+
+.wf-events-map__node--trigger .wf-events-map__card {
   stroke: var(--accent-border);
 }
 
-.wf-events-map__node--success rect {
+.wf-events-map__node--trigger .wf-events-map__accent {
+  fill: var(--accent);
+}
+
+.wf-events-map__node--success .wf-events-map__card {
   stroke: rgba(74, 222, 128, 0.4);
 }
 
-.wf-events-map__node--failure rect {
+.wf-events-map__node--success .wf-events-map__accent {
+  fill: var(--color-git-add);
+}
+
+.wf-events-map__node--failure .wf-events-map__card {
   stroke: rgba(248, 113, 113, 0.4);
+}
+
+.wf-events-map__node--failure .wf-events-map__accent {
+  fill: var(--color-git-remove);
 }
 
 .wf-events-map__label {
   fill: var(--tab-color-hover);
   font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .wf-events-map__node--trigger .wf-events-map__label {
@@ -626,7 +644,7 @@
 
 .wf-events-map__sublabel {
   fill: var(--tab-color);
-  opacity: 0.5;
+  opacity: 0.6;
   font-family: var(--font-mono);
   font-size: 10.5px;
 }
