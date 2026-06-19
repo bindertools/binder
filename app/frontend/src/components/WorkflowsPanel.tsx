@@ -531,7 +531,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
 
   const handleAddProcess = useCallback(() => {
     const name = window.prompt('Name for the new process:', 'New process')
-    if (!name || !name.trim()) return
+    if (!name?.trim()) return
     mutateWorkflow(insertJob(content, name.trim()).content)
   }, [content, mutateWorkflow])
 
