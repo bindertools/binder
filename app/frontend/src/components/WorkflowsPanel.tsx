@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Workflow as EventsMapIcon } from 'lucide-react'
+import { Workflow } from 'lucide-react'
 import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
   type WorkflowRunRecord,
 } from '../lib/workflowRunsStore'
+import { insertJob } from '../lib/workflowGraph'
 import { Skeleton } from './Skeleton'
 import GpuEditor from './GpuEditor'
 import EventsMap from './EventsMap'
@@ -387,7 +388,7 @@ function RunHistory({ cwd, file }: { cwd: string; file: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type Section = 'code' | 'events' | 'history' | 'console'
+type Section = 'code' | 'history' | 'console'
 
 interface SelectionState {
   file:    string
@@ -528,6 +529,33 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
     })
   }, [cwd, selected])
 
+  const handleAddProcess = useCallback(() => {
+    const name = window.prompt('Name for the new process:', 'New process')
+    if (!name || !name.trim()) return
+    mutateWorkflow(insertJob(content, name.trim()).content)
+  }, [content, mutateWorkflow])
+
+  // Drag-resizable divider between the code editor and the events map, both
+  // now living side by side in the merged "Code" section.
+  const [splitRatio, setSplitRatio] = useState(0.45)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const container = splitRef.current
+    if (!container) return
+    const onMove = (mv: MouseEvent) => {
+      const rect = container.getBoundingClientRect()
+      const ratio = (mv.clientX - rect.left) / rect.width
+      setSplitRatio(Math.max(0.2, Math.min(0.8, ratio)))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
   const latestRun = useLatestRun(allRuns, cwd, selected?.file)
   const bashUnavailable = runnerStatus !== null && runnerStatus.bash.available === false
 
@@ -611,10 +639,9 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
                 <RunControls cwd={cwd} workflow={selected} run={latestRun} />
                 <SubNavTabs
                   items={[
-                    { id: 'code',    label: 'Code',       icon: <CodeIcon /> },
-                    { id: 'console', label: 'Console',    icon: <ConsoleIcon /> },
-                    { id: 'events',  label: 'Events Map', icon: <EventsMapIcon size={14} strokeWidth={1.6} /> },
-                    { id: 'history', label: 'History',    icon: <ClockIcon /> },
+                    { id: 'code',    label: 'Code',    icon: <CodeIcon /> },
+                    { id: 'console', label: 'Console', icon: <ConsoleIcon /> },
+                    { id: 'history', label: 'History', icon: <ClockIcon /> },
                   ]}
                   activeId={section}
                   onSelect={id => selectSection(id as Section)}
@@ -623,40 +650,51 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, onEditWorkflow 
 
               <div className="wf-detail-content">
                 {section === 'code' && (
-                  <div className="wf-code-card">
-                    <div className="wf-code-card__header">
-                      <span className="wf-code-card__path">{selected.path}</span>
-                      <button
-                        className="wf-btn wf-btn--ghost wf-code-card__edit-btn"
-                        onClick={handleEditWorkflow}
-                        disabled={!onEditWorkflow}
-                        title="Open this workflow file in the code editor"
-                      >
-                        <EditIcon /> Edit Workflow
-                      </button>
+                  <div className="wf-code-events">
+                    <div className="wf-code-events__bar">
+                      <span className="wf-code-events__path">{selected.path}</span>
+                      <div className="wf-code-events__actions">
+                        <button
+                          className="wf-btn wf-btn--ghost wf-code-events__action-btn"
+                          onClick={handleAddProcess}
+                          title="Add a new process to this workflow"
+                        >
+                          <Workflow size={12} strokeWidth={1.8} /> Add process
+                        </button>
+                        <button
+                          className="wf-btn wf-btn--ghost wf-code-events__action-btn"
+                          onClick={handleEditWorkflow}
+                          disabled={!onEditWorkflow}
+                          title="Open this workflow file in the code editor"
+                        >
+                          <EditIcon /> Edit Workflow
+                        </button>
+                      </div>
                     </div>
-                    <div className="wf-code-card__body">
-                      {contentLoading ? (
-                        <CodeSkeleton />
-                      ) : (
-                        <GpuEditor
-                          filePath={`${cwd.replace(/\\/g, '/')}/${selected.path}`}
-                          colors={gpuColors}
-                          readOnly
+                    <div className="wf-code-events__split" ref={splitRef}>
+                      <div className="wf-code-events__pane" style={{ width: `calc(${splitRatio * 100}% - 2px)` }}>
+                        {contentLoading ? (
+                          <CodeSkeleton />
+                        ) : (
+                          <GpuEditor
+                            filePath={`${cwd.replace(/\\/g, '/')}/${selected.path}`}
+                            colors={gpuColors}
+                            readOnly
+                          />
+                        )}
+                      </div>
+                      <div className="wf-code-events__divider" onMouseDown={handleDividerMouseDown} />
+                      <div className="wf-code-events__pane" style={{ width: `calc(${(1 - splitRatio) * 100}% - 2px)` }}>
+                        <EventsMap
+                          content={content}
+                          loading={contentLoading}
+                          stepEvents={latestRun?.stepEvents}
+                          onEdit={onEditWorkflow ? jumpToLine : undefined}
+                          onChange={mutateWorkflow}
                         />
-                      )}
+                      </div>
                     </div>
                   </div>
-                )}
-
-                {section === 'events' && (
-                  <EventsMap
-                    content={content}
-                    loading={contentLoading}
-                    stepEvents={latestRun?.stepEvents}
-                    onEdit={onEditWorkflow ? jumpToLine : undefined}
-                    onChange={mutateWorkflow}
-                  />
                 )}
 
                 {section === 'history' && <RunHistory cwd={cwd} file={selected.file} />}

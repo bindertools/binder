@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { Pencil, Plus, Workflow } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import {
-  parseWorkflowYaml, insertJob, linkJobs, setJobCondition, edgeCondition,
+  parseWorkflowYaml, linkJobs, setJobCondition, edgeCondition,
   type WorkflowJobNode, type LinkCondition,
 } from '../lib/workflowGraph'
 import type { WorkflowStepEvent } from '../lib/workflows'
@@ -237,12 +237,34 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
   const [linkFrom, setLinkFrom] = useState<string | null>(null)
   const [customModal, setCustomModal] = useState<CustomConditionState | null>(null)
 
-  const handleAddProcess = useCallback(() => {
-    if (!onChange) return
-    const name = window.prompt('Name for the new process:', 'New process')
-    if (!name?.trim()) return
-    onChange(insertJob(content, name.trim()).content)
-  }, [content, onChange])
+  // Drag-to-pan, like a map: click empty canvas space and drag to reveal
+  // parts of a large workflow that scrolled out of view. Excludes drags
+  // starting on cards/buttons so clicking a port, pencil, or badge still works.
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+
+  const handleViewportMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, .ev-map__card')) return
+    panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+    setIsPanning(true)
+  }, [pan])
+
+  useEffect(() => {
+    if (!isPanning) return
+    const onMove = (e: MouseEvent) => {
+      const start = panStart.current
+      if (!start) return
+      setPan({ x: start.panX + (e.clientX - start.x), y: start.panY + (e.clientY - start.y) })
+    }
+    const onUp = () => { setIsPanning(false); panStart.current = null }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [isPanning])
 
   const handlePortClick = useCallback((jobId: string) => {
     if (!onChange) return
@@ -349,20 +371,23 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
 
   return (
     <div className="ev-map">
-      {onChange && (
-        <div className="ev-map__toolbar">
-          <button type="button" className="ev-map__add-process" onClick={handleAddProcess}>
-            <Workflow size={12} strokeWidth={1.8} /> Add process
-          </button>
-          {linkFrom && (
-            <span className="ev-map__link-hint">
-              Click another process's dot to link from <strong>{jobById.get(linkFrom)?.name ?? linkFrom}</strong>
-              <button type="button" className="ev-map__link-cancel" onClick={() => setLinkFrom(null)}>Esc to cancel</button>
-            </span>
-          )}
+      {linkFrom && (
+        <div className="ev-map__link-hint-float">
+          <span className="ev-map__link-hint">
+            Click another process's dot to link from <strong>{jobById.get(linkFrom)?.name ?? linkFrom}</strong>
+            <button type="button" className="ev-map__link-cancel" onClick={() => setLinkFrom(null)}>Esc to cancel</button>
+          </span>
         </div>
       )}
-      <div className="ev-map__surface" ref={surfaceRef}>
+      <div
+        className={`ev-map__viewport${isPanning ? ' ev-map__viewport--panning' : ''}`}
+        onMouseDown={handleViewportMouseDown}
+      >
+        <div
+          className="ev-map__surface"
+          ref={surfaceRef}
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+        >
         <svg className="ev-map__wires" width={size.w} height={size.h}>
           {wires.map((w, i) => {
             const midY = (w.from.y + w.to.y) / 2
@@ -525,6 +550,7 @@ export default function EventsMap({ content, loading, stepEvents, onEdit, onChan
               })}
             </div>
           ))}
+        </div>
         </div>
       </div>
 

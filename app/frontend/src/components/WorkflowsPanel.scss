@@ -249,7 +249,7 @@
 }
 
 // ── Code card ──────────────────────────────────────────────────────────────
-.wf-code-card {
+.wf-code-events {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -260,7 +260,7 @@
   overflow: hidden;
 }
 
-.wf-code-card__header {
+.wf-code-events__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -270,7 +270,7 @@
   flex-shrink: 0;
 }
 
-.wf-code-card__path {
+.wf-code-events__path {
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -281,15 +281,44 @@
   white-space: nowrap;
 }
 
-.wf-code-card__edit-btn {
+.wf-code-events__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wf-code-events__action-btn {
   flex-shrink: 0;
   padding: 6px 12px;
   font-size: 11.5px;
 }
 
-.wf-code-card__body {
+.wf-code-events__split {
   flex: 1;
   min-height: 0;
+  display: flex;
+}
+
+.wf-code-events__pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wf-code-events__divider {
+  flex-shrink: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: var(--sep);
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: rgba(10, 132, 255, 0.45);
+  }
 }
 
 // ── Run view ───────────────────────────────────────────────────────────────
@@ -538,12 +567,11 @@
 // wires. A terminal job carries its own pass/fail chips directly, so there's
 // no distant outcome row for a wire to reach past anything to get to.
 .ev-map {
-  @extend %wf-scroll;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--sep);
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--app-bg);
 }
 
@@ -554,46 +582,47 @@
   padding: 24px;
 }
 
-// ── Toolbar: add-process button + linking-mode hint ─────────────────────────
-.ev-map__toolbar {
-  position: sticky;
-  top: 0;
-  left: 0;
-  z-index: 2;
+// ── Pannable viewport: drag anywhere on the empty canvas to reveal jobs
+// that scrolled out of view in a large workflow, like dragging a map. ──────
+.ev-map__viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--sep);
-  background: var(--app-bg);
+  align-items: flex-start;
+  justify-content: center;
+  cursor: grab;
+  user-select: none;
 }
 
-.ev-map__add-process {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 6px 12px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--sep);
-  background: var(--surface-raised);
-  color: var(--tab-color-hover);
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .12s, border-color .12s;
+.ev-map__viewport--panning {
+  cursor: grabbing;
 }
 
-.ev-map__add-process:hover {
-  background: var(--app-bg);
-  border-color: var(--sep-strong);
+// Floating linking-mode hint, overlaid on top of the canvas rather than a
+// full toolbar row, since "Add process" now lives in the shared bar above.
+.ev-map__link-hint-float {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
 }
 
 .ev-map__link-hint {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay);
   font-size: 11.5px;
   color: var(--tab-color);
 
@@ -615,15 +644,14 @@
 }
 
 .ev-map__link-cancel:hover {
-  background: var(--surface-raised);
+  background: var(--app-bg);
   color: var(--tab-color-hover);
 }
 
 .ev-map__surface {
   position: relative;
+  flex-shrink: 0;
   padding: 32px;
-  display: inline-block;
-  min-width: 100%;
 }
 
 // Clickable badge sitting at a wire's midpoint, showing the run condition
