@@ -41,7 +41,14 @@ export interface WorkflowJobNode {
   needsBlockEndLine?: number
   /** Line of an existing `if:` key, if present. */
   ifLine?: number
-  /** The existing `if:` value, with any `${{ }}` wrapper stripped. */
+  /** Last line occupied by the `if:` value — equal to `ifLine` for a plain
+   *  single-line value, or the last continuation line when it's a block
+   *  scalar (`if: >-` / `if: |`) spanning multiple lines. Edits must replace
+   *  this whole range, not just `ifLine`, or the continuation lines are left
+   *  behind as orphaned, unparseable text. */
+  ifEndLine?: number
+  /** The existing `if:` value, with any `${{ }}` wrapper and block-scalar
+   *  indicator stripped, and continuation lines folded into one line. */
   ifExpr?: string
 }
 
@@ -261,6 +268,7 @@ function parseJobs(lines: Line[]): JobsParseResult {
     let needsStyle: 'scalar' | 'flow' | 'block' | undefined
     let needsBlockEndLine: number | undefined
     let ifLine: number | undefined
+    let ifEndLine: number | undefined
     let ifExpr: string | undefined
 
     for (const c of directJobChildren) {
@@ -269,7 +277,17 @@ function parseJobs(lines: Line[]): JobsParseResult {
         name = unquote(value)
       } else if (key === 'if') {
         ifLine = c.lineNo
-        ifExpr = value.replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+        if (/^[|>][-+0-9]*$/.test(value.trim())) {
+          // Block scalar (`if: >-`, `if: |`, etc.) — its value is every
+          // deeper-indented line that follows, not the text after the colon.
+          const cIdx = jobChildren.indexOf(c)
+          const ifBlock = blockChildren(jobChildren, cIdx)
+          ifEndLine = ifBlock.length > 0 ? ifBlock[ifBlock.length - 1].lineNo : c.lineNo
+          ifExpr = ifBlock.map(l => l.text.trim()).join(' ').replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+        } else {
+          ifEndLine = c.lineNo
+          ifExpr = value.replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+        }
       } else if (key === 'needs') {
         needsLine = c.lineNo
         if (value.startsWith('[')) {
@@ -303,7 +321,7 @@ function parseJobs(lines: Line[]): JobsParseResult {
     jobs.push({
       id: jobId, name, needs, steps, line: jobLine.lineNo, stepsInsertLine,
       bodyInsertLine: jobLine.lineNo + 1,
-      needsLine, needsStyle, needsBlockEndLine, ifLine, ifExpr,
+      needsLine, needsStyle, needsBlockEndLine, ifLine, ifEndLine, ifExpr,
     })
   }
 
@@ -409,13 +427,18 @@ export function setJobCondition(content: string, jobId: string, expr: string | u
   if (!job) return content
 
   const lines = content.split(/\r?\n/)
+  // Block-scalar `if:` values span ifLine..ifEndLine — the whole range must
+  // be removed/replaced together, or its continuation lines are left behind
+  // as orphaned text that breaks the file's YAML.
+  const ifSpan = job.ifLine !== undefined ? (job.ifEndLine ?? job.ifLine) - job.ifLine + 1 : 0
+
   if (expr === undefined) {
-    if (job.ifLine !== undefined) lines.splice(job.ifLine - 1, 1)
+    if (job.ifLine !== undefined) lines.splice(job.ifLine - 1, ifSpan)
     return lines.join('\n')
   }
 
   const text = `${' '.repeat(graph.jobBodyIndent)}if: \${{ ${expr} }}`
-  if (job.ifLine !== undefined) lines[job.ifLine - 1] = text
+  if (job.ifLine !== undefined) lines.splice(job.ifLine - 1, ifSpan, text)
   else lines.splice(job.bodyInsertLine - 1, 0, text)
   return lines.join('\n')
 }
