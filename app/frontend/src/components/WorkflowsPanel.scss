@@ -535,6 +535,8 @@
 }
 
 // ── Events map ─────────────────────────────────────────────────────────────
+// A dotted "canvas" with floating, drop-shadowed node cards — closer to a
+// schematic/whiteboard than the bordered, flat-tinted boxes this replaced.
 .wf-events-map {
   @extend %wf-scroll;
   flex: 1;
@@ -543,7 +545,11 @@
   border-radius: var(--r-lg);
   border: 1px solid var(--sep);
   background: var(--app-bg);
-  padding: 4px;
+}
+
+.wf-events-map__dot {
+  fill: var(--sep-strong);
+  opacity: 0.5;
 }
 
 .wf-events-map__loading {
@@ -553,39 +559,99 @@
   padding: 20px;
 }
 
+// ── Edges: thin, arrow-terminated, lifted off the canvas with their own glow ─
 .wf-events-map__edge {
   fill: none;
   stroke: var(--sep-strong);
-  stroke-width: 1.5;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
 
 .wf-events-map__edge--success {
-  stroke: rgba(74, 222, 128, 0.45);
+  stroke: rgba(74, 222, 128, 0.55);
 }
 
 .wf-events-map__edge--failure {
-  stroke: rgba(248, 113, 113, 0.45);
+  stroke: rgba(248, 113, 113, 0.55);
 }
 
-.wf-events-map__node rect {
+.wf-events-map__arrowhead {
+  fill: var(--sep-strong);
+}
+
+.wf-events-map__arrowhead--success {
+  fill: rgba(74, 222, 128, 0.55);
+}
+
+.wf-events-map__arrowhead--failure {
+  fill: rgba(248, 113, 113, 0.55);
+}
+
+// ── Node cards: neutral card + a colored icon badge carries the kind,
+// instead of tinting the whole card ────────────────────────────────────────
+.wf-events-map__node {
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.28));
+}
+
+.wf-events-map__card {
   fill: var(--surface-raised);
   stroke: var(--sep);
   stroke-width: 1.5;
 }
 
-.wf-events-map__node--trigger rect {
+.wf-events-map__icon-bg {
+  fill: var(--app-bg);
+  stroke: var(--sep-strong);
+  stroke-width: 1.5;
+}
+
+.wf-events-map__icon {
+  fill: none;
+  stroke: var(--tab-color);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wf-events-map__node--trigger .wf-events-map__icon-bg {
   fill: var(--accent-dim);
   stroke: var(--accent-border);
 }
 
-.wf-events-map__node--success rect {
-  fill: rgba(74, 222, 128, 0.1);
-  stroke: rgba(74, 222, 128, 0.35);
+.wf-events-map__node--trigger .wf-events-map__icon {
+  fill: var(--accent);
+  stroke: var(--accent);
 }
 
-.wf-events-map__node--failure rect {
-  fill: rgba(248, 113, 113, 0.1);
-  stroke: rgba(248, 113, 113, 0.35);
+.wf-events-map__node--job .wf-events-map__icon {
+  fill: var(--tab-color);
+  stroke: var(--tab-color);
+}
+
+.wf-events-map__node--success .wf-events-map__icon-bg {
+  fill: rgba(74, 222, 128, 0.12);
+  stroke: rgba(74, 222, 128, 0.4);
+}
+
+.wf-events-map__node--success .wf-events-map__icon {
+  stroke: var(--color-git-add);
+}
+
+.wf-events-map__node--success .wf-events-map__card {
+  stroke: rgba(74, 222, 128, 0.3);
+}
+
+.wf-events-map__node--failure .wf-events-map__icon-bg {
+  fill: rgba(248, 113, 113, 0.12);
+  stroke: rgba(248, 113, 113, 0.4);
+}
+
+.wf-events-map__node--failure .wf-events-map__icon {
+  stroke: var(--color-git-remove);
+}
+
+.wf-events-map__node--failure .wf-events-map__card {
+  stroke: rgba(248, 113, 113, 0.3);
 }
 
 .wf-events-map__label {
@@ -610,8 +676,8 @@
 .wf-events-map__sublabel {
   fill: var(--tab-color);
   opacity: 0.55;
-  font-family: var(--font-ui);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
 }
 
 // ── History ────────────────────────────────────────────────────────────────

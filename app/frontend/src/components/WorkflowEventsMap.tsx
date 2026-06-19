@@ -3,11 +3,13 @@ import { parseWorkflowYaml, type WorkflowJobNode } from '../lib/workflowGraph'
 import { Skeleton } from './Skeleton'
 import './WorkflowsPanel.scss'
 
-const NODE_W = 176
-const NODE_H = 56
+const NODE_W = 196
+const NODE_H = 60
 const H_GAP  = 88
 const V_GAP  = 26
-const PAD    = 28
+const PAD    = 32
+const ICON_R = 13 // radius of the kind icon badge
+const ICON_CX = 24 // badge center x, relative to node origin
 const PORT_SPAN = 0.6 // fraction of node height used to fan out multiple ports
 const CORRIDOR_TOP = 36 // gap between the lowest node row and the first bus lane
 const LANE_GAP     = 16 // vertical spacing between stacked bus lanes
@@ -80,6 +82,21 @@ function busPath(x1: number, y1: number, x2: number, y2: number, laneY: number):
 
 function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
+/** Small stroke-based glyph drawn inside each node's icon badge, centered on (0,0). */
+function NodeGlyph({ kind }: { kind: NodeKind }) {
+  switch (kind) {
+    case 'trigger':
+      return <path d="M1.5,-6 L-4,1 H-0.5 L-1.5,6 L4,-1 H0.5 Z" />
+    case 'success':
+      return <path d="M-4.5,0.5 L-1.5,4 L5,-4.5" />
+    case 'failure':
+      return <path d="M-4,-4 L4,4 M4,-4 L-4,4" />
+    case 'job':
+    default:
+      return <path d="M-3,-5 L5,0 L-3,5 Z" />
+  }
 }
 
 /** Longest dependency chain ending at each job (0 = no `needs`). */
@@ -262,19 +279,48 @@ export default function WorkflowEventsMap({ content, loading }: Props) {
   return (
     <div className="wf-events-map">
       <svg width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`}>
+        <defs>
+          <pattern id="wf-events-map-dots" width="18" height="18" patternUnits="userSpaceOnUse">
+            <circle cx="1.5" cy="1.5" r="1.5" className="wf-events-map__dot" />
+          </pattern>
+          {(['neutral', 'success', 'failure'] as const).map(k => (
+            <marker
+              key={k}
+              id={`wf-events-map-arrow-${k}`}
+              viewBox="0 0 8 8"
+              refX="6.5"
+              refY="4"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0.5 L7,4 L0,7.5 Z" className={`wf-events-map__arrowhead wf-events-map__arrowhead--${k}`} />
+            </marker>
+          ))}
+        </defs>
+        <rect width={layout.width} height={layout.height} fill="url(#wf-events-map-dots)" />
         <g transform={`translate(${PAD},${PAD})`}>
           {layout.edges.map((e, i) => (
             <path
               key={`${e.from}->${e.to}-${i}`}
               d={e.path}
+              markerEnd={`url(#wf-events-map-arrow-${e.kind})`}
               className={`wf-events-map__edge wf-events-map__edge--${e.kind}`}
             />
           ))}
           {layout.nodes.map(n => (
             <g key={n.id} transform={`translate(${n.x},${n.y})`} className={`wf-events-map__node wf-events-map__node--${n.kind}`}>
-              <rect width={NODE_W} height={NODE_H} rx={6} />
-              <text x={14} y={n.sub ? 23 : NODE_H / 2 + 5} className="wf-events-map__label">{truncate(n.label, 22)}</text>
-              {n.sub && <text x={14} y={41} className="wf-events-map__sublabel">{n.sub}</text>}
+              <rect className="wf-events-map__card" width={NODE_W} height={NODE_H} rx={10} />
+              <circle className="wf-events-map__icon-bg" cx={ICON_CX} cy={NODE_H / 2} r={ICON_R} />
+              <g transform={`translate(${ICON_CX},${NODE_H / 2})`} className="wf-events-map__icon">
+                <NodeGlyph kind={n.kind} />
+              </g>
+              <text x={ICON_CX + ICON_R + 12} y={n.sub ? NODE_H / 2 - 6 : NODE_H / 2 + 5} className="wf-events-map__label">
+                {truncate(n.label, 20)}
+              </text>
+              {n.sub && (
+                <text x={ICON_CX + ICON_R + 12} y={NODE_H / 2 + 14} className="wf-events-map__sublabel">{n.sub}</text>
+              )}
             </g>
           ))}
         </g>
