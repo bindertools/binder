@@ -296,12 +296,6 @@ function RunControls({ cwd, workflow, run, onRun }: RunControlsProps) {
 
   return (
     <div className="wf-run-controls">
-      {!running && run && (
-        <span className={`wf-pill ${run.status === 'success' ? 'wf-pill--success' : 'wf-pill--failure'}`}>
-          {run.status === 'success' ? <CheckIcon /> : <CrossIcon />}
-          {run.status === 'success' ? 'Passed' : 'Failed'}
-        </span>
-      )}
       <button
         onClick={handleClick}
         className={`wf-run-btn${running ? ' wf-run-btn--running' : ''}`}
