@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px;
   background: var(--app-bg);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -12,7 +14,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--sep);
   flex-shrink: 0;
 }
@@ -32,21 +34,6 @@
 }
 .ports__filter::placeholder { color: var(--info-bar-color); }
 .ports__filter:focus { border-color: var(--accent-border); }
-
-.ports__select {
-  background: var(--surface-raised);
-  border: 1px solid var(--sep);
-  border-radius: var(--r-md);
-  color: var(--info-bar-color);
-  padding: 5px 9px;
-  font-size: 12px;
-  font-family: var(--font-ui);
-  outline: none;
-  cursor: pointer;
-  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
-}
-.ports__select:hover  { background: var(--surface-overlay); color: var(--info-bar-hover-color); border-color: var(--sep-strong); }
-.ports__select:focus  { border-color: var(--accent-border); }
 
 .ports__refresh {
   display: flex;
@@ -85,64 +72,92 @@
 
 .ports__th {
   text-align: left;
-  padding: 9px 14px;
-  background: var(--info-bar-bg);
-  border-bottom: 1px solid var(--border-color);
+  padding: 11px 16px;
+  background: transparent;
+  border-bottom: 1px solid var(--sep);
   color: var(--info-bar-color);
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: color var(--t-fast);
+  transition: color var(--t-fast), opacity var(--t-fast);
 }
 .ports__th-inner {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.ports__th:hover         { color: var(--info-bar-hover-color); }
-.ports__th--active       { color: var(--accent); }
+.ports__th:hover         { color: var(--info-bar-hover-color); opacity: 0.9; }
+.ports__th--active       { color: var(--accent); opacity: 1; }
+.ports__th--action       { cursor: default; }
 
 .ports__row:hover { background: var(--surface-raised); }
-.ports__row td    { padding: 9px 14px; border-bottom: 1px solid var(--sep); font-family: var(--font-mono); }
+.ports__row td    { padding: 13px 16px; border-bottom: 1px solid var(--sep); }
 
-.ports__port    { color: var(--accent); font-weight: 600; }
-.ports__proto   { color: var(--info-bar-color); font-family: var(--font-ui); }
-.ports__pid     { color: var(--info-bar-color); }
-.ports__addr    { color: var(--info-bar-color); font-size: 11px; }
-.ports__process { color: var(--info-bar-hover-color); font-family: var(--font-ui); }
-
-/* ── State chips ─────────────────────────────────────────────────────────────── */
-.ports__state {
-  font-size: 10.5px;
-  font-family: var(--font-ui);
-  font-weight: 500;
-  border-radius: var(--r-xl);
-  padding: 2px 8px;
-  display: inline-block;
-  letter-spacing: 0.02em;
+.ports__cell {
+  vertical-align: middle;
 }
-.ports__state--listen      { color: var(--color-success); background: rgba(48,209,88,0.1);  }
-.ports__state--established { color: var(--accent);        background: var(--accent-dim);     }
-.ports__state--time_wait   { color: var(--color-warning); background: rgba(255,159,10,0.1); }
-.ports__state--close_wait  { color: var(--color-error);   background: rgba(255,69,58,0.1);  }
+
+.ports__primary {
+  color: var(--info-bar-hover-color);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ports__secondary {
+  color: var(--info-bar-color);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  opacity: 0.6;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.ports__port { color: var(--accent); font-weight: 600; }
+.ports__addr {
+  color: var(--info-bar-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ── State dot ──────────────────────────────────────────────────────────────── */
+.ports__state-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ports__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--info-bar-color);
+}
+.ports__dot--listen      { background: var(--color-success); }
+.ports__dot--established { background: var(--accent); }
+.ports__dot--time_wait   { background: var(--color-warning); }
+.ports__dot--close_wait  { background: var(--color-error); }
 
 /* ── Kill button ─────────────────────────────────────────────────────────────── */
 .ports__kill {
-  background: rgba(255,69,58,0.08);
-  border: 1px solid rgba(255,69,58,0.2);
+  background: transparent;
+  border: none;
   border-radius: var(--r-sm);
-  color: var(--color-error);
-  padding: 3px 10px;
-  font-size: 11px;
+  color: var(--info-bar-color);
+  padding: 4px 10px;
+  font-size: 11.5px;
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: background var(--t-fast), border-color var(--t-fast);
+  opacity: 0.6;
+  transition: background var(--t-fast), color var(--t-fast), opacity var(--t-fast);
 }
-.ports__kill:hover    { background: rgba(255,69,58,0.18); border-color: rgba(255,69,58,0.4); }
-.ports__kill:disabled { opacity: 0.35; cursor: default; }
+.ports__row:hover .ports__kill { opacity: 1; }
+.ports__kill:hover    { background: rgba(255,69,58,0.12); color: var(--color-error); }
+.ports__kill:disabled { opacity: 0.3; cursor: default; }
 
 .ports__empty {
   display: flex;
@@ -161,14 +176,19 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 4px 14px;
+  padding: 4px 16px;
   overflow: hidden;
   flex: 1;
 }
 .ports__skeleton-row {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 9px 0;
+  gap: 36px;
+  padding: 13px 0;
   border-bottom: 1px solid var(--sep);
+}
+.ports__skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }

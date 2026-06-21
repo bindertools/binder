@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { EndpointItem } from '../types'
-import { ScanEndpoints } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import SubNavTabs from './shared/SubNavTabs'
+import SortableColumnHeader, { ColumnDef } from './shared/SortableColumnHeader'
 import { addBackgroundTask, removeBackgroundTask } from '../lib/backgroundTaskStore'
 import './EndpointsTab.scss'
 
@@ -12,6 +13,7 @@ interface Props {
 }
 
 type SevFilter = 'all' | 'high' | 'medium' | 'info'
+type SortKey = 'method' | 'path' | 'severity' | 'file'
 
 // ── Severity / method meta ──────────────────────────────────────────────────────
 
@@ -81,10 +83,23 @@ function itemKey(item: EndpointItem): string {
   return `${item.file.replace(/\\/g, '/')}::${item.line}::${item.method}::${item.path}`
 }
 
-function severitySort(a: EndpointItem, b: EndpointItem) {
-  const order = { high: 0, medium: 1, info: 2 }
-  return order[a.severity] - order[b.severity]
+const SEVERITY_ORDER = { high: 0, medium: 1, info: 2 }
+
+function compareItems(a: EndpointItem, b: EndpointItem, key: SortKey): number {
+  switch (key) {
+    case 'severity': return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+    case 'method':   return a.method.localeCompare(b.method)
+    case 'path':     return a.path.localeCompare(b.path)
+    case 'file':     return a.file.localeCompare(b.file)
+  }
 }
+
+const ENDPOINT_COLUMNS: ColumnDef<SortKey>[] = [
+  { key: 'method', label: 'Method' },
+  { key: 'path', label: 'Path' },
+  { key: 'severity', label: 'Security' },
+  { key: 'file', label: 'File' },
+]
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -111,15 +126,33 @@ export default function EndpointsTab({ cwd, active }: Props) {
   const [scanning, setScanning] = useState(false)
   const [sevFilter, setSevFilter] = useState<SevFilter>('all')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('severity')
+  const [sortAsc, setSortAsc] = useState(true)
+  const [visibleColumns, setVisibleColumns] = useState<Set<SortKey>>(
+    () => new Set(ENDPOINT_COLUMNS.map(c => c.key))
+  )
   const hasScanned = useRef(false)
+
+  const sortAscBy = (key: SortKey) => { setSortKey(key); setSortAsc(true) }
+  const sortDescBy = (key: SortKey) => { setSortKey(key); setSortAsc(false) }
+
+  const toggleColumn = (key: SortKey) => {
+    setVisibleColumns(prev => {
+      if (prev.has(key) && prev.size === 1) return prev
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   const runScan = useCallback(() => {
     if (!cwd) return
     setScanning(true)
     setExpanded(null)
     const taskId = addBackgroundTask('Scanning endpoints…')
-    ScanEndpoints(cwd)
-      .then(r => setItems(Array.isArray(r) ? r as EndpointItem[] : []))
+    invoke<EndpointItem[]>('endpoints.scan', { path: cwd })
+      .then(r => setItems(Array.isArray(r) ? r : []))
       .catch(() => setItems([]))
       .finally(() => {
         setScanning(false)
@@ -139,7 +172,14 @@ export default function EndpointsTab({ cwd, active }: Props) {
     }
   }, [active, cwd, runScan])
 
-  const sorted = useMemo(() => [...items].sort(severitySort), [items])
+  const sorted = useMemo(() => {
+    const arr = [...items]
+    arr.sort((a, b) => {
+      const cmp = compareItems(a, b, sortKey)
+      return sortAsc ? cmp : -cmp
+    })
+    return arr
+  }, [items, sortKey, sortAsc])
 
   const counts = useMemo(() => {
     const c: Record<SevFilter, number> = { all: sorted.length, high: 0, medium: 0, info: 0 }
@@ -206,10 +246,22 @@ export default function EndpointsTab({ cwd, active }: Props) {
           <table className="endpoints__table">
             <thead>
               <tr>
-                <th className="endpoints__th">Method</th>
-                <th className="endpoints__th">Path</th>
-                <th className="endpoints__th">Security</th>
-                <th className="endpoints__th">File</th>
+                <th className="endpoints__th endpoints__th--chevron" />
+                {ENDPOINT_COLUMNS.filter(c => visibleColumns.has(c.key)).map(c => (
+                  <SortableColumnHeader
+                    key={c.key}
+                    label={c.label}
+                    active={sortKey === c.key}
+                    sortAsc={sortAsc}
+                    onSortAsc={() => sortAscBy(c.key)}
+                    onSortDesc={() => sortDescBy(c.key)}
+                    thClassName={`endpoints__th${sortKey === c.key ? ' endpoints__th--active' : ''}`}
+                    innerClassName="endpoints__th-inner"
+                    columns={ENDPOINT_COLUMNS}
+                    visibleColumns={visibleColumns}
+                    onToggleColumn={toggleColumn}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -223,30 +275,38 @@ export default function EndpointsTab({ cwd, active }: Props) {
                   <React.Fragment key={k}>
                     <tr className="endpoints__row" onClick={() => setExpanded(isOpen ? null : k)}>
                       <td className="endpoints__cell-chevron"><IconChevron open={isOpen} /></td>
-                      <td className="endpoints__method">
-                        <span className="endpoints__method-badge" style={{ color: methodColor, borderColor: methodColor }}>
-                          {item.method}
-                        </span>
-                      </td>
-                      <td className="endpoints__path" title={item.path}>{item.path}</td>
-                      <td className="endpoints__security">
-                        <span className="endpoints__sev-badge" style={{ color: sev.color, background: sev.bg }}>{sev.label}</span>
-                        <span className={`endpoints__chip${item.has_rate_limit ? ' ok' : ' bad'}`} title="Rate limiting / throttling">
-                          {item.has_rate_limit ? <IconCheck /> : <IconWarning />} Throttle
-                        </span>
-                        <span className={`endpoints__chip${item.has_auth ? ' ok' : ' bad'}`} title="Authentication / permission check">
-                          {item.has_auth ? <IconCheck /> : <IconWarning />} Auth
-                        </span>
-                      </td>
-                      <td className="endpoints__file" title={item.file}>
-                        {dir && <span className="endpoints__file-dir">{dir}</span>}
-                        <span className="endpoints__file-name">{name}</span>
-                        <span className="endpoints__file-line">:{item.line}</span>
-                      </td>
+                      {visibleColumns.has('method') && (
+                        <td className="endpoints__method">
+                          <span className="endpoints__method-badge" style={{ color: methodColor, borderColor: methodColor }}>
+                            {item.method}
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.has('path') && (
+                        <td className="endpoints__path" title={item.path}>{item.path}</td>
+                      )}
+                      {visibleColumns.has('severity') && (
+                        <td className="endpoints__security">
+                          <span className="endpoints__sev-badge" style={{ color: sev.color, background: sev.bg }}>{sev.label}</span>
+                          <span className={`endpoints__chip${item.has_rate_limit ? ' ok' : ' bad'}`} title="Rate limiting / throttling">
+                            {item.has_rate_limit ? <IconCheck /> : <IconWarning />} Throttle
+                          </span>
+                          <span className={`endpoints__chip${item.has_auth ? ' ok' : ' bad'}`} title="Authentication / permission check">
+                            {item.has_auth ? <IconCheck /> : <IconWarning />} Auth
+                          </span>
+                        </td>
+                      )}
+                      {visibleColumns.has('file') && (
+                        <td className="endpoints__file" title={item.file}>
+                          {dir && <span className="endpoints__file-dir">{dir}</span>}
+                          <span className="endpoints__file-name">{name}</span>
+                          <span className="endpoints__file-line">:{item.line}</span>
+                        </td>
+                      )}
                     </tr>
                     {isOpen && (
                       <tr className="endpoints__detail-row">
-                        <td colSpan={4}>
+                        <td colSpan={visibleColumns.size + 1}>
                           <div className="endpoints__detail">
                             <div className="endpoints__detail-meta">
                               <span className="endpoints__detail-framework">{item.framework}</span>

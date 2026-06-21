@@ -4,6 +4,7 @@ import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import EndpointsTab from './EndpointsTab'
 import SubNavTabs from './shared/SubNavTabs'
+import SortableColumnHeader, { ColumnDef } from './shared/SortableColumnHeader'
 import './PortsTab.scss'
 
 interface Props {
@@ -34,18 +35,6 @@ const IconEndpoint = () => (
   </svg>
 )
 
-const IconChevronUp = () => (
-  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
-    <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-
-const IconChevronDown = () => (
-  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
-    <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-
 const IconRefresh = () => (
   <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
     <path d="M11 6.5C11 9.04 8.76 11 6 11C3.24 11 1 9.04 1 6.5C1 3.96 3.24 2 6 2C7.6 2 9.02 2.72 9.9 3.86" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -53,24 +42,12 @@ const IconRefresh = () => (
   </svg>
 )
 
-// Hoisted to module scope: must keep a stable function identity across
-// PortsTab re-renders, otherwise React treats each render's <th> as a new
-// component type and tears down/remounts the header on every poll tick,
-// which can swallow a click mid-gesture.
-const Col = ({ k, label, sortKey, sortAsc, onSort }: {
-  k: keyof PortInfo
-  label: string
-  sortKey: keyof PortInfo
-  sortAsc: boolean
-  onSort: (k: keyof PortInfo) => void
-}) => (
-  <th className={`ports__th${sortKey === k ? ' ports__th--active' : ''}`} onClick={() => onSort(k)}>
-    <span className="ports__th-inner">
-      {label}
-      {sortKey === k && (sortAsc ? <IconChevronUp /> : <IconChevronDown />)}
-    </span>
-  </th>
-)
+const PORT_COLUMNS: ColumnDef<keyof PortInfo>[] = [
+  { key: 'port', label: 'Port' },
+  { key: 'state', label: 'State' },
+  { key: 'process', label: 'Process' },
+  { key: 'address', label: 'Address' },
+]
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -107,6 +84,9 @@ export default function PortsTab({ active, cwd }: Props) {
   const [sortAsc, setSortAsc] = useState(true)
   const [killing, setKilling] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [visibleColumns, setVisibleColumns] = useState<Set<keyof PortInfo>>(
+    () => new Set(PORT_COLUMNS.map(c => c.key))
+  )
 
   const refresh = useCallback(() => {
     invoke<{ ports: PortInfo[] }>('sysinfo.ports')
@@ -122,9 +102,17 @@ export default function PortsTab({ active, cwd }: Props) {
     return () => clearInterval(id)
   }, [active, mainTab, refresh])
 
-  const handleSort = (key: keyof PortInfo) => {
-    if (sortKey === key) setSortAsc(a => !a)
-    else { setSortKey(key); setSortAsc(true) }
+  const sortAscBy = (key: keyof PortInfo) => { setSortKey(key); setSortAsc(true) }
+  const sortDescBy = (key: keyof PortInfo) => { setSortKey(key); setSortAsc(false) }
+
+  const toggleColumn = (key: keyof PortInfo) => {
+    setVisibleColumns(prev => {
+      if (prev.has(key) && prev.size === 1) return prev
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const handleKill = async (port: PortInfo) => {
@@ -173,6 +161,42 @@ export default function PortsTab({ active, cwd }: Props) {
     <span className={`ports__dot ports__dot--${state.toLowerCase()}`} />
   )
 
+  const protocolFilterContent = (
+    <div>
+      <div className="col-menu__label">Protocol</div>
+      {(['all', 'tcp', 'udp'] as const).map(p => (
+        <button
+          key={p}
+          className={`col-menu__item${protoFilter === p ? ' col-menu__item--active' : ''}`}
+          onClick={() => setProtoFilter(p)}
+        >
+          {p === 'all' ? 'All protocols' : p.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  )
+
+  const stateFilterContent = (
+    <div>
+      <div className="col-menu__label">State</div>
+      <button
+        className={`col-menu__item${stateFilter === 'all' ? ' col-menu__item--active' : ''}`}
+        onClick={() => setStateFilter('all')}
+      >
+        All states
+      </button>
+      {states.map(s => (
+        <button
+          key={s}
+          className={`col-menu__item${stateFilter === s ? ' col-menu__item--active' : ''}`}
+          onClick={() => setStateFilter(s)}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="ports">
       <div className="flex items-stretch border-b border-sep shrink-0">
@@ -195,25 +219,6 @@ export default function PortsTab({ active, cwd }: Props) {
               value={filter}
               onChange={e => setFilter(e.target.value)}
             />
-            <select
-              className="ports__select"
-              value={protoFilter}
-              onChange={e => setProtoFilter(e.target.value as ProtoFilter)}
-              title="Filter by protocol"
-            >
-              <option value="all">All protocols</option>
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
-            </select>
-            <select
-              className="ports__select"
-              value={stateFilter}
-              onChange={e => setStateFilter(e.target.value)}
-              title="Filter by state"
-            >
-              <option value="all">All states</option>
-              {states.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
             <button className="ports__refresh" onClick={refresh}><IconRefresh /> Refresh</button>
             {message && <span className="ports__msg">{message}</span>}
           </div>
@@ -222,31 +227,93 @@ export default function PortsTab({ active, cwd }: Props) {
               <table className="ports__table">
                 <thead>
                   <tr>
-                    <Col k="port"    label="Port"    sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-                    <Col k="state"   label="State"   sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-                    <Col k="process" label="Process" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-                    <Col k="address" label="Address" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+                    {visibleColumns.has('port') && (
+                      <SortableColumnHeader
+                        label="Port"
+                        active={sortKey === 'port'}
+                        sortAsc={sortAsc}
+                        onSortAsc={() => sortAscBy('port')}
+                        onSortDesc={() => sortDescBy('port')}
+                        thClassName={`ports__th${sortKey === 'port' ? ' ports__th--active' : ''}`}
+                        innerClassName="ports__th-inner"
+                        filterContent={protocolFilterContent}
+                        columns={PORT_COLUMNS}
+                        visibleColumns={visibleColumns}
+                        onToggleColumn={toggleColumn}
+                      />
+                    )}
+                    {visibleColumns.has('state') && (
+                      <SortableColumnHeader
+                        label="State"
+                        active={sortKey === 'state'}
+                        sortAsc={sortAsc}
+                        onSortAsc={() => sortAscBy('state')}
+                        onSortDesc={() => sortDescBy('state')}
+                        thClassName={`ports__th${sortKey === 'state' ? ' ports__th--active' : ''}`}
+                        innerClassName="ports__th-inner"
+                        filterContent={stateFilterContent}
+                        columns={PORT_COLUMNS}
+                        visibleColumns={visibleColumns}
+                        onToggleColumn={toggleColumn}
+                      />
+                    )}
+                    {visibleColumns.has('process') && (
+                      <SortableColumnHeader
+                        label="Process"
+                        active={sortKey === 'process'}
+                        sortAsc={sortAsc}
+                        onSortAsc={() => sortAscBy('process')}
+                        onSortDesc={() => sortDescBy('process')}
+                        thClassName={`ports__th${sortKey === 'process' ? ' ports__th--active' : ''}`}
+                        innerClassName="ports__th-inner"
+                        columns={PORT_COLUMNS}
+                        visibleColumns={visibleColumns}
+                        onToggleColumn={toggleColumn}
+                      />
+                    )}
+                    {visibleColumns.has('address') && (
+                      <SortableColumnHeader
+                        label="Address"
+                        active={sortKey === 'address'}
+                        sortAsc={sortAsc}
+                        onSortAsc={() => sortAscBy('address')}
+                        onSortDesc={() => sortDescBy('address')}
+                        thClassName={`ports__th${sortKey === 'address' ? ' ports__th--active' : ''}`}
+                        innerClassName="ports__th-inner"
+                        columns={PORT_COLUMNS}
+                        visibleColumns={visibleColumns}
+                        onToggleColumn={toggleColumn}
+                      />
+                    )}
                     <th className="ports__th ports__th--action">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.map((p, i) => (
                     <tr key={`${p.protocol}:${p.address}:${p.port}:${p.pid}:${i}`} className="ports__row">
-                      <td className="ports__cell">
-                        <div className="ports__primary ports__port">{p.port}</div>
-                        <div className="ports__secondary">{p.protocol.toLowerCase()}</div>
-                      </td>
-                      <td className="ports__cell">
-                        <div className="ports__state-line">
-                          <StateDot state={p.state} />
-                          <span className="ports__primary">{p.state || '-'}</span>
-                        </div>
-                      </td>
-                      <td className="ports__cell">
-                        <div className="ports__primary">{p.process || '-'}</div>
-                        {!!p.pid && <div className="ports__secondary">pid {p.pid}</div>}
-                      </td>
-                      <td className="ports__cell ports__addr">{p.address}</td>
+                      {visibleColumns.has('port') && (
+                        <td className="ports__cell">
+                          <div className="ports__primary ports__port">{p.port}</div>
+                          <div className="ports__secondary">{p.protocol.toLowerCase()}</div>
+                        </td>
+                      )}
+                      {visibleColumns.has('state') && (
+                        <td className="ports__cell">
+                          <div className="ports__state-line">
+                            <StateDot state={p.state} />
+                            <span className="ports__primary">{p.state || '-'}</span>
+                          </div>
+                        </td>
+                      )}
+                      {visibleColumns.has('process') && (
+                        <td className="ports__cell">
+                          <div className="ports__primary">{p.process || '-'}</div>
+                          {!!p.pid && <div className="ports__secondary">pid {p.pid}</div>}
+                        </td>
+                      )}
+                      {visibleColumns.has('address') && (
+                        <td className="ports__cell ports__addr">{p.address}</td>
+                      )}
                       <td className="ports__cell ports__action">
                         <button
                           className="ports__kill"
@@ -259,7 +326,7 @@ export default function PortsTab({ active, cwd }: Props) {
                     </tr>
                   ))}
                   {sorted.length === 0 && (
-                    <tr><td colSpan={5} className="ports__empty">no ports match your filters</td></tr>
+                    <tr><td colSpan={visibleColumns.size + 1} className="ports__empty">no ports match your filters</td></tr>
                   )}
                 </tbody>
               </table>
