@@ -86,6 +86,18 @@ export interface PortInfo {
   state: string
 }
 
+export interface PortForward {
+  id: string
+  name: string
+  protocol: 'tcp' | 'udp' | 'both'
+  listen_port: number
+  target_host: string
+  target_port: number
+  enabled: boolean
+  status: 'running' | 'stopped' | 'error'
+  error?: string
+}
+
 export interface EndpointItem {
   framework:           string
   method:              string

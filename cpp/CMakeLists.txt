@@ -109,6 +109,7 @@ add_library(cmdide-backend-lib STATIC
     src/process_registry.cpp
     src/editor_buffer.cpp
     src/file_watcher.cpp
+    src/port_forward.cpp
 )
 
 target_include_directories(cmdide-backend-lib PUBLIC
@@ -130,6 +131,7 @@ if(WIN32)
     target_link_libraries(cmdide-backend-lib PUBLIC
         iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable
         psapi      # EnumProcesses, GetProcessMemoryInfo
+        ws2_32     # Winsock (port_forward TCP/UDP relay)
     )
 endif()
 

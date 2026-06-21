@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { PortInfo } from '../types'
+import { Plus, Trash2 } from 'lucide-react'
+import { PortInfo, PortForward } from '../types'
 import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import EndpointsTab from './EndpointsTab'
+import NewPortForwardModal from './NewPortForwardModal'
 import SubNavTabs from './shared/SubNavTabs'
 import SortableColumnHeader, { ColumnDef } from './shared/SortableColumnHeader'
 import './PortsTab.scss'
@@ -14,7 +16,7 @@ interface Props {
 }
 
 type ProtoFilter = 'all' | 'tcp' | 'udp'
-type MainTab = 'open-ports' | 'endpoints'
+type MainTab = 'open-ports' | 'forwards' | 'endpoints'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,13 @@ const IconPlug = () => (
     <path d="M5 1.5V5M11 1.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     <path d="M3.5 5h9v2.5a4.5 4.5 0 01-9 0V5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
     <path d="M8 12v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconForward = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <path d="M2 8h9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path d="M8.5 4.5L12.5 8L8.5 11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
@@ -88,12 +97,56 @@ export default function PortsTab({ active, cwd }: Props) {
     () => new Set(PORT_COLUMNS.map(c => c.key))
   )
 
+  const [forwards, setForwards] = useState<PortForward[]>([])
+  const [forwardsLoading, setForwardsLoading] = useState(true)
+  const [showNewForward, setShowNewForward] = useState(false)
+  const [forwardMessage, setForwardMessage] = useState('')
+
   const refresh = useCallback(() => {
     invoke<{ ports: PortInfo[] }>('sysinfo.ports')
       .then(r => setPorts(r.ports ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  const refreshForwards = useCallback(() => {
+    invoke<{ forwards: PortForward[] }>('portforward.list')
+      .then(r => setForwards(r.forwards ?? []))
+      .catch(() => {})
+      .finally(() => setForwardsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!active || mainTab !== 'forwards') return
+    refreshForwards()
+    const id = setInterval(refreshForwards, 5000)
+    return () => clearInterval(id)
+  }, [active, mainTab, refreshForwards])
+
+  const handleCreateForward = (forward: {
+    name: string
+    protocol: 'tcp' | 'udp' | 'both'
+    listen_port: number
+    target_host: string
+    target_port: number
+    enabled: boolean
+  }) => {
+    invoke<{ forward: PortForward }>('portforward.add', { forward })
+      .then(() => { setShowNewForward(false); refreshForwards() })
+      .catch(e => setForwardMessage(e?.message ?? String(e)))
+  }
+
+  const handleToggleForward = (fwd: PortForward) => {
+    invoke('portforward.toggle', { id: fwd.id, enabled: !fwd.enabled })
+      .then(refreshForwards)
+      .catch(() => {})
+  }
+
+  const handleRemoveForward = (fwd: PortForward) => {
+    invoke('portforward.remove', { id: fwd.id })
+      .then(refreshForwards)
+      .catch(() => {})
+  }
 
   useEffect(() => {
     if (!active || mainTab !== 'open-ports') return
@@ -203,6 +256,7 @@ export default function PortsTab({ active, cwd }: Props) {
         <SubNavTabs
           items={[
             { id: 'open-ports', label: 'Open Ports', icon: <IconPlug /> },
+            { id: 'forwards', label: 'Forwards', icon: <IconForward /> },
             { id: 'endpoints', label: 'Endpoints', icon: <IconEndpoint /> },
           ]}
           activeId={mainTab}
@@ -335,9 +389,75 @@ export default function PortsTab({ active, cwd }: Props) {
         </>
       )}
 
+      {mainTab === 'forwards' && (
+        <>
+          <div className="ports__toolbar">
+            <span className="ports__msg" style={{ flex: 1, color: 'var(--info-bar-color)', opacity: 0.7 }}>
+              Local TCP/UDP relays — listens on this machine and forwards to another host:port reachable from it. Does not touch router/UPnP/NAT settings.
+            </span>
+            <button className="ports__refresh" onClick={() => setShowNewForward(true)}>
+              <Plus size={13} /> New Forward
+            </button>
+            {forwardMessage && <span className="ports__msg" style={{ color: 'var(--color-error)' }}>{forwardMessage}</span>}
+          </div>
+          {forwardsLoading ? <PortsSkeleton /> : forwards.length === 0 ? (
+            <div className="ports__empty">
+              No port forwards configured. Click "New Forward" to relay a local port to another host:port on this machine.
+            </div>
+          ) : (
+            <div className="ports__table-wrap">
+              <table className="ports__table">
+                <thead>
+                  <tr>
+                    <th className="ports__th">Name</th>
+                    <th className="ports__th">Protocol</th>
+                    <th className="ports__th">Listen</th>
+                    <th className="ports__th">Target</th>
+                    <th className="ports__th">Status</th>
+                    <th className="ports__th ports__th--action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forwards.map(fwd => (
+                    <tr key={fwd.id} className="ports__row">
+                      <td className="ports__cell">
+                        <div className="ports__primary">{fwd.name}</div>
+                      </td>
+                      <td className="ports__cell ports__addr">{fwd.protocol.toUpperCase()}</td>
+                      <td className="ports__cell ports__addr">127.0.0.1:{fwd.listen_port}</td>
+                      <td className="ports__cell ports__addr">{fwd.target_host}:{fwd.target_port}</td>
+                      <td className="ports__cell">
+                        <div className="ports__state-line">
+                          <span className={`ports__dot ports__dot--${fwd.status === 'running' ? 'listen' : fwd.status === 'error' ? 'close_wait' : 'time_wait'}`} />
+                          <span className="ports__primary" title={fwd.error}>{fwd.status}</span>
+                        </div>
+                      </td>
+                      <td className="ports__cell ports__action" style={{ display: 'flex', gap: 6 }}>
+                        <button className="ports__kill" onClick={() => handleToggleForward(fwd)}>
+                          {fwd.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button className="ports__kill" onClick={() => handleRemoveForward(fwd)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
       {mainTab === 'endpoints' && (
         <EndpointsTab cwd={cwd} active={active && mainTab === 'endpoints'} />
       )}
+
+      <NewPortForwardModal
+        open={showNewForward}
+        onCreate={handleCreateForward}
+        onDismiss={() => setShowNewForward(false)}
+      />
     </div>
   )
 }
