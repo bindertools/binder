@@ -122,7 +122,7 @@ static DWORD WINAPI SplashThread(LPVOID arg) {
     wc.lpfnWndProc   = SplashWndProc;
     wc.hInstance     = hInst;
     wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
-    wc.lpszClassName = L"cmdIDESplash";
+    wc.lpszClassName = L"BinderSplash";
     wc.hIcon         = LoadIconW(hInst, MAKEINTRESOURCEW(IDI_APPICON));
     RegisterClassExW(&wc);
 
@@ -131,7 +131,7 @@ static DWORD WINAPI SplashThread(LPVOID arg) {
 
     HWND hwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        L"cmdIDESplash", L"cmdIDE",
+        L"BinderSplash", L"Binder",
         WS_POPUP | WS_VISIBLE,
         (sw - kW) / 2, (sh - kH) / 2, kW, kH,
         nullptr, nullptr, hInst, nullptr);

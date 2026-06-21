@@ -1,10 +1,10 @@
 // Low-level IPC client for the C++ WebView host.
-// In Wails mode (window.__cmdide_invoke undefined), this module is inert.
+// In Wails mode (window.__binder_invoke undefined), this module is inert.
 
 declare global {
   interface Window {
-    __cmdide_invoke?: (type: string, argsJson: string, reqId: string) => Promise<unknown>
-    __cmdide_emit?: (event: string, data: unknown) => void
+    __binder_invoke?: (type: string, argsJson: string, reqId: string) => Promise<unknown>
+    __binder_emit?: (event: string, data: unknown) => void
   }
 }
 
@@ -14,12 +14,12 @@ type Handler = (data: unknown) => void
 const _handlers = new Map<string, Set<Handler>>()
 
 // Set up the global event receiver once at module load time.
-// C++ calls: window.__cmdide_emit(event, value)
+// C++ calls: window.__binder_emit(event, value)
 // where `value` is already the correct JavaScript type (string, number, object)
 // because the C++ emit uses json(data).dump() which produces a JS literal.
 // No extra JSON.parse is needed — the JS engine already evaluated the literal.
 if (typeof window !== 'undefined') {
-  window.__cmdide_emit = (event: string, data: unknown) => {
+  window.__binder_emit = (event: string, data: unknown) => {
     try {
       _handlers.get(event)?.forEach(h => h(data))
     } catch {
@@ -30,7 +30,7 @@ if (typeof window !== 'undefined') {
 
 /** Returns true when running inside the C++ WebView host. */
 export function isWebViewHost(): boolean {
-  return typeof window.__cmdide_invoke === 'function'
+  return typeof window.__binder_invoke === 'function'
 }
 
 /** Invoke an IPC method and return its result.
@@ -40,12 +40,12 @@ export function isWebViewHost(): boolean {
  * We cast it directly; no second JSON.parse needed.
  */
 export async function invoke<T = unknown>(type: string, args: object = {}): Promise<T> {
-  if (!window.__cmdide_invoke) {
+  if (!window.__binder_invoke) {
     throw new Error('IPC not available: not running in C++ WebView host')
   }
   const reqId = crypto.randomUUID()
   // webview resolves the promise with the already-parsed result object
-  const result = await window.__cmdide_invoke(type, JSON.stringify(args), reqId) as IpcResult<T>
+  const result = await window.__binder_invoke(type, JSON.stringify(args), reqId) as IpcResult<T>
   if (!result.ok) throw new Error((result).error)
   return result.data
 }
@@ -65,4 +65,20 @@ export function off(event: string, handler: Handler): void {
 /** Remove ALL handlers for an event (used by EventsOff which has no handler reference). */
 export function offAll(event: string): void {
   _handlers.delete(event)
+}
+
+// ── File content codec ────────────────────────────────────────────────────────
+// C++ readfile returns base64-encoded bytes; writefile expects the same.
+export function b64ToText(b64: string): string {
+  const binStr = atob(b64)
+  const bytes = new Uint8Array(binStr.length)
+  for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
+}
+
+export function textToB64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binStr = ''
+  for (let i = 0; i < bytes.length; i++) binStr += String.fromCharCode(bytes[i])
+  return btoa(binStr)
 }

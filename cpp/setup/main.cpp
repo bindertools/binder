@@ -36,7 +36,7 @@ static std::string ExtractInstallerAssets() {
     std::string tmpPath(tmp);
     for (char& c : tmpPath) if (c == '\\') c = '/';
     while (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
-    std::string extractDir = tmpPath + "/cmdide-inst-" + hashStr;
+    std::string extractDir = tmpPath + "/binder-inst-" + hashStr;
     std::string marker     = extractDir + "/.extracted";
 
     if (GetFileAttributesA(marker.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -148,7 +148,7 @@ static std::string BuildInlineHtml(const std::string& extractDir) {
     html << "<!DOCTYPE html><html lang=\"en\"><head>"
          << "<meta charset=\"UTF-8\"/>"
          << "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>"
-         << "<title>cmdIDE Setup</title>"
+         << "<title>Binder Setup</title>"
          << "<style>" << css << "</style>"
          << "</head><body><div id=\"root\"></div>"
          << "<script type=\"module\">" << js << "</script>"
@@ -188,9 +188,9 @@ static constexpr const char* kWailsProxy = R"js(
 // relative chunk URL fails). We replicate its functionality here in the init
 // script, which runs reliably via WebView2's AddScriptToExecuteOnDocumentCreated.
 function __ipcInvoke(type, args) {
-  if (!window.__cmdide_invoke) return Promise.reject(new Error('IPC not available'));
+  if (!window.__binder_invoke) return Promise.reject(new Error('IPC not available'));
   var reqId = Math.random().toString(36).slice(2);
-  return window.__cmdide_invoke(type, JSON.stringify(args || {}), reqId)
+  return window.__binder_invoke(type, JSON.stringify(args || {}), reqId)
     .then(function(result) {
       // webview/webview automatically JSON.parses the resolve value,
       // so result is already a JS object: {ok: bool, data: ...}
@@ -219,16 +219,16 @@ window.go = {
 if (!window.runtime) {
   // Provide stubs for all Wails runtime functions used by the installer.
   // EventsOn → EventsOnMultiple → window.runtime.EventsOnMultiple (must exist!)
-  window.__cmdide_events = {};
+  window.__binder_events = {};
   window.runtime = {
     EventsOnMultiple: function(e, cb, max) {
-      (window.__cmdide_events[e] = window.__cmdide_events[e] || []).push({cb: cb, max: max, count: 0});
-      return function() { delete window.__cmdide_events[e]; };
+      (window.__binder_events[e] = window.__binder_events[e] || []).push({cb: cb, max: max, count: 0});
+      return function() { delete window.__binder_events[e]; };
     },
     EventsOn:   function(e, cb) { return window.runtime.EventsOnMultiple(e, cb, -1); },
     EventsOnce: function(e, cb) { return window.runtime.EventsOnMultiple(e, cb, 1); },
-    EventsOff:  function(e) { delete window.__cmdide_events[e]; },
-    EventsOffAll: function() { window.__cmdide_events = {}; },
+    EventsOff:  function(e) { delete window.__binder_events[e]; },
+    EventsOffAll: function() { window.__binder_events = {}; },
     EventsEmit: function() {},
     LogPrint: function() {}, LogTrace: function() {}, LogDebug: function() {},
     LogInfo: function() {}, LogWarning: function() {}, LogError: function() {}, LogFatal: function() {},
@@ -249,22 +249,22 @@ if (!window.runtime) {
     WindowSetSystemDefaultTheme: function() {}, WindowSetLightTheme: function() {}, WindowSetDarkTheme: function() {},
   };
 }
-// Patch __cmdide_emit to fire into EventsOnMultiple-registered listeners.
-// C++ calls: window.__cmdide_emit('event', arg1, arg2, ...)
+// Patch __binder_emit to fire into EventsOnMultiple-registered listeners.
+// C++ calls: window.__binder_emit('event', arg1, arg2, ...)
 // The callback receives the same positional args: callback(arg1, arg2, ...)
 // e.g. install:progress -> callback(pct, msg)
 //      installer:error  -> callback(errorMsg)
-window.__cmdide_emit = function(event) {
+window.__binder_emit = function(event) {
   try {
     var args = Array.prototype.slice.call(arguments, 1);
-    var entries = (window.__cmdide_events || {})[event] || [];
+    var entries = (window.__binder_events || {})[event] || [];
     var keep = [];
     entries.forEach(function(entry) {
       try { entry.cb.apply(null, args); } catch(e) {}
       entry.count++;
       if (entry.max < 0 || entry.count < entry.max) keep.push(entry);
     });
-    window.__cmdide_events[event] = keep;
+    window.__binder_events[event] = keep;
   } catch(e) {}
 };
 )js";
@@ -282,7 +282,7 @@ int main(int, char**) {
         : BuildInlineHtml(root);
 
     webview::webview wv(false, nullptr);  // debug=false for release
-    wv.set_title("cmdIDE Setup");
+    wv.set_title("Binder Setup");
     wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
 
 #ifdef _WIN32
@@ -296,7 +296,7 @@ int main(int, char**) {
     InstallerApp app(wv);
     BindCtx ctx{&wv, &app};
 
-    wv.bind("__cmdide_invoke",
+    wv.bind("__binder_invoke",
         [](const std::string& seq, const std::string& req, void* arg) {
             auto* ctx = static_cast<BindCtx*>(arg);
             try {

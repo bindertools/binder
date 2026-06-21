@@ -1,6 +1,6 @@
 <div align="center">
 
-# Command IDE (CMD IDE)
+# Binder
 
 **A terminal-first desktop IDE for developers who live in the command line.**
 
@@ -8,16 +8,16 @@
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Wails](https://img.shields.io/badge/Wails-v2-red?logo=go)](https://wails.io)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#platform-support)
-[![Build](https://github.com/Command-IDE/cmd-IDE/actions/workflows/code-quality.yml/badge.svg)](https://github.com/Command-IDE/cmd-ide/actions/workflows/code-quality.yml)
-[![Latest Release](https://img.shields.io/github/v/release/Command-IDE/cmd-IDE?label=release)](https://github.com/Command-IDE/cmd-ide/releases/latest)
+[![Build](https://github.com/BinderTools/binder/actions/workflows/code-quality.yml/badge.svg)](https://github.com/BinderTools/binder/actions/workflows/code-quality.yml)
+[![Latest Release](https://img.shields.io/github/v/release/BinderTools/binder?label=release)](https://github.com/BinderTools/binder/releases/latest)
 
-[**Download**](https://github.com/Command-IDE/cmd-IDE/releases/latest) · [**Docs**](docs/) · [**Themes**](app/themes/) · [**Plugin SDK**](packages/) · [**Contributing**](CONTRIBUTING.md)
+[**Download**](https://github.com/BinderTools/binder/releases/latest) · [**Docs**](docs/) · [**Themes**](app/themes/) · [**Plugin SDK**](packages/) · [**Contributing**](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-Command IDE (CMD IDE) is a native desktop application built with [Wails](https://wails.io), [Go](https://go.dev), and [React](https://react.dev). It wraps your real shell in a multi-tab, session-restoring terminal, then layers on a Monaco-powered editor, live preview, database inspector, plugin system, and more — all in a single window, with no browser involved.
+Binder is a native desktop application built with [Wails](https://wails.io), [Go](https://go.dev), and [React](https://react.dev). It wraps your real shell in a multi-tab, session-restoring terminal, then layers on a Monaco-powered editor, live preview, database inspector, plugin system, and more — all in a single window, with no browser involved.
 
 ## Features
 
@@ -48,7 +48,7 @@ Command IDE (CMD IDE) is a native desktop application built with [Wails](https:/
 | `/plugins` | Open the plugin store |
 
 ### Plugins
-Install official and community plugins from the built-in store (`/plugins`), or load any plugin directly from a public GitHub repository built with the [cmdIDE Plugin SDK](packages/).
+Install official and community plugins from the built-in store (`/plugins`), or load any plugin directly from a public GitHub repository built with the [Binder Plugin SDK](packages/).
 
 ### Other Panels
 - **Database** — open and inspect SQLite files inline
@@ -77,28 +77,28 @@ Install official and community plugins from the built-in store (`/plugins`), or 
 - Settings for font size, zoom level, scroll speed, word wrap, indent guides, minimap
 - Git branch display in the terminal prompt
 - Soft-close protection against accidentally discarding unsaved work
-- Config stored in the OS user config directory under `cmdIDE/`
+- Config stored in the OS user config directory under `Binder/`
 
 ---
 
 ## Install
 
-Download the latest release from the [Releases](https://github.com/Command-IDE/cmd-ide/releases/latest) page.
+Download the latest release from the [Releases](https://github.com/BinderTools/binder/releases/latest) page.
 
 | Artifact | Description |
 |---|---|
-| `cmdIDE-setup.exe` | Windows setup |
-| `cmdIDE.exe` | Portable Windows build — unzip and run, no install required |
-| `cmdIDE-macos.zip` | macOS universal binary |
-| `cmdIDE-linux` | Linux binary (amd64) |
+| `Binder-setup.exe` | Windows setup |
+| `Binder.exe` | Portable Windows build — unzip and run, no install required |
+| `Binder-macos.zip` | macOS universal binary |
+| `Binder-linux` | Linux binary (amd64) |
 
 On first launch, the app creates its config and session files at:
 
 | Platform | Path |
 |---|---|
-| Windows | `%APPDATA%\cmdIDE\` |
-| macOS | `~/Library/Application Support/cmdIDE/` |
-| Linux | `~/.config/cmdIDE/` |
+| Windows | `%APPDATA%\Binder\` |
+| macOS | `~/Library/Application Support/Binder/` |
+| Linux | `~/.config/Binder/` |
 
 ---
 
@@ -111,8 +111,8 @@ On first launch, the app creates its config and session files at:
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
 # Clone with all submodules
-git clone --recurse-submodules https://github.com/Command-IDE/cmd-ide
-cd cmd-ide/app
+git clone --recurse-submodules https://github.com/BinderTools/binder
+cd binder/app
 
 # Development server with hot reload
 wails dev
@@ -146,8 +146,8 @@ git submodule update --init --recursive
 | Backend | Go |
 | Frontend | React + TypeScript + Vite |
 | Editor | [Monaco Editor](https://microsoft.github.io/monaco-editor/) |
-| Terminal | xterm.js — [Command-IDE/terminal](app/terminal/) |
-| Themes | SCSS — [Command-IDE/cmdide-themes](app/themes/) |
+| Terminal | xterm.js — [BinderTools/terminal](app/terminal/) |
+| Themes | SCSS — [BinderTools/binder-themes](app/themes/) |
 | Database | modernc SQLite (pure Go, no CGO) |
 | Styling | CSS custom properties with runtime theme switching |
 
@@ -167,7 +167,7 @@ git submodule update --init --recursive
 ## Repository Structure
 
 ```
-cmd-ide/
+binder/
 ├── app/                  # Main Wails application (Go + React)
 │   ├── frontend/         # React + TypeScript frontend
 │   ├── themes/           # SCSS theme system (git submodule)

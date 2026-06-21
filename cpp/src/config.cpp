@@ -22,15 +22,15 @@ static fs::path GetConfigRoot() {
 #ifdef _WIN32
     wchar_t appdata[MAX_PATH] = {};
     GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    return fs::path(appdata) / "cmdIDE";
+    return fs::path(appdata) / "Binder";
 #elif __APPLE__
     const char* home = getenv("HOME");
-    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "cmdIDE";
+    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "Binder";
 #else  // Linux / other Unix
     const char* xdg = getenv("XDG_CONFIG_HOME");
-    if (xdg && *xdg) return fs::path(xdg) / "cmdide";
+    if (xdg && *xdg) return fs::path(xdg) / "binder";
     const char* home = getenv("HOME");
-    return fs::path(home ? home : "/tmp") / ".config" / "cmdide";
+    return fs::path(home ? home : "/tmp") / ".config" / "binder";
 #endif
 }
 
@@ -38,15 +38,15 @@ static fs::path GetDataRoot() {
 #ifdef _WIN32
     wchar_t localapp[MAX_PATH] = {};
     GetEnvironmentVariableW(L"LOCALAPPDATA", localapp, MAX_PATH);
-    return fs::path(localapp) / "cmdIDE";
+    return fs::path(localapp) / "Binder";
 #elif __APPLE__
     const char* home = getenv("HOME");
-    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "cmdIDE";
+    return fs::path(home ? home : "/tmp") / "Library" / "Application Support" / "Binder";
 #else
     const char* xdg = getenv("XDG_DATA_HOME");
-    if (xdg && *xdg) return fs::path(xdg) / "cmdide";
+    if (xdg && *xdg) return fs::path(xdg) / "binder";
     const char* home = getenv("HOME");
-    return fs::path(home ? home : "/tmp") / ".local" / "share" / "cmdide";
+    return fs::path(home ? home : "/tmp") / ".local" / "share" / "binder";
 #endif
 }
 

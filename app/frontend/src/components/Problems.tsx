@@ -49,7 +49,7 @@ const SEV_META = {
 
 // ── Dismissal persistence ─────────────────────────────────────────────────────
 
-const DISMISSED_KEY = 'cmdide_cwe_dismissed'
+const DISMISSED_KEY = 'binder_cwe_dismissed'
 
 function cweKey(item: CweItem): string {
   return `${item.cwe_id}::${item.file.replace(/\\/g, '/')}::${item.line}`

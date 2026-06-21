@@ -33,11 +33,11 @@
   --color-sep:        rgba(255,255,255,0.08);
   --color-sep-strong: rgba(255,255,255,0.13);
 
-  /* Shadows */
-  --shadow-sm:      0 1px 4px rgba(0,0,0,0.25);
-  --shadow-md:      0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg:      0 12px 40px rgba(0,0,0,0.55);
-  --shadow-overlay: 0 20px 60px rgba(0,0,0,0.7);
+  /* Shadows — disabled app-wide */
+  --shadow-sm:      none;
+  --shadow-md:      none;
+  --shadow-lg:      none;
+  --shadow-overlay: none;
 
   /* Transitions */
   --ease-fast: 100ms ease;
@@ -107,15 +107,26 @@
   --sep:              rgba(255,255,255,0.08);
   --sep-strong:       rgba(255,255,255,0.13);
 
-  /* Shadows */
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.25);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.55);
-  --shadow-overlay: 0 20px 60px rgba(0,0,0,0.7);
+  /* Shadows — disabled app-wide */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-overlay: none;
 
   /* Transitions */
   --t-fast: 100ms ease;
   --t-base: 180ms ease;
+}
+
+/* ── Light theme overrides ────────────────────────────────────────────────────
+   Surfaces/separators are alpha-over-background overlays tuned for a dark
+   background (lightening it). Light mode needs inverted values, or dark
+   mode's look leaks into light mode. */
+[data-theme="light"] {
+  --surface-raised:   rgba(0,0,0,0.04);
+  --surface-overlay:  rgba(0,0,0,0.06);
+  --sep:              rgba(0,0,0,0.08);
+  --sep-strong:       rgba(0,0,0,0.14);
 }
 
 /* ── Global element resets ───────────────────────────────────────────────────── */
@@ -273,7 +284,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #ffffff;
+  color: var(--info-bar-hover-color);
   font-weight: 400;
 }
 

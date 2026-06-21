@@ -264,7 +264,7 @@ export default function TaskProgressIndicator() {
       {menuOpen && (
         <div
           id="task-dropdown"
-          className="min-w-[260px] max-w-[340px] bg-[var(--app-bg)] border border-[var(--border-color)] rounded-md shadow-lg overflow-hidden"
+          className="min-w-[260px] max-w-[340px] bg-[var(--app-bg)] border border-[var(--border-color)] rounded-md overflow-hidden"
           style={{
             position: 'fixed',
             top: dropdownPos.top,

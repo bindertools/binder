@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(cmdide-backend LANGUAGES C CXX)
+project(binder-backend LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,7 +26,7 @@ find_package(libzip CONFIG REQUIRED)
 find_package(unofficial-tree-sitter CONFIG REQUIRED)
 
 # ── Vendored tree-sitter grammars (parser.c per language, no external deps) ────
-add_library(cmdide-grammars STATIC
+add_library(binder-grammars STATIC
     third_party/grammars/tree-sitter-json/src/parser.c
     third_party/grammars/tree-sitter-javascript/src/parser.c
     third_party/grammars/tree-sitter-javascript/src/scanner.c
@@ -65,8 +65,8 @@ add_library(cmdide-grammars STATIC
     third_party/grammars/tree-sitter-html/src/parser.c
     third_party/grammars/tree-sitter-html/src/scanner.c
 )
-set_target_properties(cmdide-grammars PROPERTIES LINKER_LANGUAGE C)
-target_include_directories(cmdide-grammars PRIVATE
+set_target_properties(binder-grammars PROPERTIES LINKER_LANGUAGE C)
+target_include_directories(binder-grammars PRIVATE
     third_party/grammars/tree-sitter-json/src
     third_party/grammars/tree-sitter-javascript/src
     third_party/grammars/tree-sitter-typescript/typescript/src
@@ -90,8 +90,8 @@ target_include_directories(cmdide-grammars PRIVATE
     third_party/grammars/tree-sitter-html/src
 )
 
-# ── Backend static library (shared by cmdide-backend.exe and cmdide-host) ──────
-add_library(cmdide-backend-lib STATIC
+# ── Backend static library (shared by binder-backend.exe and binder-host) ──────
+add_library(binder-backend-lib STATIC
     src/terminal.cpp
     src/fileops.cpp
     src/config.cpp
@@ -112,11 +112,11 @@ add_library(cmdide-backend-lib STATIC
     src/port_forward.cpp
 )
 
-target_include_directories(cmdide-backend-lib PUBLIC
+target_include_directories(binder-backend-lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
-target_link_libraries(cmdide-backend-lib PUBLIC
+target_link_libraries(binder-backend-lib PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib
@@ -124,11 +124,11 @@ target_link_libraries(cmdide-backend-lib PUBLIC
     unofficial::sqlite3::sqlite3
     libzip::zip
     unofficial::tree-sitter::tree-sitter
-    cmdide-grammars
+    binder-grammars
 )
 
 if(WIN32)
-    target_link_libraries(cmdide-backend-lib PUBLIC
+    target_link_libraries(binder-backend-lib PUBLIC
         iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable
         psapi      # EnumProcesses, GetProcessMemoryInfo
         ws2_32     # Winsock (port_forward TCP/UDP relay)
@@ -138,12 +138,12 @@ endif()
 if(UNIX AND NOT APPLE)
     # OpenSSL is needed by cpp-httplib on Linux
     find_package(OpenSSL REQUIRED)
-    target_link_libraries(cmdide-backend-lib PUBLIC
+    target_link_libraries(binder-backend-lib PUBLIC
         OpenSSL::SSL OpenSSL::Crypto util)
 endif()
 
 if(WIN32)
-    target_compile_definitions(cmdide-backend-lib PUBLIC
+    target_compile_definitions(binder-backend-lib PUBLIC
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         _UNICODE

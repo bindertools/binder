@@ -63,7 +63,7 @@ export default function FindReplaceBar(props: Props) {
   }
 
   return (
-    <div className="absolute top-2 right-4 z-10 flex flex-col gap-1 rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] p-1.5 shadow-lg font-mono">
+    <div className="absolute top-2 right-4 z-10 flex flex-col gap-1 rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] p-1.5 font-mono">
       <div className="flex items-center gap-1">
         <button
           title={props.mode === 'find' ? 'Toggle replace' : 'Toggle replace'}

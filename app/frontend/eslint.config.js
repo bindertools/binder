@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   // Ignore generated / build output
-  { ignores: ['dist/**', 'wailsjs/**', 'node_modules/**'] },
+  { ignores: ['dist/**', 'node_modules/**'] },
 
   {
     extends: [

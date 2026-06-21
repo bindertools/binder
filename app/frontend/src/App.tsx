@@ -30,11 +30,7 @@ import {
   clearLinkedTerminalInTree,
   type PaneNode, type LeafPane,
 } from './paneModel'
-import { EventsOn, EventsOff, Quit, WindowMinimise, WindowToggleMaximise } from '../wailsjs/runtime/runtime'
-import {
-  GetAppConfig, SaveSession, LoadSession, ReadFile, GetFileLanguage, GetTerminalCwd,
-  ScanProblems, ScanCWE, SaveCustomTheme, SaveAppConfig, CheckForUpdate, PerformUpdate,
-} from '../wailsjs/go/main/App'
+import { invoke, on, offAll, b64ToText, textToB64 } from './lib/ipc'
 import { useDragRegions } from './lib/useDragRegions'
 import { addBackgroundTask, removeBackgroundTask } from './lib/backgroundTaskStore'
 import { useWorkflowRuns } from './lib/workflowRunsStore'
@@ -70,7 +66,7 @@ const nextId = () => `tab-${SESSION_TS}-${++tabCounter}`
 
 // ── Recent paths helpers ──────────────────────────────────────────────────────
 
-const RECENT_PATHS_KEY = 'cmdide_recent_paths'
+const RECENT_PATHS_KEY = 'binder_recent_paths'
 
 function loadRecentPaths(): string[] {
   try {
@@ -357,7 +353,7 @@ const defaultConfig: AppConfig = {
   preferred_shell: '', database_privacy: false,
 }
 
-const LAYOUT_STORAGE_KEY = 'cmdide_pane_layout_v2'
+const LAYOUT_STORAGE_KEY = 'binder_pane_layout_v2'
 
 // ── Layout persistence helpers ────────────────────────────────────────────────
 // Layouts are stored using tab-array INDICES (not IDs) so they survive
@@ -550,7 +546,7 @@ export default function App() {
   // ── App config ───────────────────────────────────────────────────────────────
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
   const [currentZoom, setCurrentZoom] = useState(() => {
-    const saved = parseFloat(localStorage.getItem('cmdide_zoom') ?? '')
+    const saved = parseFloat(localStorage.getItem('binder_zoom') ?? '')
     return isFinite(saved) && saved > 0 ? saved : defaultConfig.default_zoom
   })
   const [liveColors,      setLiveColors]      = useState<Record<string, string> | null>(null)
@@ -668,32 +664,38 @@ export default function App() {
 
   // ── Config load ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    CheckForUpdate().then(tag => { if (tag) setUpdateTag(tag) }).catch(() => {})
+    invoke<string>('updater.check').then(tag => { if (tag) setUpdateTag(tag) }).catch(() => {})
   }, [])
 
   useEffect(() => {
-    GetAppConfig().then(cfg => {
+    invoke('config.get').then(cfg => {
       const zoom = (cfg as unknown as AppConfig).default_zoom || defaultConfig.default_zoom
       setAppConfig(cfg as unknown as AppConfig)
       setCurrentZoom(zoom)
-      localStorage.setItem('cmdide_zoom', String(zoom))
+      localStorage.setItem('binder_zoom', String(zoom))
     }).catch(() => {})
   }, [])
 
   useEffect(() => {
-    EventsOn('app:config', (cfg: AppConfig) => {
+    on('app:config', (data: unknown) => {
+      const cfg = data as AppConfig
       const zoom = cfg.default_zoom || defaultConfig.default_zoom
       setAppConfig(cfg); setCurrentZoom(zoom)
-      localStorage.setItem('cmdide_zoom', String(zoom))
+      localStorage.setItem('binder_zoom', String(zoom))
       setLiveColors(null)
     })
-    return () => EventsOff('app:config')
+    return () => offAll('app:config')
   }, [])
 
   // ── Session restore ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!appConfig.soft_close) return
-    LoadSession().then(async (sessionTabs) => {
+    invoke<any>('session.load').then(r => {
+      if (Array.isArray(r)) return r
+      if (Array.isArray(r?.session?.tabs)) return r.session.tabs
+      if (Array.isArray(r?.tabs)) return r.tabs
+      return []
+    }).then(async (sessionTabs) => {
       if (!sessionTabs || sessionTabs.length === 0) return
       const restoredTabs: Tab[] = []
       for (const st of sessionTabs) {
@@ -701,7 +703,7 @@ export default function App() {
           restoredTabs.push(makeTerminalTab(undefined, st.cwd || undefined))
         } else if (st.type === 'editor' && st.file_path) {
           try {
-            const content = await ReadFile(st.file_path)
+            const content = b64ToText((await invoke<{ content: string }>('fs.readfile', { path: st.file_path })).content)
             const fileName = st.file_path.replace(/\\/g, '/').split('/').pop() ?? st.file_path
             restoredTabs.push({ id: nextId(), type: 'editor', title: fileName, filePath: st.file_path, content, language: st.language || 'plaintext' })
           } catch { /* gone */ }
@@ -733,56 +735,47 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement
     const isCustom = appConfig.theme === 'custom' || liveColors !== null
-    if (isCustom) {
-      root.setAttribute('data-theme', 'custom')
-      const t = resolvedTheme
-      root.style.setProperty('--app-bg',               t.appBg)
-      root.style.setProperty('--border-color',          t.borderColor)
-      root.style.setProperty('--info-bar-bg',           t.infoBarBg)
-      root.style.setProperty('--info-bar-color',        t.infoBarColor)
-      root.style.setProperty('--info-bar-hover-bg',     t.infoBarHoverBg)
-      root.style.setProperty('--info-bar-hover-color',  t.infoBarHoverColor)
-      root.style.setProperty('--tab-color',             t.tabColor)
-      root.style.setProperty('--tab-color-hover',       t.tabColorHover)
-      root.style.setProperty('--tab-add-border',        t.tabAddBorder)
-    } else {
-      root.setAttribute('data-theme', appConfig.theme)
-      for (const p of [
-        '--app-bg', '--border-color', '--info-bar-bg', '--info-bar-color',
-        '--info-bar-hover-bg', '--info-bar-hover-color', '--tab-color',
-        '--tab-color-hover', '--tab-add-border',
-      ]) root.style.removeProperty(p)
-    }
+    root.setAttribute('data-theme', isCustom ? 'custom' : appConfig.theme)
+    const t = resolvedTheme
+    root.style.setProperty('--app-bg',               t.appBg)
+    root.style.setProperty('--border-color',          t.borderColor)
+    root.style.setProperty('--info-bar-bg',           t.infoBarBg)
+    root.style.setProperty('--info-bar-color',        t.infoBarColor)
+    root.style.setProperty('--info-bar-hover-bg',     t.infoBarHoverBg)
+    root.style.setProperty('--info-bar-hover-color',  t.infoBarHoverColor)
+    root.style.setProperty('--tab-color',             t.tabColor)
+    root.style.setProperty('--tab-color-hover',       t.tabColorHover)
+    root.style.setProperty('--tab-add-border',        t.tabAddBorder)
   }, [resolvedTheme, appConfig.theme, liveColors])
 
   // ── Go events ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    EventsOn('app:open-file', (...args: any[]) => {
+    on('app:open-file', (...args: any[]) => {
       const payload = args[0] as OpenFilePayload
       if (!payload?.path || payload.content === undefined) return
       dispatch({ type: 'open-file', payload })
     })
-    return () => EventsOff('app:open-file')
+    return () => offAll('app:open-file')
   }, [])
 
   useEffect(() => {
-    EventsOn('app:open-database', (...args: any[]) => {
+    on('app:open-database', (...args: any[]) => {
       const payload = args[0] as OpenDatabasePayload
       if (!payload?.path) return
       setForcedDbPath(payload.path)
       updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'database' })) }))
     })
-    return () => EventsOff('app:open-database')
+    return () => offAll('app:open-database')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId])
 
   useEffect(() => {
-    EventsOn('app:open-preview', (...args: any[]) => {
+    on('app:open-preview', (...args: any[]) => {
       const payload = args[0] as OpenPreviewPayload
       if (!payload?.type) return
       dispatch({ type: 'open-preview', payload })
     })
-    return () => EventsOff('app:open-preview')
+    return () => offAll('app:open-preview')
   }, [])
 
   useEffect(() => {
@@ -796,23 +789,23 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    EventsOn('app:open-problems', () => {
+    on('app:open-problems', () => {
       updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'debug' })) }))
     })
-    return () => EventsOff('app:open-problems')
+    return () => offAll('app:open-problems')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId])
 
   useEffect(() => {
-    EventsOn('app:open-config', () => {
+    on('app:open-config', () => {
       updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'settings' })) }))
     })
-    return () => EventsOff('app:open-config')
+    return () => offAll('app:open-config')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId])
 
   useEffect(() => {
-    EventsOn('app:open-tab', (...args: any[]) => {
+    on('app:open-tab', (...args: any[]) => {
       const p = args[0] as { type: string; title: string; terminalId?: string; cwd?: string }
       if (!p?.type) return
       if (p.type === 'plugins') {
@@ -826,7 +819,7 @@ export default function App() {
       }
       dispatch({ type: 'open-tab', tabType: p.type, title: p.title, terminalId: p.terminalId, cwd: p.cwd })
     })
-    return () => EventsOff('app:open-tab')
+    return () => offAll('app:open-tab')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId])
 
@@ -876,18 +869,18 @@ export default function App() {
       if (appConfig.soft_close) {
         const sessionTabs = await Promise.all(tabs.map(async t => {
           if (t.type === 'terminal') {
-            const cwd = await GetTerminalCwd(t.id).catch(() => '')
+            const cwd = await invoke<string>('terminal.cwd', { id: t.id }).catch(() => '')
             return { type: t.type, file_path: '', language: '', cwd }
           }
           return { type: t.type, file_path: t.filePath ?? '', language: t.language ?? '', cwd: '' }
         }))
         await Promise.race([
-          SaveSession(sessionTabs).catch(() => {}),
+          invoke('session.save', { tabs: sessionTabs }).catch(() => {}),
           new Promise<void>(resolve => setTimeout(resolve, 1500)),
         ])
       }
     } catch { /* ignore */ }
-    Quit()
+    invoke('window.close')
   }, [appConfig.soft_close, tabs])
 
   // ── Pane operations ───────────────────────────────────────────────────────────
@@ -942,7 +935,7 @@ export default function App() {
   const handleDuplicateTab = useCallback(async (tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
     if (tab?.type !== 'terminal') return
-    const cwd = await GetTerminalCwd(tabId).catch(() => '')
+    const cwd = await invoke<string>('terminal.cwd', { id: tabId }).catch(() => '')
     const newId = nextId()
     const workspaceId = workspaceIdOf(tabId, tabs)
     const layout = layouts[workspaceId]
@@ -1041,9 +1034,9 @@ export default function App() {
 
   // ── Theme helpers ─────────────────────────────────────────────────────────────
   const handleApplyColors  = useCallback((colors: Record<string, string>) => setLiveColors(colors), [])
-  const handleSaveTheme    = useCallback(async (colors: Record<string, string>) => SaveCustomTheme(colors), [])
+  const handleSaveTheme    = useCallback(async (colors: Record<string, string>) => { await invoke('config.set', { key: 'customTheme', value: colors }) }, [])
   const handleSaveSettings = useCallback(async (cfg: AppConfig) => {
-    await SaveAppConfig(cfg as unknown as Parameters<typeof SaveAppConfig>[0])
+    await invoke('config.setall', { config: cfg })
     setAppConfig(cfg)
   }, [])
 
@@ -1062,7 +1055,7 @@ export default function App() {
   useEffect(() => {
     if (activePage !== 'debug' || !activeCwd) return
     setProbScanning(true)
-    ScanProblems(activeCwd)
+    invoke('problems.scan', { path: activeCwd })
       .then(result => {
         const r = result as { sources?: string[]; items?: ProbItem[] }
         setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
@@ -1107,13 +1100,16 @@ export default function App() {
 
   const handleCweScan = useCallback(async (scanCwd: string) => {
     setCweScanning(true)
-    try { setCweItems(Array.isArray(await ScanCWE(scanCwd)) ? await ScanCWE(scanCwd) as CweItem[] : []) }
+    try {
+      const cweResult = await invoke<unknown>('problems.cwe', { path: scanCwd })
+      setCweItems(Array.isArray(cweResult) ? cweResult as CweItem[] : [])
+    }
     catch { /* ignore */ }
     setCweScanning(false)
   }, [])
 
   const handleRescanProblems = useCallback(async (tabId: string, cwd: string) => {
-    const result = await ScanProblems(cwd).catch(() => null)
+    const result = await invoke('problems.scan', { path: cwd }).catch(() => null)
     if (!result) return
     const r = result as { sources?: string[]; items?: ProbItem[] }
     dispatch({ type: 'update-problems', id: tabId, sources: r.sources ?? [], items: r.items ?? [] })
@@ -1121,8 +1117,8 @@ export default function App() {
 
   const handleOpenFileAtLine = useCallback(async (path: string, line: number, _col: number) => {
     try {
-      const content = await ReadFile(path)
-      const lang    = await GetFileLanguage(path)
+      const content = b64ToText((await invoke<{ content: string }>('fs.readfile', { path })).content)
+      const lang    = await invoke<string>('fs.language', { path })
       dispatch({ type: 'open-file', payload: { path, content, language: lang, gotoLine: line } })
     } catch { /* gone */ }
   }, [])
@@ -1178,7 +1174,7 @@ export default function App() {
             onRescan={async (_, scanCwd) => {
               setProbScanning(true)
               try {
-                const r = await ScanProblems(scanCwd) as { sources?: string[]; items?: ProbItem[] }
+                const r = await invoke('problems.scan', { path: scanCwd }) as { sources?: string[]; items?: ProbItem[] }
                 setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
               } catch { /* ignore */ }
               setProbScanning(false)
@@ -1316,7 +1312,7 @@ export default function App() {
           <button
             className="flex items-center justify-center w-[28px] h-[28px] border-0 outline-none rounded p-0 bg-transparent text-[#3fb950] cursor-pointer shrink-0 transition-[background,color] duration-[120ms] hover:bg-[rgba(63,185,80,0.15)] hover:text-[#56d364]"
             title={`Update available: ${updateTag} (click to install)`}
-            onClick={() => PerformUpdate(updateTag).catch(() => {})}
+            onClick={() => invoke('updater.download', { version: updateTag }).catch(() => {})}
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M8 2v9M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1326,10 +1322,10 @@ export default function App() {
           <div className="w-px h-4 bg-sep shrink-0 mx-0.5" />
         </>
       )}
-      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowMinimise} aria-label="Minimise">
+      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={() => invoke('window.minimise')} aria-label="Minimise">
         <svg width="12" height="2" viewBox="0 0 12 2"><path d="M0 1h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
       </button>
-      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={WindowToggleMaximise} aria-label="Maximise" onDoubleClick={WindowToggleMaximise}>
+      <button className={wcBtnBase + " hover:text-[var(--tab-color-hover)] hover:bg-surface-raised"} onClick={() => invoke('window.toggleMaximise')} aria-label="Maximise" onDoubleClick={() => invoke('window.toggleMaximise')}>
         <svg width="12" height="12" viewBox="0 0 12 12"><rect x="0.75" y="0.75" width="10.5" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>
       </button>
       <button className={wcBtnBase + " hover:bg-error hover:text-white"} onClick={handleQuit} aria-label="Close">

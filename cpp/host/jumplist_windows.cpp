@@ -13,7 +13,7 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "propsys.lib")
 
-static constexpr LPCWSTR kAppUserModelId = L"cmdIDE.App";
+static constexpr LPCWSTR kAppUserModelId = L"Binder.App";
 
 void RegisterJumpList() {
     // Set AppUserModelID so all windows appear grouped in the taskbar

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Workflow } from 'lucide-react'
+import { Workflow, RefreshCw, Plus } from 'lucide-react'
 import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
@@ -9,6 +9,7 @@ import { insertJob } from '../lib/workflowGraph'
 import { Skeleton } from './Skeleton'
 import GpuEditor from './GpuEditor'
 import EventsMap from './EventsMap'
+import NewWorkflowModal from './NewWorkflowModal'
 import SubNavTabs from './shared/SubNavTabs'
 import SidebarPanel from './shared/SidebarPanel'
 import { type PageSidebarNavItem } from './shared/PageSidebarNav'
@@ -32,13 +33,6 @@ const WorkflowIcon = ({ size = 14 }: { size?: number }) => (
     <circle cx="12.5" cy="3.5" r="2"/>
     <circle cx="8" cy="12.5" r="2"/>
     <path d="M5.1 4.6L7 11M10.9 4.6L9 11"/>
-  </svg>
-)
-
-const RefreshIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M10 2a5 5 0 11-1.5 7.5"/>
-    <path d="M10 2v3h-3"/>
   </svg>
 )
 
@@ -409,6 +403,7 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
   const [content,  setContent]  = useState('')
   const [contentLoading, setContentLoading] = useState(false)
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus | null>(null)
+  const [newWorkflowOpen, setNewWorkflowOpen] = useState(false)
 
   const allRuns = useWorkflowRuns()
 
@@ -534,6 +529,17 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
     selectSection('code')
   }, [content, mutateWorkflow, selectSection])
 
+  const handleCreateWorkflow = useCallback((file: string, yaml: string) => {
+    const absPath = `${cwd.replace(/\\/g, '/')}/.github/workflows/${file}`
+    workflows.write(absPath, yaml).then(async () => {
+      setNewWorkflowOpen(false)
+      await refresh()
+      setSelectedFile(file)
+      setSection('code')
+      lastSelection.set(cwd, { file, section: 'code' })
+    }).catch(() => {})
+  }, [cwd, refresh])
+
   // Drag-resizable divider between the code editor and the events map, both
   // now living side by side in the merged "Code" section.
   const [splitRatio, setSplitRatio] = useState(0.6)
@@ -584,7 +590,14 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
               onClick={() => void refresh()}
               disabled={loading}
             >
-              <RefreshIcon />
+              <RefreshCw size={12} />
+            </button>
+            <button
+              className="flex items-center p-1 rounded text-[var(--info-bar-color)] hover:text-[var(--info-bar-hover-color)] hover:bg-[var(--surface-raised)] transition-colors"
+              title="New workflow"
+              onClick={() => setNewWorkflowOpen(true)}
+            >
+              <Plus size={13} />
             </button>
           </div>
         }
@@ -737,6 +750,13 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
           </>
         )}
       </main>
+
+      <NewWorkflowModal
+        open={newWorkflowOpen}
+        existingFiles={list.map(wf => wf.file)}
+        onCreate={handleCreateWorkflow}
+        onDismiss={() => setNewWorkflowOpen(false)}
+      />
     </div>
   )
 }

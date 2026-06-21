@@ -217,7 +217,7 @@ fs::path prepare_sandbox(const std::string& projectPath, const std::string& runI
     auto emitOut = [&](const std::string& s) { emit("workflows:output:" + runId, json(s)); };
     emitOut("\x1b[90mPreparing sandbox...\x1b[0m\r\n");
 
-    fs::path tempRoot = fs::temp_directory_path() / ("cmdide-run-" + runId);
+    fs::path tempRoot = fs::temp_directory_path() / ("binder-run-" + runId);
     std::error_code ec;
     fs::remove_all(tempRoot, ec);
     fs::create_directories(tempRoot, ec);

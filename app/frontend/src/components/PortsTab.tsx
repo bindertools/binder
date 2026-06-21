@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Info } from 'lucide-react'
+import { Plus, Trash2, Info, Milestone } from 'lucide-react'
 import { PortInfo, PortForward } from '../types'
 import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
@@ -25,13 +25,6 @@ const IconPlug = () => (
     <path d="M5 1.5V5M11 1.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     <path d="M3.5 5h9v2.5a4.5 4.5 0 01-9 0V5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
     <path d="M8 12v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-  </svg>
-)
-
-const IconForward = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-    <path d="M2 8h9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    <path d="M8.5 4.5L12.5 8L8.5 11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
@@ -257,7 +250,7 @@ export default function PortsTab({ active, cwd }: Props) {
           items={[
             { id: 'open-ports', label: 'Open Ports', icon: <IconPlug /> },
             { id: 'endpoints', label: 'Endpoints', icon: <IconEndpoint /> },
-            { id: 'forwards', label: 'Forwards', icon: <IconForward /> },
+            { id: 'forwards', label: 'Forwards', icon: <Milestone size={13} /> },
           ]}
           activeId={mainTab}
           onSelect={id => setMainTab(id as MainTab)}

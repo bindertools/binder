@@ -12,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@cmdide/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
+      '@binder/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
     },
   },
   server: {

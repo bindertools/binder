@@ -9,13 +9,13 @@
 // Single-instance enforcement using a named mutex.
 // Returns false if another instance is already running (and brings it to front).
 inline bool AcquireSingleInstance() {
-    HANDLE h = CreateMutexW(nullptr, TRUE, L"Global\\cmdIDE-App");
+    HANDLE h = CreateMutexW(nullptr, TRUE, L"Global\\Binder-App");
     if (!h) return true; // Failed to create mutex — allow startup
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         // Another instance is running — bring its window to the foreground
         // Search by window title (webview/webview sets it via set_title)
-        HWND existing = FindWindowW(nullptr, L"cmdIDE");
+        HWND existing = FindWindowW(nullptr, L"Binder");
         if (existing) {
             if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
             SetForegroundWindow(existing);

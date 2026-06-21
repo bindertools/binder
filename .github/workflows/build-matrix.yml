@@ -107,7 +107,7 @@ jobs:
 
       - name: CMake build (compile check)
         shell: bash
-        run: cmake --build cpp/build --config Release --target cmdide-host
+        run: cmake --build cpp/build --config Release --target binder-host
 
       - name: TypeScript type check
         run: ${{ matrix.npm }} run typecheck

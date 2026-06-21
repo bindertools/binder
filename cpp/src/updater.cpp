@@ -33,8 +33,8 @@ namespace updater_ops {
 
 namespace {
 
-static const char* kGithubRepo  = "Command-IDE/cmd-ide";
-static const char* kDownloadExe = "cmdIDE-windows-amd64.exe";
+static const char* kGithubRepo  = "BinderTools/binder";
+static const char* kDownloadExe = "Binder-windows-amd64.exe";
 
 struct ReleaseInfo {
     bool        available = false;
@@ -67,7 +67,7 @@ static void configure_client(httplib::SSLClient& cli, const std::string& ca) {
     cli.enable_server_certificate_verification(true);
     if (!ca.empty()) cli.set_ca_cert_path(ca.c_str());
     cli.set_default_headers({
-        {"User-Agent", "cmdIDE-app/1.0"},
+        {"User-Agent", "Binder-app/1.0"},
         {"Accept",     "application/vnd.github+json"}
     });
 }

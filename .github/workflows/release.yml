@@ -55,9 +55,9 @@ jobs:
         run: |
           $rel = "cpp\build\Release"
           @(
-            "$rel\cmdIDE-windows-amd64.exe",
-            "$rel\cmdIDE-setup-windows.exe",
-            "$rel\cmdIDE-setup-dev-windows.exe"
+            "$rel\Binder-windows-amd64.exe",
+            "$rel\Binder-setup-windows.exe",
+            "$rel\Binder-setup-dev-windows.exe"
           ) | ForEach-Object {
             if (-not (Test-Path $_)) { throw "Missing: $_" }
             Write-Host "  found: $_" -ForegroundColor Green
@@ -67,7 +67,7 @@ jobs:
         run: |
           $cert = New-SelfSignedCertificate `
             -Type CodeSigningCert `
-            -Subject "CN=Command IDE, O=Command IDE, C=US" `
+            -Subject "CN=Binder, O=BinderTools, C=US" `
             -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -NotAfter (Get-Date).AddYears(10)
@@ -81,15 +81,15 @@ jobs:
 
           $rel = "cpp\build\Release"
           $files = @(
-            "$rel\cmdIDE-windows-amd64.exe",
-            "$rel\cmdIDE-setup-windows.exe",
-            "$rel\cmdIDE-setup-dev-windows.exe"
+            "$rel\Binder-windows-amd64.exe",
+            "$rel\Binder-setup-windows.exe",
+            "$rel\Binder-setup-dev-windows.exe"
           )
           foreach ($f in $files) {
             if (-not (Test-Path $f)) { continue }
             & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint `
               /t http://timestamp.digicert.com `
-              /d "Command IDE" /du "https://github.com/Command-IDE/cmd-ide" $f
+              /d "Binder" /du "https://github.com/BinderTools/binder" $f
             if ($LASTEXITCODE -ne 0) { throw "signtool failed on $f" }
             Write-Host "  signed: $f" -ForegroundColor Green
           }
@@ -101,9 +101,9 @@ jobs:
           $tag = "${{ github.event.release.tag_name }}"
           $rel = "cpp/build/Release"
           $files = @(
-            @{ path = "$rel/cmdIDE-windows-amd64.exe";     label = "cmdIDE-windows-amd64.exe" },
-            @{ path = "$rel/cmdIDE-setup-windows.exe";     label = "cmdIDE-setup-windows.exe" },
-            @{ path = "$rel/cmdIDE-setup-dev-windows.exe"; label = "cmdIDE-setup-dev-windows.exe" }
+            @{ path = "$rel/Binder-windows-amd64.exe";     label = "Binder-windows-amd64.exe" },
+            @{ path = "$rel/Binder-setup-windows.exe";     label = "Binder-setup-windows.exe" },
+            @{ path = "$rel/Binder-setup-dev-windows.exe"; label = "Binder-setup-dev-windows.exe" }
           )
           foreach ($f in $files) {
             if (Test-Path $f.path) {
@@ -152,45 +152,45 @@ jobs:
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             "-DVCPKG_OVERLAY_PORTS=cpp/ports"
-          cmake --build cpp/build --config Release --target cmdide-host
+          cmake --build cpp/build --config Release --target binder-host
 
       - name: Package macOS .app
         run: |
-          mkdir -p cmdIDE.app/Contents/MacOS
-          find cpp/build -name "cmdide-host" -not -path "*/CMakeFiles/*" | head -1 \
-            | xargs -I{} cp {} cmdIDE.app/Contents/MacOS/cmdide || true
+          mkdir -p Binder.app/Contents/MacOS
+          find cpp/build -name "binder-host" -not -path "*/CMakeFiles/*" | head -1 \
+            | xargs -I{} cp {} Binder.app/Contents/MacOS/binder || true
           # Copy www/ assets into the bundle
-          [ -d cpp/build/Release/www ] && cp -r cpp/build/Release/www cmdIDE.app/Contents/Resources/ || true
+          [ -d cpp/build/Release/www ] && cp -r cpp/build/Release/www Binder.app/Contents/Resources/ || true
 
           {
             echo '<?xml version="1.0" encoding="UTF-8"?>'
             echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
             echo '<plist version="1.0"><dict>'
-            echo '  <key>CFBundleName</key><string>cmdIDE</string>'
-            echo '  <key>CFBundleDisplayName</key><string>cmdIDE</string>'
-            echo '  <key>CFBundleExecutable</key><string>cmdide</string>'
-            echo '  <key>CFBundleIdentifier</key><string>com.cmdide.app</string>'
+            echo '  <key>CFBundleName</key><string>Binder</string>'
+            echo '  <key>CFBundleDisplayName</key><string>Binder</string>'
+            echo '  <key>CFBundleExecutable</key><string>binder</string>'
+            echo '  <key>CFBundleIdentifier</key><string>com.binder.app</string>'
             echo '  <key>NSHighResolutionCapable</key><true/>'
             echo '  <key>LSMinimumSystemVersion</key><string>12.0</string>'
             echo '</dict></plist>'
-          } > cmdIDE.app/Contents/Info.plist
-          codesign --deep --force --sign - cmdIDE.app 2>/dev/null || true
+          } > Binder.app/Contents/Info.plist
+          codesign --deep --force --sign - Binder.app 2>/dev/null || true
 
           # Create DMG
-          create-dmg --volname "cmdIDE" --window-size 600 400 \
+          create-dmg --volname "Binder" --window-size 600 400 \
             --icon-size 100 --app-drop-link 450 180 \
-            cmdIDE-darwin-arm64.dmg cmdIDE.app || \
-          zip -r cmdIDE-darwin-arm64.zip cmdIDE.app
+            Binder-darwin-arm64.dmg Binder.app || \
+          zip -r Binder-darwin-arm64.zip Binder.app
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.event.release.tag_name }}"
-          if [ -f cmdIDE-darwin-arm64.dmg ]; then
-            gh release upload "$tag" "cmdIDE-darwin-arm64.dmg#cmdIDE-darwin-arm64.dmg" --clobber
-          elif [ -f cmdIDE-darwin-arm64.zip ]; then
-            gh release upload "$tag" "cmdIDE-darwin-arm64.zip#cmdIDE-darwin-arm64.zip" --clobber
+          if [ -f Binder-darwin-arm64.dmg ]; then
+            gh release upload "$tag" "Binder-darwin-arm64.dmg#Binder-darwin-arm64.dmg" --clobber
+          elif [ -f Binder-darwin-arm64.zip ]; then
+            gh release upload "$tag" "Binder-darwin-arm64.zip#Binder-darwin-arm64.zip" --clobber
           fi
 
   # ── Linux ────────────────────────────────────────────────────────────────────
@@ -242,21 +242,21 @@ jobs:
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             "-DVCPKG_OVERLAY_PORTS=cpp/ports"
-          cmake --build cpp/build --config Release --target cmdide-host
+          cmake --build cpp/build --config Release --target binder-host
 
       - name: Package Linux tar.gz
         run: |
-          mkdir -p cmdide-linux-amd64
-          find cpp/build -name "cmdide-host" -not -path "*/CMakeFiles/*" | head -1 \
-            | xargs -I{} cp {} cmdide-linux-amd64/cmdide-host || true
-          [ -d cpp/build/Release/www ] && cp -r cpp/build/Release/www cmdide-linux-amd64/ || true
-          tar -czf cmdIDE-linux-amd64.tar.gz cmdide-linux-amd64/
+          mkdir -p binder-linux-amd64
+          find cpp/build -name "binder-host" -not -path "*/CMakeFiles/*" | head -1 \
+            | xargs -I{} cp {} binder-linux-amd64/binder-host || true
+          [ -d cpp/build/Release/www ] && cp -r cpp/build/Release/www binder-linux-amd64/ || true
+          tar -czf Binder-linux-amd64.tar.gz binder-linux-amd64/
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -f cmdIDE-linux-amd64.tar.gz ]; then
+          if [ -f Binder-linux-amd64.tar.gz ]; then
             gh release upload "${{ github.event.release.tag_name }}" \
-              "cmdIDE-linux-amd64.tar.gz#cmdIDE-linux-amd64.tar.gz" --clobber
+              "Binder-linux-amd64.tar.gz#Binder-linux-amd64.tar.gz" --clobber
           fi

@@ -145,7 +145,7 @@ HWND CreateMainWindow(int width, int height) {
         wc.cbSize        = sizeof(wc);
         wc.lpfnWndProc   = DefWindowProcW;   // will be subclassed by MakeFrameless
         wc.hInstance     = hInst;
-        wc.lpszClassName = L"cmdIDEMain";
+        wc.lpszClassName = L"BinderMain";
         // Black background so no white flash if WM_ERASEBKGND fires before content
         wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
         wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
@@ -162,8 +162,8 @@ HWND CreateMainWindow(int width, int height) {
     // NOTE: No WS_VISIBLE — the window must remain hidden until app.ready.
     HWND hwnd = CreateWindowExW(
         WS_EX_APPWINDOW,
-        L"cmdIDEMain",
-        L"cmdIDE",
+        L"BinderMain",
+        L"Binder",
         WS_POPUP | WS_THICKFRAME |
             WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU |
             WS_CLIPCHILDREN | WS_CLIPSIBLINGS,

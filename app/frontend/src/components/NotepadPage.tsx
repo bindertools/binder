@@ -26,7 +26,7 @@ interface Note {
 
 type NotesByPath = Record<string, Note[]>
 
-const STORAGE_KEY = 'cmdide_notepad_notes'
+const STORAGE_KEY = 'binder_notepad_notes'
 
 function loadAllNotes(): NotesByPath {
   try {

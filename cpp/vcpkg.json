@@ -1,5 +1,5 @@
 {
-  "name": "cmdide-backend",
+  "name": "binder-backend",
   "version": "0.1.0",
   "dependencies": [
     "nlohmann-json",

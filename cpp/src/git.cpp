@@ -336,7 +336,7 @@ bool dispatch(const std::string& type, const json& msg,
         auto message = msg.value("message", std::string{});
         if (message.empty()) { reply_err("commit message required"); return true; }
         // Write to temp file to avoid command-line quoting issues with newlines/quotes
-        auto tmpfile = (fs::temp_directory_path() / ("cmdide-commit-" + id + ".txt")).string();
+        auto tmpfile = (fs::temp_directory_path() / ("binder-commit-" + id + ".txt")).string();
         { std::ofstream f(tmpfile); f << message; }
         auto r = run_git(path, {"commit", "-F", tmpfile});
         fs::remove(tmpfile);

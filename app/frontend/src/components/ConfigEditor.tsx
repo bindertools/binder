@@ -7,7 +7,7 @@ import {
 } from '../themes'
 import { AppConfig } from '../types'
 import { SHORTCUT_DEFS, eventToKey, setShortcutsPaused } from '../lib/useShortcuts'
-import { SelectDirectory } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import './ConfigEditor.scss'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
   }, [appConfig.custom_theme, onApply, saveCfg])
 
   const handleBrowseDir = async () => {
-    const dir = await SelectDirectory().catch(() => '')
+    const dir = await invoke<string>('shell.selectdir').catch(() => '')
     if (dir) updateCfg({ default_directory: dir })
   }
 
@@ -248,7 +248,7 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = 'cmdide-theme.json'
+    a.download = 'binder-theme.json'
     a.click()
     URL.revokeObjectURL(url)
   }

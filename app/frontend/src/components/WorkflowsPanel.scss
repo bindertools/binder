@@ -141,11 +141,11 @@
   gap: 8px;
 }
 
-// "Sun-fade" — the button's base color slowly pulses through a warm glow.
+// "Sky-fade" — the button's base color slowly pulses through lighter blue shades.
 .wf-run-btn--running {
-  background: linear-gradient(135deg, var(--accent), var(--color-warning) 50%, var(--accent));
+  background: linear-gradient(135deg, var(--accent), var(--color-info) 50%, var(--accent));
   background-size: 220% 220%;
-  animation: wf-run-sunfade 3.2s ease-in-out infinite;
+  animation: wf-run-skyfade 3.2s ease-in-out infinite;
 }
 
 // Warping glare — a diagonal sheen sweeps across the button.
@@ -166,7 +166,7 @@
   z-index: 0;
 }
 
-@keyframes wf-run-sunfade {
+@keyframes wf-run-skyfade {
   0%, 100% { background-position: 0% 50%; }
   50%      { background-position: 100% 50%; }
 }
@@ -632,7 +632,6 @@
   border-radius: var(--r-sm);
   border: 1px solid var(--sep);
   background: var(--surface-raised);
-  box-shadow: var(--shadow-overlay);
   font-size: 11.5px;
   color: var(--tab-color);
 

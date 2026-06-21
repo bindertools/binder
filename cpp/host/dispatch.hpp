@@ -17,7 +17,7 @@ class SplashScreen;
 #endif
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-// Routes all __cmdide_invoke calls to backend modules.
+// Routes all __binder_invoke calls to backend modules.
 // Terminal output events are pushed to the frontend via emit().
 class Dispatcher {
 public:
@@ -31,7 +31,7 @@ public:
     void SetSplash(SplashScreen* /*splash*/) {}
 #endif
 
-    // Called from the __cmdide_invoke bind callback (any thread).
+    // Called from the __binder_invoke bind callback (any thread).
     void dispatch(const std::string& seq,
                   const std::string& type,
                   const std::string& args);

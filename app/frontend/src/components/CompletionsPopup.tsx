@@ -45,7 +45,7 @@ export default function CompletionsPopup({ items, index, x, y, above = false, ma
   return (
     <div
       ref={listRef}
-      className="gpu-completions-popup absolute z-20 w-[360px] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] shadow-lg font-mono text-[12px]"
+      className="gpu-completions-popup absolute z-20 w-[360px] overflow-y-auto rounded-md border border-[var(--border-color)] bg-[var(--info-bar-bg)] font-mono text-[12px]"
       style={{ left: x, top: y, maxHeight, transform: above ? 'translateY(-100%)' : undefined }}
     >
       {items.map((item, i) => {

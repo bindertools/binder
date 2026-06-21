@@ -1,7 +1,7 @@
 #pragma once
 // Frontend asset embedding + serving.
 // On Windows: assets are embedded as a zip RC resource (FRONTEND_ZIP) and
-//             extracted to %TEMP%\cmdide-<hash>\ on first run.
+//             extracted to %TEMP%\binder-<hash>\ on first run.
 //             No www/ sidecar directory is needed — the exe is self-contained.
 // On macOS/Linux: assets are served from <exe_dir>/www/ (copy-alongside).
 
@@ -58,7 +58,7 @@ inline std::string ExtractAssets() {
     std::string tmpPath(tmp);
     for (char& c : tmpPath) if (c == '\\') c = '/';
     if (!tmpPath.empty() && tmpPath.back() == '/') tmpPath.pop_back();
-    std::string extractDir = tmpPath + "/cmdide-" + hashStr;
+    std::string extractDir = tmpPath + "/binder-" + hashStr;
     std::string marker     = extractDir + "/.extracted";
 
     // Skip extraction if already done (same version)

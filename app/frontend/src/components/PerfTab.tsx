@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { PerfData } from '../types'
-import { StartPerfMonitor, StopPerfMonitor } from '../../wailsjs/go/main/App'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
+import { invoke, on, offAll } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import './PerfTab.scss'
 
@@ -148,9 +147,10 @@ export default function PerfTab({ tabId, active }: Props) {
   useEffect(() => {
     if (!active) return
     const event = `perf:data:${tabId}`
-    StartPerfMonitor(tabId).catch(() => {})
+    invoke('sysinfo.perf.start', { id: tabId }).catch(() => {})
 
-    EventsOn(event, (d: PerfData) => {
+    on(event, (raw: unknown) => {
+      const d = raw as PerfData
       setData(d)
       const push = (arr: number[], v: number) => {
         arr.push(v)
@@ -163,8 +163,8 @@ export default function PerfTab({ tabId, active }: Props) {
     })
 
     return () => {
-      StopPerfMonitor(tabId).catch(() => {})
-      EventsOff(event)
+      invoke('sysinfo.perf.stop', { id: tabId }).catch(() => {})
+      offAll(event)
     }
   }, [tabId, active])
 

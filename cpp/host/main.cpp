@@ -98,7 +98,7 @@ int main(int, char**) {
         nullptr
 #endif
     );
-    wv.set_title("cmdIDE");
+    wv.set_title("Binder");
 
 #ifdef _WIN32
     // After the constructor the webview_widget child exists but has size 0×0
@@ -135,7 +135,7 @@ int main(int, char**) {
     dispatcher.SetSplash(nullptr);
 #endif
 
-    wv.bind("__cmdide_invoke",
+    wv.bind("__binder_invoke",
         [](const std::string& seq, const std::string& req, void* arg) {
             auto* d = static_cast<Dispatcher*>(arg);
             try {
@@ -165,9 +165,9 @@ document.addEventListener('mousedown', function(e) {
     }
     if (drag === 'no-drag') return;
     if (drag === 'drag') {
-      if (window.__cmdide_invoke) {
+      if (window.__binder_invoke) {
         e.preventDefault();
-        window.__cmdide_invoke('window.startDrag', '{}', Math.random().toString(36).slice(2));
+        window.__binder_invoke('window.startDrag', '{}', Math.random().toString(36).slice(2));
       }
       return;
     }
@@ -176,7 +176,7 @@ document.addEventListener('mousedown', function(e) {
 });
 )js");
 
-    const char* dev_env = std::getenv("CMDIDE_DEV");
+    const char* dev_env = std::getenv("BINDER_DEV");
     std::string url;
     if (dev_env && std::string(dev_env) == "1") {
         url = GetDevUrl();

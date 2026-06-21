@@ -1,1 +1,1 @@
-export type { Plugin, PluginCommand, PluginTabProps, PluginContext } from '@cmdide/plugin-sdk'
+export type { Plugin, PluginCommand, PluginTabProps, PluginContext } from '@binder/plugin-sdk'

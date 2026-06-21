@@ -10,7 +10,7 @@ class Config {
 public:
     static Config& instance();
 
-    // Load from %APPDATA%\cmdIDE\config.json; create with defaults if absent.
+    // Load from %APPDATA%\Binder\config.json; create with defaults if absent.
     bool load();
 
     // Overwrite all keys from incoming (preserves key order of stored data).

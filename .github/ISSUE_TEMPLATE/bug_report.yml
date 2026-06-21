@@ -8,12 +8,12 @@ body:
       value: |
         Thanks for taking the time to report a bug. Fill out as much as you can — the more detail, the faster it gets fixed.
 
-        **Security issues:** please do not report them here. Use [GitHub Private Advisories](https://github.com/Command-IDE/terminal-IDE/security/advisories/new) instead.
+        **Security issues:** please do not report them here. Use [GitHub Private Advisories](https://github.com/BinderTools/binder/security/advisories/new) instead.
 
   - type: input
     id: version
     attributes:
-      label: cmdIDE Version
+      label: Binder Version
       description: Found in the window title bar or the About section of Settings.
       placeholder: "e.g. 1.2.0"
     validations:
@@ -62,7 +62,7 @@ body:
       label: Steps to Reproduce
       description: Reliable steps to trigger the bug. The more specific the better.
       placeholder: |
-        1. Open cmdIDE
+        1. Open Binder
         2. Run `/preview index.html`
         3. ...
     validations:

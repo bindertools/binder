@@ -97,7 +97,7 @@ void Dispatcher::resolve_err(const std::string& seq, const std::string& error) {
 }
 
 void Dispatcher::emit(const std::string& event, const json& data) {
-    std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('" +
+    std::string js = "if(window.__binder_emit){window.__binder_emit('" +
                      event + "'," + data.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
@@ -334,7 +334,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 emit("app:open-problems", json({{"cwd",cwd},{"terminalId",id},
                                                 {"sources",json::array()},{"items",json::array()}}));
             } else if (name == "debug") {
-                std::string info = "\r\ncmdIDE v" + std::string(kHostVersion) + " (C++ host)\r\n";
+                std::string info = "\r\nBinder v" + std::string(kHostVersion) + " (C++ host)\r\n";
                 info += "CWD: " + cwd + "\r\n";
 #ifdef _WIN32
                 char comp[256]={}; DWORD sz=256;
@@ -527,7 +527,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 }
             } else if (name == "version") {
                 emit("terminal:output:" + id, json(
-                    "\r\ncmdIDE v" + std::string(kHostVersion) + " (C++ WebView host)\r\n"));
+                    "\r\nBinder v" + std::string(kHostVersion) + " (C++ WebView host)\r\n"));
             } else if (name == "help") {
                 emit("terminal:output:" + id, json(std::string(
                     "\r\nBuilt-in commands:\r\n"

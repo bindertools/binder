@@ -183,7 +183,7 @@ export default function SplitModal({
       <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-[2px]" onClick={onDismiss} />
 
       {/* dialog */}
-      <div className="fixed z-[10001] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[96vw] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-xl shadow-[var(--shadow-overlay)] flex flex-col overflow-hidden">
+      <div className="fixed z-[10001] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[96vw] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden">
 
         {/* header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
@@ -235,7 +235,7 @@ export default function SplitModal({
               onClick={() => setSplitOn(v => !v)}
               className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-[150ms] border-0 p-0 cursor-pointer ${splitOn ? 'bg-accent' : 'bg-sep-strong'}`}
             >
-              <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-[150ms] ${splitOn ? 'translate-x-[14px]' : 'translate-x-0'}`} />
+              <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform duration-[150ms] ${splitOn ? 'translate-x-[14px]' : 'translate-x-0'}`} />
             </button>
             <span className="text-[12px] text-[var(--tab-color)]">Enable split view</span>
           </label>

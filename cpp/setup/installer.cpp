@@ -42,8 +42,8 @@ static void RunHidden(const std::string& cmd) {
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-static constexpr const char* kGithubRepo = "Command-IDE/cmd-ide";
-static constexpr const char* kBinaryName = "cmdIDE.exe";
+static constexpr const char* kGithubRepo = "BinderTools/binder";
+static constexpr const char* kBinaryName = "Binder.exe";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -68,13 +68,13 @@ static std::string GetInstallDirPath() {
 #ifdef _WIN32
     wchar_t localapp[MAX_PATH] = {};
     SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localapp);
-    return to_utf8(std::wstring(localapp) + L"\\Programs\\cmdIDE");
+    return to_utf8(std::wstring(localapp) + L"\\Programs\\Binder");
 #elif __APPLE__
     const char* home = getenv("HOME");
-    return std::string(home ? home : "/tmp") + "/Applications/cmdIDE";
+    return std::string(home ? home : "/tmp") + "/Applications/Binder";
 #else
     const char* home = getenv("HOME");
-    return std::string(home ? home : "/tmp") + "/.local/bin/cmdide";
+    return std::string(home ? home : "/tmp") + "/.local/bin/binder";
 #endif
 }
 
@@ -86,14 +86,14 @@ void InstallerApp::emit_progress(int pct, const std::string& msg) {
     // Pass pct and msg as POSITIONAL args matching the Wails EventsOn(event, pct, msg) convention.
     // The callback is (pct: number, msg: string) — it must receive separate args, not one object.
     nlohmann::json jmsg = msg;  // handles quoting/escaping
-    std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('install:progress'," +
+    std::string js = "if(window.__binder_emit){window.__binder_emit('install:progress'," +
                      std::to_string(pct) + "," + jmsg.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
 
 void InstallerApp::emit_error(const std::string& msg) {
     nlohmann::json jmsg = msg;
-    std::string js = "if(window.__cmdide_emit){window.__cmdide_emit('installer:error'," +
+    std::string js = "if(window.__binder_emit){window.__binder_emit('installer:error'," +
                      jmsg.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
@@ -114,7 +114,7 @@ void InstallerApp::GetReleases(const std::string& seq) {
     cli.enable_server_certificate_verification(true);
     cli.set_default_headers({
         {"Accept",     "application/vnd.github+json"},
-        {"User-Agent", "cmdIDE-installer/1.0"}
+        {"User-Agent", "Binder-installer/1.0"}
     });
 
     auto res = cli.Get("/repos/" + std::string(kGithubRepo) + "/releases");
@@ -143,14 +143,14 @@ void InstallerApp::GetReleases(const std::string& seq) {
 
         std::string dl_url;
         for (auto& asset : r.value("assets", json::array())) {
-            if (asset.value("name", std::string{}) == "cmdIDE-windows-amd64.exe") {
+            if (asset.value("name", std::string{}) == "Binder-windows-amd64.exe") {
                 dl_url = asset.value("browser_download_url", std::string{});
                 break;
             }
         }
         if (dl_url.empty()) {
             dl_url = "https://github.com/" + std::string(kGithubRepo) +
-                     "/releases/download/" + tag + "/cmdIDE-windows-amd64.exe";
+                     "/releases/download/" + tag + "/Binder-windows-amd64.exe";
         }
 
         std::string pub = r.value("published_at", std::string{});
@@ -183,10 +183,10 @@ void InstallerApp::Install(const std::string& seq,
     std::string url;
     if (version.empty() || version == "latest") {
         url = "https://github.com/" + std::string(kGithubRepo) +
-              "/releases/latest/download/cmdIDE-windows-amd64.exe";
+              "/releases/latest/download/Binder-windows-amd64.exe";
     } else {
         url = "https://github.com/" + std::string(kGithubRepo) +
-              "/releases/download/" + version + "/cmdIDE-windows-amd64.exe";
+              "/releases/download/" + version + "/Binder-windows-amd64.exe";
     }
 
     // Parse host and path
@@ -199,9 +199,9 @@ void InstallerApp::Install(const std::string& seq,
     httplib::SSLClient cli(host);
     cli.set_follow_location(true);
     cli.enable_server_certificate_verification(true);
-    cli.set_default_headers({{"User-Agent", "cmdIDE-installer/1.0"}});
+    cli.set_default_headers({{"User-Agent", "Binder-installer/1.0"}});
 
-    std::string tmp_path = install_dir + "\\.cmdide_download_tmp.exe";
+    std::string tmp_path = install_dir + "\\.binder_download_tmp.exe";
     {
         std::error_code ec;
         fs::create_directories(install_dir, ec);
@@ -275,13 +275,13 @@ void InstallerApp::Install(const std::string& seq,
     std::string uninstall_ps = install_dir + "\\uninstall.ps1";
     {
         std::ofstream ps(uninstall_ps);
-        ps << "Remove-Item -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\cmdIDE' -Recurse -Force -ErrorAction SilentlyContinue\n";
+        ps << "Remove-Item -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Binder' -Recurse -Force -ErrorAction SilentlyContinue\n";
         ps << "Remove-Item -Recurse -Force $PSScriptRoot -ErrorAction SilentlyContinue\n";
     }
     std::string reg_cmd = "powershell.exe -NoProfile -NonInteractive -Command \""
-        "$p='HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\cmdIDE';"
+        "$p='HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Binder';"
         "New-Item -Path $p -Force|Out-Null;"
-        "Set-ItemProperty -Path $p -Name DisplayName -Value 'Command IDE';"
+        "Set-ItemProperty -Path $p -Name DisplayName -Value 'Binder';"
         "Set-ItemProperty -Path $p -Name DisplayVersion -Value '" + version + "';"
         "Set-ItemProperty -Path $p -Name InstallLocation -Value '" + install_dir + "';"
         "Set-ItemProperty -Path $p -Name UninstallString -Value 'powershell.exe -File \\\"" + uninstall_ps + "\\\"';"
@@ -295,7 +295,7 @@ void InstallerApp::Install(const std::string& seq,
             "$d=[System.Environment]::GetFolderPath('" + folder_const + "');"
             "if('" + folder_const + "' -eq 'StartMenu'){$d=[System.IO.Path]::Combine($d,'Programs')};"
             "$s=New-Object -ComObject WScript.Shell;"
-            "$l=$s.CreateShortcut([System.IO.Path]::Combine($d,'Command IDE.lnk'));"
+            "$l=$s.CreateShortcut([System.IO.Path]::Combine($d,'Binder.lnk'));"
             "$l.TargetPath='" + dest + "';"
             "$l.WorkingDirectory='" + install_dir + "';"
             "$l.Save()\"";

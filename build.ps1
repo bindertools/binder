@@ -2,9 +2,9 @@
 # build.ps1 - Builds all C++ release artifacts.
 #
 # Output artifacts:
-#   cmdIDE-windows-amd64.exe - main app (plugin manager included as standard)
-#   cmdIDE-setup-windows.exe - stable setup
-#   cmdIDE-setup-dev-windows.exe - dev-channel setup
+#   Binder-windows-amd64.exe - main app (plugin manager included as standard)
+#   Binder-setup-windows.exe - stable setup
+#   Binder-setup-dev-windows.exe - dev-channel setup
 #
 # Flags:
 #   -AppOnly    build app only, skip setup
@@ -36,9 +36,9 @@ if ($IsWindows -or $env:OS -eq 'Windows_NT') {
 Write-Host "`n  Platform : $platform" -ForegroundColor DarkGray
 
 # -- Artifact names ------------------------------------------------------------
-$appName     = "cmdIDE-$platform-amd64$binExt"
-$setupName    = "cmdIDE-setup-$platform$binExt"
-$setupDevName = "cmdIDE-setup-dev-$platform$binExt"
+$appName     = "Binder-$platform-amd64$binExt"
+$setupName    = "Binder-setup-$platform$binExt"
+$setupDevName = "Binder-setup-dev-$platform$binExt"
 
 # -- Locate vcpkg --------------------------------------------------------------
 $vcpkgRoot = $env:VCPKG_ROOT
@@ -70,7 +70,7 @@ function Cmake-Configure {
               "-DCMAKE_TOOLCHAIN_FILE=$toolchain",
               "-DVCPKG_OVERLAY_PORTS=$overlayPorts")
     $args += $tripletArgs
-    if ($Version) { $args += "-DCMDIDE_VERSION=$Version" }
+    if ($Version) { $args += "-DBINDER_VERSION=$Version" }
     foreach ($k in $extra.Keys) { $args += "-D$k=$($extra[$k])" }
     & cmake @args
     if ($LASTEXITCODE -ne 0) { Fail "CMake configure failed for $buildDir" }
@@ -117,10 +117,10 @@ Ok "Configured -> cpp/build"
 # STEP 4 - Build app
 # =============================================================================
 if (-not $SetupOnly) {
-    Step "Build cmdide-host"
-    & cmake --build $cppBuild --config Release --target cmdide-host
-    if ($LASTEXITCODE -ne 0) { Fail "cmdide-host build failed" }
-    $hostSrc = Join-Path $releaseDir "cmdide-host$binExt"
+    Step "Build binder-host"
+    & cmake --build $cppBuild --config Release --target binder-host
+    if ($LASTEXITCODE -ne 0) { Fail "binder-host build failed" }
+    $hostSrc = Join-Path $releaseDir "binder-host$binExt"
     $appDst  = Join-Path $releaseDir $appName
     if (Test-Path $hostSrc) { Copy-Item -Force $hostSrc $appDst }
     Ok "Built -> $appName"
@@ -131,9 +131,9 @@ if (-not $SetupOnly) {
 # =============================================================================
 if (-not $AppOnly) {
     Step "Build stable setup"
-    & cmake --build $cppBuild --config Release --target cmdide-setup
+    & cmake --build $cppBuild --config Release --target binder-setup
     if ($LASTEXITCODE -ne 0) { Fail "Stable setup build failed" }
-    $instSrc = Join-Path $releaseDir "cmdide-setup$binExt"
+    $instSrc = Join-Path $releaseDir "binder-setup$binExt"
     $setupDst = Join-Path $releaseDir $setupName
     if (Test-Path $instSrc) { Copy-Item -Force $instSrc $setupDst }
     Ok "Built -> $setupName"
@@ -145,14 +145,14 @@ if (-not $AppOnly) {
 if (-not $AppOnly) {
     Step "Build dev setup"
     $sharedInstalled = Join-Path $cppBuild 'vcpkg_installed'
-    $devExtra = @{ CMDIDE_SETUP_DEV = 'ON' }
+    $devExtra = @{ BINDER_SETUP_DEV = 'ON' }
     if (Test-Path $sharedInstalled) {
         $devExtra['VCPKG_INSTALLED_DIR'] = $sharedInstalled
     }
     Cmake-Configure -buildDir $devBuild -extra $devExtra
-    & cmake --build $devBuild --config Release --target cmdide-setup
+    & cmake --build $devBuild --config Release --target binder-setup
     if ($LASTEXITCODE -ne 0) { Fail "Dev setup build failed" }
-    $devSrc = Join-Path $devBuild "Release\cmdide-setup$binExt"
+    $devSrc = Join-Path $devBuild "Release\binder-setup$binExt"
     $setupDevDst = Join-Path $releaseDir $setupDevName
     if (Test-Path $devSrc) { Copy-Item -Force $devSrc $setupDevDst }
     Ok "Built -> $setupDevName"

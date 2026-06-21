@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
-import { ExplorerCreateDir, ExplorerCreateFile, ExplorerDelete, ExplorerMove, ExplorerRename, ExplorerReveal } from '../../wailsjs/go/main/App'
+import { invoke, on } from '../lib/ipc'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
 import DeleteConfirmDialog from './DeleteConfirmDialog'
 import NewItemDialog from './NewItemDialog'
@@ -119,7 +118,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   useEffect(() => { dirCacheRef.current = dirCache }, [dirCache])
 
   useEffect(() => {
-    const unsub = EventsOn('fs:changed', (data: unknown) => {
+    const unsub = on('fs:changed', (data: unknown) => {
       const dirs = (data as { dirs?: string[] })?.dirs ?? []
       for (const dir of dirs) {
         if (dirCacheRef.current.has(dir)) void loadDir(dir)
@@ -174,7 +173,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const commitRename = useCallback(async (node: FileNode) => {
     if (!renameVal.trim() || renameVal === node.name) { setRenaming(null); return }
     const dir = parentDir(node.path)
-    await ExplorerRename(node.path, `${dir}/${renameVal.trim()}`)
+    await invoke('fs.rename', { from: node.path, to: `${dir}/${renameVal.trim()}` })
     setRenaming(null)
     void loadDir(dir)
     onRefresh()
@@ -187,7 +186,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return
-    await ExplorerDelete(deleteTarget.path)
+    await invoke('fs.delete', { path: deleteTarget.path })
     setDeleteTarget(null)
     void loadDir(parentDir(deleteTarget.path))
     onRefresh()
@@ -209,9 +208,9 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     if (!newItem) return
     const fullPath = `${newItem.dir}/${filename}`
     if (newItem.kind === 'file') {
-      await ExplorerCreateFile(fullPath)
+      await invoke('fs.create', { path: fullPath })
     } else {
-      await ExplorerCreateDir(fullPath)
+      await invoke('fs.mkdir', { path: fullPath })
     }
     setExpanded(prev => new Set(prev).add(newItem.dir))
     setNewItem(null)
@@ -224,7 +223,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   }, [])
 
   const handleReveal = useCallback((node: FileNode) => {
-    ExplorerReveal(node.path).catch(() => {})
+    invoke('shell.reveal', { path: node.path }).catch(() => {})
   }, [])
 
   const collapseAll = useCallback(() => {
@@ -276,7 +275,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     if (!dragSrc.current || !node.isDir || node.path === dragSrc.current) return
     const src = dragSrc.current
     const srcName = src.split('/').pop()!
-    await ExplorerMove(src, `${node.path}/${srcName}`)
+    await invoke('fs.rename', { from: src, to: `${node.path}/${srcName}` })
     dragSrc.current = null
     void loadDir(parentDir(src))
     void loadDir(node.path)

@@ -137,7 +137,7 @@ export default function App() {
 
         {/* brand + channel badge */}
         <div className="brand" style={noDrag}>
-          <img src="/lockup-dark.svg" alt="cmdIDE" className="brand-lockup" draggable={false} />
+          <img src="/lockup-dark.svg" alt="Binder" className="brand-lockup" draggable={false} />
           {channel === 'dev' && <span className="channel-badge">Developer Channel</span>}
         </div>
 
@@ -206,10 +206,10 @@ export default function App() {
           <div className="screen-done" style={noDrag}>
             <div className="done-checkmark">✓</div>
             <p className="done-title">Installation complete</p>
-            <p className="done-sub">cmdIDE was installed to your system.</p>
+            <p className="done-sub">Binder was installed to your system.</p>
             <div className="done-actions">
               <button className="btn-action btn-launch" onClick={LaunchAndClose}>
-                Launch cmdIDE
+                Launch Binder
               </button>
               <button className="btn-action" onClick={CloseInstaller}>
                 Close

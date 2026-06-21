@@ -61,6 +61,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px;
   background: var(--app-bg);
   color: var(--info-bar-hover-color);
   font-family: var(--font-ui);

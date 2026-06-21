@@ -130,7 +130,7 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = 'terminal-ide-theme.json'
+    a.download = 'binder-theme.json'
     a.click()
     URL.revokeObjectURL(url)
   }

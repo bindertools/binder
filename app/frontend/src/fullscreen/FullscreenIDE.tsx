@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerReaddir, ExplorerGetFile, ExecSilent, ReadFile, WriteFile, WatchDir, UnwatchDir } from '../../wailsjs/go/main/App'
+import { invoke, on, offAll, b64ToText, textToB64 } from '../lib/ipc'
 import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import StructureView from './StructureView'
@@ -16,12 +15,12 @@ import './fullscreen.scss'
 
 async function fetchGitStatusMap(cwd: string): Promise<Record<string, string>> {
   try {
-    const root = (await ExecSilent(cwd, 'git', ['-C', cwd, 'rev-parse', '--show-toplevel'])).trim().replace(/\\/g, '/')
+    const root = (await invoke<string>('shell.exec', { cmd: 'git', dir: cwd, args: ['-C', cwd, 'rev-parse', '--show-toplevel'] })).trim().replace(/\\/g, '/')
     if (!root) return {}
 
     const [porcelain, gitmodulesRaw] = await Promise.all([
-      ExecSilent(cwd, 'git', ['-C', cwd, 'status', '--porcelain=v1', '--ignored']),
-      ReadFile(root + '/.gitmodules').catch(() => ''),
+      invoke<string>('shell.exec', { cmd: 'git', dir: cwd, args: ['-C', cwd, 'status', '--porcelain=v1', '--ignored'] }),
+      invoke<{ content: string }>('fs.readfile', { path: root + '/.gitmodules' }).then(r => b64ToText(r.content)).catch(() => ''),
     ])
 
     // Parse submodule paths from .gitmodules
@@ -214,8 +213,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   // stop it on unmount. The watcher emits 'fs:changed' below.
   useEffect(() => {
     if (!cwd) return
-    void WatchDir(cwd)
-    return () => { void UnwatchDir() }
+    void invoke('fs.watch', { path: cwd })
+    return () => { void invoke('fs.unwatch') }
   }, [cwd])
 
   // External filesystem changes (from the native watcher) — debounce a git
@@ -223,7 +222,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   // FileExplorer itself (it owns dirCache).
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
-    const unsub = EventsOn('fs:changed', () => {
+    const unsub = on('fs:changed', () => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(refreshGitStatus, 300)
     })
@@ -235,7 +234,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
 
   // Fetch and convert one directory's children for the lazy explorer.
   const loadDir = useCallback(async (path: string): Promise<FileNode[]> => {
-    const { entries } = await ExplorerReaddir(path)
+    const { entries } = await invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path })
     return entries.map(e => {
       const dot = !e.isDir ? e.name.lastIndexOf('.') : -1
       const ext = dot > 0 ? e.name.slice(dot + 1) : ''
@@ -247,10 +246,12 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   // Dirty files (user has unsaved edits) are intentionally skipped so we
   // never silently overwrite work in progress.
   useEffect(() => {
-    EventsOn('fullscreen:file-changed', (changedPath: string) => {
+    on('fullscreen:file-changed', (raw: unknown) => {
+      const changedPath = raw as string
       const file = openFilesRef.current.find(f => f.path === changedPath)
       if (!file || file.dirty) return
-      ExplorerGetFile(changedPath)
+      invoke<{ content: string }>('fs.readfile', { path: changedPath })
+        .then(r => b64ToText(r.content))
         .then(content => {
           setOpenFiles(prev => prev.map(f =>
             f.path === changedPath && !f.dirty ? { ...f, content } : f
@@ -258,7 +259,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
         })
         .catch(() => {})
     })
-    return () => EventsOff('fullscreen:file-changed')
+    return () => offAll('fullscreen:file-changed')
   }, [])
 
   // ── switch active file in a panel ──────────────────────────────────────────
@@ -281,7 +282,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     }
 
     try {
-      const content = await ExplorerGetFile(node.path)
+      const content = b64ToText((await invoke<{ content: string }>('fs.readfile', { path: node.path })).content)
       const panel = targetPanel ?? focusedPanelRef.current
       const panelActive = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
       const newFile: OpenFile = {
@@ -350,7 +351,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   // and drop any open file no longer present).
   useEffect(() => {
     const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
-    const unsub = EventsOn('fs:changed', (payload: unknown) => {
+    const unsub = on('fs:changed', (payload: unknown) => {
       const dirs = (payload as { dirs?: string[] })?.dirs ?? []
       if (dirs.length === 0) return
       const dirSet = new Set(dirs.map(norm))
@@ -367,7 +368,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
 
       void Promise.all([...byDir.entries()].map(async ([dir, files]) => {
         try {
-          const { entries } = await ExplorerReaddir(dir)
+          const { entries } = await invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path: dir })
           const names = new Set(entries.map(e => e.name.toLowerCase()))
           return files.filter(f => !names.has(f.path.slice(f.path.lastIndexOf('/') + 1).toLowerCase()))
         } catch { return [] }
@@ -579,11 +580,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
       : node.path
     const gitignorePath = cwdSlash + '/.gitignore'
 
-    const existing = await ReadFile(gitignorePath).catch(() => '')
+    const existing = await invoke<{ content: string }>('fs.readfile', { path: gitignorePath }).then(r => b64ToText(r.content)).catch(() => '')
     // Skip if already present
     if (existing.split('\n').some(l => l.trim() === relPath)) return
     const newContent = (existing && !existing.endsWith('\n') ? existing + '\n' : existing) + relPath + '\n'
-    await WriteFile(gitignorePath, newContent)
+    await invoke('fs.writefile', { path: gitignorePath, content: textToB64(newContent) })
 
     // Refresh git status so the ignored indicator appears immediately
     setGitStatusMap(await fetchGitStatusMap(cwd))

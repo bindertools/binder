@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { SearchFiles } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import Database from './Database'
 import { SearchResult } from '../types'
 import SidebarPanel from './shared/SidebarPanel'
@@ -38,9 +38,9 @@ export default function DatabasePage({ terminalId, cwd, initialDbPath, privacyMo
     setLoading(true)
 
     Promise.all([
-      SearchFiles(terminalId, '.db').catch(() => [] as SearchResult[]),
-      SearchFiles(terminalId, '.sqlite').catch(() => [] as SearchResult[]),
-      SearchFiles(terminalId, '.sqlite3').catch(() => [] as SearchResult[]),
+      invoke<SearchResult[]>('search.files', { path: terminalId, query: '.db' }).catch(() => [] as SearchResult[]),
+      invoke<SearchResult[]>('search.files', { path: terminalId, query: '.sqlite' }).catch(() => [] as SearchResult[]),
+      invoke<SearchResult[]>('search.files', { path: terminalId, query: '.sqlite3' }).catch(() => [] as SearchResult[]),
     ]).then(([a, b, c]) => {
       const all = ([...a, ...b, ...c] as SearchResult[])
         .filter(r => r.is_name)

@@ -1,6 +1,6 @@
-// Guardrail: scans src/**/*.{ts,tsx} (excluding wailsjs/) for emoji/symbol
-// glyphs and em-dashes (U+2014) outside of comments. Run on demand with
-// `npm run check:ui-text` — not wired into build/lint.
+// Guardrail: scans src/**/*.{ts,tsx} for emoji/symbol glyphs and em-dashes
+// (U+2014) outside of comments. Run on demand with `npm run check:ui-text`
+// — not wired into build/lint.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -22,7 +22,6 @@ const EXCLUDED_FILES = new Set([
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
-    if (entry === 'wailsjs') continue
     const full = join(dir, entry)
     const stat = statSync(full)
     if (stat.isDirectory()) yield* walk(full)

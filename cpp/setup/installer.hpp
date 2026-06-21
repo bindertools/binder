@@ -18,7 +18,7 @@ class InstallerApp {
 public:
     explicit InstallerApp(webview::webview& wv);
 
-    // IPC handlers — called from the __cmdide_invoke bind on a worker thread.
+    // IPC handlers — called from the __binder_invoke bind on a worker thread.
     void GetReleases(const std::string& seq);
     void GetChannel(const std::string& seq);
     void GetInstallDir(const std::string& seq);

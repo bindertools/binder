@@ -6,22 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import type { InstalledPluginCommand } from '../plugins'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import {
-  CreateTerminal,
-  SetTerminalAlignment,
-  ExecuteCommand,
-  InterruptCommand,
-  CloseTerminal,
-  SetClipboardText,
-  GetTerminalCwd,
-  SetTerminalCwd,
-  SelectDirectory,
-  GetCompletions,
-  CtrlClickPath,
-  TerminalInput,
-  ResizeTerminal,
-} from '../../wailsjs/go/main/App'
+import { invoke, on, offAll } from '../lib/ipc'
 import '@xterm/xterm/css/xterm.css'
 import TerminalBlockList from './TerminalBlockList'
 import GitBranchIcon from './GitBranchIcon'
@@ -146,17 +131,17 @@ export default function Terminal({
   useEffect(() => {
     const startEv = `terminal:pty:start:${tabId}`
     const endEv   = `terminal:pty:end:${tabId}`
-    EventsOn(startEv, () => {
+    on(startEv, () => {
       setIsPtyActive(true)
       setTimeout(() => { fitRef.current?.fit(); termRef.current?.focus() }, 50)
     })
-    EventsOn(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
-    return () => { EventsOff(startEv); EventsOff(endEv) }
+    on(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
+    return () => { offAll(startEv); offAll(endEv) }
   }, [tabId])
 
   // Keep Go terminal in sync when the user changes alignment via Settings.
   useEffect(() => {
-    SetTerminalAlignment(tabId, commandAlignment).catch(() => {})
+    invoke('terminal.setalignment', { id: tabId, alignment: commandAlignment }).catch(() => {})
   }, [tabId, commandAlignment])
 
   // Structured prompt data pushed from Go after each command completes.
@@ -179,7 +164,8 @@ export default function Terminal({
 
   useEffect(() => {
     const ev = `terminal:bar-prompt:${tabId}`
-    EventsOn(ev, (data: { path: string; branch: string; ts: string; exitCode?: number }) => {
+    on(ev, (raw: unknown) => {
+      const data = raw as { path: string; branch: string; ts: string; exitCode?: number }
       setBarPrompt(data)
       barPromptRef.current = data
       const list = blocksRef.current
@@ -191,7 +177,7 @@ export default function Terminal({
         scheduleBlocksUpdate()
       }
     })
-    return () => EventsOff(ev)
+    return () => offAll(ev)
   }, [tabId])
 
   const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
@@ -216,20 +202,20 @@ export default function Terminal({
   const undoStackRef = useRef<string[]>([])
 
   useEffect(() => {
-    GetTerminalCwd(tabId).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
+    invoke<string>('terminal.cwd', { id: tabId }).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
     const event = `terminal:cwd:${tabId}`
-    EventsOn(event, (path: string) => { cwdRef.current = path; setCwd(path); onCwdChange?.(path) })
-    return () => EventsOff(event)
+    on(event, (path: unknown) => { const p = path as string; cwdRef.current = p; setCwd(p); onCwdChange?.(p) })
+    return () => offAll(event)
   }, [tabId])
 
   useEffect(() => {
     const handler = (e: Event) => {
       const { terminalId } = (e as CustomEvent).detail
       if (terminalId !== tabId) return
-      SelectDirectory().then(path => { if (path) SetTerminalCwd(tabId, path).catch(() => {}) }).catch(() => {})
+      invoke<string>('shell.selectdir').then(path => { if (path) invoke('terminal.setcwd', { id: tabId, cwd: path }).catch(() => {}) }).catch(() => {})
     }
     window.addEventListener('terminal:select-dir', handler)
     return () => window.removeEventListener('terminal:select-dir', handler)
@@ -239,7 +225,7 @@ export default function Terminal({
     const handler = (e: Event) => {
       const { terminalId, path } = (e as CustomEvent<{ terminalId: string; path: string }>).detail
       if (terminalId !== tabId || !path) return
-      SetTerminalCwd(tabId, path).catch(() => {})
+      invoke('terminal.setcwd', { id: tabId, cwd: path }).catch(() => {})
     }
     window.addEventListener('terminal:cd-to', handler)
     return () => window.removeEventListener('terminal:cd-to', handler)
@@ -321,7 +307,7 @@ export default function Terminal({
         if (ctrlCTimer) clearTimeout(ctrlCTimer)
         if (ctrlCCopies === 1) {
           // First press with selection: copy, keep selection, block kill
-          SetClipboardText(selection).catch(() => {})
+          invoke('clipboard.set', { text: selection }).catch(() => {})
           ctrlCTimer = setTimeout(() => { ctrlCCopies = 0 }, 1000)
           return false // block xterm from sending ^C
         }
@@ -413,11 +399,11 @@ export default function Terminal({
       }
 
       e.preventDefault()
-      CtrlClickPath(tabId, token).then((result: unknown) => {
+      invoke('shell.ctrlclick', { tabId, path: token }).then((result: unknown) => {
         const r = result as { resolved: string; isDir: boolean; exists: boolean }
         if (r.exists && r.isDir) {
           const escaped = r.resolved.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-          ExecuteCommand(tabId, 'cd "' + escaped + '"').catch(() => {})
+          invoke('terminal.execute', { id: tabId, cmd: 'cd "' + escaped + '"' }).catch(() => {})
         } else if (r.exists && !r.isDir) {
           window.dispatchEvent(new CustomEvent('ide:ctrl-click-file', { detail: { path: r.resolved } }))
         }
@@ -443,7 +429,7 @@ export default function Terminal({
       const el = document.activeElement
       if (el && el !== document.body && !rootRef.current?.contains(el)) return
       e.preventDefault()
-      void InterruptCommand(tabId)
+      void invoke('terminal.interrupt', { id: tabId })
     }
     window.addEventListener('keydown', handleGlobalInterrupt)
 
@@ -463,13 +449,14 @@ export default function Terminal({
     const root = rootRef.current
     root?.addEventListener('wheel', handleWheel, { passive: false })
 
-    CreateTerminal(tabId, initialCwd ?? '', commandAlignmentRef.current).catch(() => {})
+    invoke('terminal.start', { id: tabId, shell: '', cwd: initialCwd ?? '', cols: 80, rows: 24, alignment: commandAlignmentRef.current }).catch(() => {})
 
     const outEvent = `terminal:output:${tabId}`
     // Use termRef.current (not the closure `term`) so that if the component
     // remounts and creates a new xterm instance, the handler always writes to
     // the currently-active terminal, not a stale/disposed one.
-    EventsOn(outEvent, (data: string) => {
+    on(outEvent, (raw: unknown) => {
+      const data = raw as string
       termRef.current?.write(data)
       if (ptyModeRef.current) return
       // 'clear'/'cls' sends an ANSI clear-screen sequence — drop every earlier
@@ -490,14 +477,14 @@ export default function Terminal({
     // PTY mode: switch to raw pass-through when an interactive process is running
     const ptyStartEvent = `terminal:pty:start:${tabId}`
     const ptyEndEvent   = `terminal:pty:end:${tabId}`
-    EventsOn(ptyStartEvent, () => { ptyModeRef.current = true  })
-    EventsOn(ptyEndEvent,   () => { ptyModeRef.current = false })
+    on(ptyStartEvent, () => { ptyModeRef.current = true  })
+    on(ptyEndEvent,   () => { ptyModeRef.current = false })
 
     // Forward xterm resize events to the backend PTY.
     // Guard against 0×0 — ConPTY panics on zero-dimension resize (can happen
     // during panel split layout transitions before the container gets its final size).
     term.onResize(({ cols, rows }) => {
-      if (cols > 0 && rows > 0) ResizeTerminal(tabId, cols, rows).catch(() => {})
+      if (cols > 0 && rows > 0) invoke('terminal.resize', { id: tabId, cols, rows }).catch(() => {})
     })
 
     // lineRef is declared at component scope (useRef) — accessible here and in handlers.
@@ -513,7 +500,7 @@ export default function Terminal({
           const cmd = lineRef.current
           lineRef.current = ''
           term.write('\r\n')
-          void ExecuteCommand(tabId, cmd)
+          void invoke('terminal.execute', { id: tabId, cmd })
         }
       })
     }
@@ -578,7 +565,7 @@ export default function Terminal({
       if (!parsed) { setMenu(null); return }
       const { dir, partial, prefix } = parsed
 
-      GetCompletions(tabId, dir, partial)
+      invoke<string[]>('complete.path', { tabId, dir, prefix: partial })
         .then((matches: string[]) => {
           if (!matches || matches.length === 0) { setMenu(null); return }
 
@@ -629,7 +616,7 @@ export default function Terminal({
               detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
             }))
           }
-          void ExecuteCommand(tabId, '')
+          void invoke('terminal.execute', { id: tabId, cmd: '' })
           return
         }
       }
@@ -647,7 +634,7 @@ export default function Terminal({
       blocksRef.current = [...blocksRef.current, block].slice(-200)
       scheduleBlocksUpdate()
 
-      void ExecuteCommand(tabId, value)
+      void invoke('terminal.execute', { id: tabId, cmd: value })
     }
 
     // Apply a specific match from the menu (used by click handler).
@@ -693,7 +680,7 @@ export default function Terminal({
       const text = e.clipboardData?.getData('text/plain') ?? ''
       if (!text) return
       if (ptyModeRef.current) {
-        TerminalInput(tabId, utf8ToBase64(text)).catch(() => {})
+        invoke('terminal.input', { id: tabId, data: utf8ToBase64(text) }).catch(() => {})
       } else {
         processPaste(text)
       }
@@ -706,13 +693,13 @@ export default function Terminal({
     // full-screen programs); the input row handles everything else.
     term.onData((data: string) => {
       if (!ptyModeRef.current) return
-      TerminalInput(tabId, utf8ToBase64(data)).catch(() => {})
+      invoke('terminal.input', { id: tabId, data: utf8ToBase64(data) }).catch(() => {})
     })
 
     // Allow plugins to execute commands in this terminal
     const handlePluginExec = (e: Event) => {
       const { terminalId, cmd } = (e as CustomEvent).detail
-      if (terminalId === tabId) void ExecuteCommand(tabId, cmd)
+      if (terminalId === tabId) void invoke('terminal.execute', { id: tabId, cmd })
     }
     window.addEventListener('plugin:execute', handlePluginExec)
 
@@ -734,11 +721,11 @@ export default function Terminal({
       window.removeEventListener('keydown', handleGlobalInterrupt)
       window.removeEventListener('paste', onWindowPaste)
       window.removeEventListener('plugin:execute', handlePluginExec)
-      EventsOff(outEvent)
-      EventsOff(ptyStartEvent)
-      EventsOff(ptyEndEvent)
+      offAll(outEvent)
+      offAll(ptyStartEvent)
+      offAll(ptyEndEvent)
       ptyModeRef.current = false
-      void CloseTerminal(tabId)
+      void invoke('terminal.stop', { id: tabId })
       try { term.dispose() } catch { /* GPU context may already be gone */ }
       termRef.current = null
       fitRef.current = null
@@ -795,7 +782,7 @@ export default function Terminal({
     if (isCommandRunning) {
       if (e.ctrlKey && e.key === 'c') {
         e.preventDefault()
-        void InterruptCommand(tabId)
+        void invoke('terminal.interrupt', { id: tabId })
       }
       return
     }
@@ -830,7 +817,7 @@ export default function Terminal({
       setMenu(null)
       lineRef.current = ''
       undoStackRef.current = []
-      void InterruptCommand(tabId)
+      void invoke('terminal.interrupt', { id: tabId })
     } else if (e.ctrlKey && e.key === 'u') {
       e.preventDefault()
       setInputBarValue('')
@@ -967,7 +954,7 @@ export default function Terminal({
 
       {menu && ReactDOM.createPortal(
         <div
-          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-y-auto max-h-[220px] min-w-[180px] shadow-lg font-mono text-[12px] py-1 backdrop-blur-[12px] no-scrollbar"
+          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-y-auto max-h-[220px] min-w-[180px] font-mono text-[12px] py-1 backdrop-blur-[12px] no-scrollbar"
           style={{ top: menu.top, left: menu.left }}
         >
           {menu.matches.map((m, i) => (

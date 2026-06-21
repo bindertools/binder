@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { ReadDatabase } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import SidebarPanel from './shared/SidebarPanel'
 import { PageSidebarNavItem } from './shared/PageSidebarNav'
 import './Database.scss'
@@ -158,7 +158,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
     setFilter('')
     setRevealedCells(new Set())
     setJsonRevealed(false)
-    ReadDatabase(dbPath)
+    invoke<unknown>('db.read', { path: dbPath })
       .then(raw => {
         const s = raw as unknown as DBSchema
         setSchema(s)

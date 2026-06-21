@@ -60,7 +60,7 @@ export default function NewPortForwardModal({ open, onCreate, onDismiss }: Props
     <>
       <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-[2px]" onClick={onDismiss} />
 
-      <div className="fixed z-[10001] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[96vw] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-xl shadow-[var(--shadow-overlay)] flex flex-col overflow-hidden">
+      <div className="fixed z-[10001] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[96vw] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden">
 
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
           <span className="text-[13px] font-semibold text-[var(--tab-color-hover)]">New Port Forward</span>

@@ -1,15 +1,15 @@
 [submodule "packages/plugin-sdk"]
 	path = packages/plugin-sdk
-	url = https://github.com/Command-IDE/plugin-sdk
+	url = https://github.com/BinderTools/plugin-sdk
 [submodule "packages/notepad"]
 	path = packages/notepad
-	url = https://github.com/Command-IDE/notepad
+	url = https://github.com/BinderTools/notepad
 [submodule "app/themes"]
 	path = app/themes
-	url = https://github.com/Command-IDE/themes
+	url = https://github.com/BinderTools/themes
 [submodule "packages/git"]
 	path = packages/git
-	url = https://github.com/Command-IDE/git
+	url = https://github.com/BinderTools/git
 [submodule "packages/ai-plugin"]
 	path = packages/ai-plugin
-	url = https://github.com/Command-IDE/ai-plugin
+	url = https://github.com/BinderTools/ai-plugin

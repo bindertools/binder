@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-const STORAGE_KEY = 'cmdide_keybindings'
+const STORAGE_KEY = 'binder_keybindings'
 
 export interface ShortcutDef {
   id:          string

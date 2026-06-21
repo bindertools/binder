@@ -5,7 +5,7 @@ import {
   getExternalPlugins, saveExternalPlugin, removeExternalPlugin,
   ExternalPluginRecord,
 } from './index'
-import { FetchExternalPlugin } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import './PluginStore.scss'
 
 type StoreTab = 'browse' | 'external'
@@ -136,7 +136,7 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
       setFetchError(null)
       setFetching(prev => new Set([...prev, entry.id]))
       try {
-        const result = await FetchExternalPlugin(entry.githubUrl)
+        const result = await invoke<any>('plugin.fetch', { id: entry.githubUrl })
         const record: ExternalPluginRecord = {
           id:          result.id || entry.id,
           name:        result.name || entry.name,
@@ -281,7 +281,7 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
     setStatus('loading')
     setMsg('')
     try {
-      const result = await FetchExternalPlugin(safeGithubUrl)
+      const result = await invoke<any>('plugin.fetch', { id: safeGithubUrl })
       const record: ExternalPluginRecord = {
         id:          result.id,
         name:        result.name,
@@ -319,8 +319,8 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
           <div className="ps-ext__title">Install from GitHub</div>
           <p className="ps-ext__desc">
             Paste the URL of any public GitHub repository built with the{' '}
-            <a className="ps-link" href="https://github.com/cmdide/plugin-sdk" target="_blank" rel="noreferrer">
-              CMD IDE Plugin SDK
+            <a className="ps-link" href="https://github.com/BinderTools/plugin-sdk" target="_blank" rel="noreferrer">
+              Binder Plugin SDK
             </a>. The repository must include a compiled <code>dist/index.js</code> bundle.
           </p>
         </div>
@@ -351,8 +351,8 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
           <ul className="ps-ext__reqs-list">
             <li>Repository must be <strong>public</strong> on GitHub</li>
             <li>Must include <code>dist/index.js</code>: a compiled ESM bundle that exports a <code>Plugin</code> object as its default export</li>
-            <li>Must be built using the <a className="ps-link" href="https://github.com/cmdide/plugin-sdk" target="_blank" rel="noreferrer">CMD IDE Plugin SDK</a></li>
-            <li>External plugins are <strong>not verified</strong> by the CMD IDE team. Only install code you trust</li>
+            <li>Must be built using the <a className="ps-link" href="https://github.com/BinderTools/plugin-sdk" target="_blank" rel="noreferrer">Binder Plugin SDK</a></li>
+            <li>External plugins are <strong>not verified</strong> by the Binder team. Only install code you trust</li>
           </ul>
         </div>
 

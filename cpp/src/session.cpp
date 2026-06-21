@@ -29,18 +29,18 @@ static std::mutex  g_db_mu;
 static bool        g_db_ok = false;
 
 #ifdef _WIN32
-// %APPDATA%\cmdIDE\sessions.db  (same directory as config.json)
+// %APPDATA%\Binder\sessions.db  (same directory as config.json)
 static std::wstring db_path_w() {
     wchar_t appdata[MAX_PATH] = {};
     GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    return std::wstring(appdata) + L"\\cmdIDE\\sessions.db";
+    return std::wstring(appdata) + L"\\Binder\\sessions.db";
 }
 #else
-// $HOME/.config/cmdide/sessions.db
+// $HOME/.config/binder/sessions.db
 static std::string db_path_u() {
     const char* home = getenv("HOME");
     if (!home || !*home) home = "/tmp";
-    return std::string(home) + "/.config/cmdide/sessions.db";
+    return std::string(home) + "/.config/binder/sessions.db";
 }
 #endif
 
@@ -54,7 +54,7 @@ static sqlite3* db() {
     // Ensure directory exists.
     wchar_t appdata[MAX_PATH] = {};
     GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    std::wstring dir = std::wstring(appdata) + L"\\cmdIDE";
+    std::wstring dir = std::wstring(appdata) + L"\\Binder";
     CreateDirectoryW(dir.c_str(), nullptr); // no-op if exists
 
     std::wstring path = db_path_w();

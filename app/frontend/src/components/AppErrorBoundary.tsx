@@ -33,7 +33,7 @@ export default class AppErrorBoundary extends React.Component<{ children: React.
             borderRadius: 18, padding: 20, background: 'rgba(255,255,255,0.03)',
           }}>
             <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 8 }}>
-              cmdIDE crashed
+              Binder crashed
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
               {this.state.error.message}

@@ -78,8 +78,8 @@ jobs:
       - name: Verify build outputs
         run: |
           $expected = @(
-            'cpp\build\Release\cmdide-host.exe',
-            'cpp\build\Release\cmdide-setup.exe'
+            'cpp\build\Release\binder-host.exe',
+            'cpp\build\Release\binder-setup.exe'
           )
           foreach ($path in $expected) {
             if (-not (Test-Path $path)) {
