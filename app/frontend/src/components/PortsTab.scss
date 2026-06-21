@@ -171,6 +171,36 @@
   opacity: 0.7;
 }
 
+/* ── Info tooltip ────────────────────────────────────────────────────────────── */
+.ports__info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
+.ports__info-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  background: var(--info-bar-bg);
+  border: 1px solid var(--sep-strong);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--info-bar-hover-color);
+  white-space: nowrap;
+  box-shadow: var(--shadow-overlay);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 10000;
+}
+.ports__info:hover .ports__info-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* ── Skeleton ────────────────────────────────────────────────────────────────── */
 .ports__skeleton {
   display: flex;

@@ -394,8 +394,9 @@ export default function PortsTab({ active, cwd }: Props) {
           <div className="ports__toolbar">
             <span className="ports__msg" style={{ flex: 1, color: 'var(--info-bar-color)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 5 }}>
               Local TCP/UDP relays: listens on this machine and forwards to another host:port reachable from it.
-              <span title="Does not touch router/UPnP/NAT settings." style={{ display: 'inline-flex', cursor: 'help' }}>
+              <span className="ports__info">
                 <Info size={12} style={{ opacity: 0.7, flexShrink: 0 }} />
+                <span className="ports__info-tip">Does not touch router/UPnP/NAT settings.</span>
               </span>
             </span>
             <button className="ports__refresh" onClick={() => setShowNewForward(true)}>
