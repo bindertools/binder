@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Info } from 'lucide-react'
 import { PortInfo, PortForward } from '../types'
 import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
@@ -256,8 +256,8 @@ export default function PortsTab({ active, cwd }: Props) {
         <SubNavTabs
           items={[
             { id: 'open-ports', label: 'Open Ports', icon: <IconPlug /> },
-            { id: 'forwards', label: 'Forwards', icon: <IconForward /> },
             { id: 'endpoints', label: 'Endpoints', icon: <IconEndpoint /> },
+            { id: 'forwards', label: 'Forwards', icon: <IconForward /> },
           ]}
           activeId={mainTab}
           onSelect={id => setMainTab(id as MainTab)}
@@ -392,8 +392,11 @@ export default function PortsTab({ active, cwd }: Props) {
       {mainTab === 'forwards' && (
         <>
           <div className="ports__toolbar">
-            <span className="ports__msg" style={{ flex: 1, color: 'var(--info-bar-color)', opacity: 0.7 }}>
-              Local TCP/UDP relays — listens on this machine and forwards to another host:port reachable from it. Does not touch router/UPnP/NAT settings.
+            <span className="ports__msg" style={{ flex: 1, color: 'var(--info-bar-color)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 5 }}>
+              Local TCP/UDP relays: listens on this machine and forwards to another host:port reachable from it.
+              <span title="Does not touch router/UPnP/NAT settings." style={{ display: 'inline-flex', cursor: 'help' }}>
+                <Info size={12} style={{ opacity: 0.7, flexShrink: 0 }} />
+              </span>
             </span>
             <button className="ports__refresh" onClick={() => setShowNewForward(true)}>
               <Plus size={13} /> New Forward

@@ -129,7 +129,7 @@ export default function NewPortForwardModal({ open, onCreate, onDismiss }: Props
               className="h-8 px-2.5 rounded-md bg-[var(--app-bg)] border border-[var(--border-color)] text-[12.5px] font-mono text-[var(--tab-color-hover)] outline-none focus:border-accent"
             />
             <span className="text-[10px] text-[var(--tab-color)] opacity-45">
-              Relayed locally on this machine only — does not touch router or NAT port forwarding.
+              Relayed locally on this machine only. Does not touch router or NAT port forwarding.
             </span>
           </label>
 
