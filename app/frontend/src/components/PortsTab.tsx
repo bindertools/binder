@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { PortInfo } from '../types'
-import { GetSystemPorts, KillPort } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import EndpointsTab from './EndpointsTab'
 import SubNavTabs from './shared/SubNavTabs'
@@ -53,6 +53,25 @@ const IconRefresh = () => (
   </svg>
 )
 
+// Hoisted to module scope: must keep a stable function identity across
+// PortsTab re-renders, otherwise React treats each render's <th> as a new
+// component type and tears down/remounts the header on every poll tick,
+// which can swallow a click mid-gesture.
+const Col = ({ k, label, sortKey, sortAsc, onSort }: {
+  k: keyof PortInfo
+  label: string
+  sortKey: keyof PortInfo
+  sortAsc: boolean
+  onSort: (k: keyof PortInfo) => void
+}) => (
+  <th className={`ports__th${sortKey === k ? ' ports__th--active' : ''}`} onClick={() => onSort(k)}>
+    <span className="ports__th-inner">
+      {label}
+      {sortKey === k && (sortAsc ? <IconChevronUp /> : <IconChevronDown />)}
+    </span>
+  </th>
+)
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function PortsSkeleton() {
@@ -60,13 +79,17 @@ function PortsSkeleton() {
     <div className="ports__skeleton">
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="ports__skeleton-row">
-          <Skeleton width={44} height={12} />
-          <Skeleton width={34} height={12} />
-          <Skeleton width={72} height={18} radius="var(--r-xl)" />
-          <Skeleton width={40} height={12} />
-          <Skeleton width={130} height={12} />
-          <Skeleton width={100} height={12} />
-          <Skeleton width={46} height={22} radius="var(--r-sm)" />
+          <div className="ports__skeleton-stack">
+            <Skeleton width={40} height={13} />
+            <Skeleton width={28} height={10} />
+          </div>
+          <Skeleton width={64} height={12} />
+          <div className="ports__skeleton-stack">
+            <Skeleton width={110} height={13} />
+            <Skeleton width={50} height={10} />
+          </div>
+          <Skeleton width={120} height={12} />
+          <Skeleton width={40} height={20} radius="var(--r-sm)" />
         </div>
       ))}
     </div>
@@ -86,8 +109,8 @@ export default function PortsTab({ active, cwd }: Props) {
   const [message, setMessage] = useState('')
 
   const refresh = useCallback(() => {
-    GetSystemPorts()
-      .then(p => setPorts(p ?? []))
+    invoke<{ ports: PortInfo[] }>('sysinfo.ports')
+      .then(r => setPorts(r.ports ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -107,8 +130,8 @@ export default function PortsTab({ active, cwd }: Props) {
   const handleKill = async (port: PortInfo) => {
     setKilling(String(port.port))
     try {
-      const msg = await KillPort(String(port.port))
-      setMessage(msg)
+      const r = await invoke<{ result: string }>('sysinfo.ports.kill', { port: port.port })
+      setMessage(r.result)
       setTimeout(() => { setMessage(''); refresh() }, 2000)
     } catch (e: any) {
       setMessage(e?.message ?? String(e))
@@ -124,29 +147,30 @@ export default function PortsTab({ active, cwd }: Props) {
     return [...s].sort()
   }, [ports])
 
-  const filtered = ports.filter(p => {
+  const filtered = useMemo(() => ports.filter(p => {
     if (protoFilter !== 'all' && p.protocol.toLowerCase() !== protoFilter) return false
     if (stateFilter !== 'all' && p.state !== stateFilter) return false
     if (!filter) return true
     const q = filter.toLowerCase()
     return String(p.port).includes(q) || p.protocol.includes(q) ||
       p.state.toLowerCase().includes(q) || p.process.toLowerCase().includes(q)
-  })
+  }), [ports, protoFilter, stateFilter, filter])
 
-  const sorted = [...filtered].sort((a, b) => {
-    const av = a[sortKey] ?? ''
-    const bv = b[sortKey] ?? ''
-    const cmp = av < bv ? -1 : av > bv ? 1 : 0
-    return sortAsc ? cmp : -cmp
-  })
+  const sorted = useMemo(() => {
+    const arr = [...filtered]
+    arr.sort((a, b) => {
+      const av = a[sortKey] ?? ''
+      const bv = b[sortKey] ?? ''
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : av < bv ? -1 : av > bv ? 1 : 0
+      return sortAsc ? cmp : -cmp
+    })
+    return arr
+  }, [filtered, sortKey, sortAsc])
 
-  const Col = ({ k, label }: { k: keyof PortInfo; label: string }) => (
-    <th className={`ports__th${sortKey === k ? ' ports__th--active' : ''}`} onClick={() => handleSort(k)}>
-      <span className="ports__th-inner">
-        {label}
-        {sortKey === k && (sortAsc ? <IconChevronUp /> : <IconChevronDown />)}
-      </span>
-    </th>
+  const StateDot = ({ state }: { state: string }) => (
+    <span className={`ports__dot ports__dot--${state.toLowerCase()}`} />
   )
 
   return (
@@ -198,37 +222,44 @@ export default function PortsTab({ active, cwd }: Props) {
               <table className="ports__table">
                 <thead>
                   <tr>
-                    <Col k="port"     label="Port" />
-                    <Col k="protocol" label="Proto" />
-                    <Col k="state"    label="State" />
-                    <Col k="pid"      label="PID" />
-                    <Col k="process"  label="Process" />
-                    <Col k="address"  label="Address" />
-                    <th className="ports__th">Action</th>
+                    <Col k="port"    label="Port"    sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+                    <Col k="state"   label="State"   sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+                    <Col k="process" label="Process" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+                    <Col k="address" label="Address" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+                    <th className="ports__th ports__th--action">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sorted.map((p, i) => (
-                    <tr key={i} className="ports__row">
-                      <td className="ports__port">{p.port}</td>
-                      <td className="ports__proto">{p.protocol}</td>
-                      <td className={`ports__state ports__state--${p.state.toLowerCase()}`}>{p.state || '-'}</td>
-                      <td className="ports__pid">{p.pid || '-'}</td>
-                      <td className="ports__process">{p.process || '-'}</td>
-                      <td className="ports__addr">{p.address}</td>
-                      <td className="ports__action">
+                    <tr key={`${p.protocol}:${p.address}:${p.port}:${p.pid}:${i}`} className="ports__row">
+                      <td className="ports__cell">
+                        <div className="ports__primary ports__port">{p.port}</div>
+                        <div className="ports__secondary">{p.protocol.toLowerCase()}</div>
+                      </td>
+                      <td className="ports__cell">
+                        <div className="ports__state-line">
+                          <StateDot state={p.state} />
+                          <span className="ports__primary">{p.state || '-'}</span>
+                        </div>
+                      </td>
+                      <td className="ports__cell">
+                        <div className="ports__primary">{p.process || '-'}</div>
+                        {!!p.pid && <div className="ports__secondary">pid {p.pid}</div>}
+                      </td>
+                      <td className="ports__cell ports__addr">{p.address}</td>
+                      <td className="ports__cell ports__action">
                         <button
                           className="ports__kill"
                           disabled={killing === String(p.port)}
                           onClick={() => handleKill(p)}
                         >
-                          {killing === String(p.port) ? '…' : 'kill'}
+                          {killing === String(p.port) ? '…' : 'Kill'}
                         </button>
                       </td>
                     </tr>
                   ))}
                   {sorted.length === 0 && (
-                    <tr><td colSpan={7} className="ports__empty">no ports match your filters</td></tr>
+                    <tr><td colSpan={5} className="ports__empty">no ports match your filters</td></tr>
                   )}
                 </tbody>
               </table>
