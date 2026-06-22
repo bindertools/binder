@@ -160,7 +160,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
     setJsonRevealed(false)
     invoke<unknown>('db.read', { path: dbPath })
       .then(raw => {
-        const s = raw as unknown as DBSchema
+        const s = raw as DBSchema
         setSchema(s)
         if (s.tables?.length) setSelectedTable(s.tables[0].name)
         setLoading(false)

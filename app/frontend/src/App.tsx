@@ -669,8 +669,8 @@ export default function App() {
 
   useEffect(() => {
     invoke('config.get').then(cfg => {
-      const zoom = (cfg as unknown as AppConfig).default_zoom || defaultConfig.default_zoom
-      setAppConfig(cfg as unknown as AppConfig)
+      const zoom = (cfg as AppConfig).default_zoom || defaultConfig.default_zoom
+      setAppConfig(cfg as AppConfig)
       setCurrentZoom(zoom)
       localStorage.setItem('binder_zoom', String(zoom))
     }).catch(() => {})
@@ -1174,7 +1174,7 @@ export default function App() {
             onRescan={async (_, scanCwd) => {
               setProbScanning(true)
               try {
-                const r = await invoke('problems.scan', { path: scanCwd }) as { sources?: string[]; items?: ProbItem[] }
+                const r = await invoke('problems.scan', { path: scanCwd })
                 setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
               } catch { /* ignore */ }
               setProbScanning(false)
