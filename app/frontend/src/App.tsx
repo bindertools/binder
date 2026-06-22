@@ -30,7 +30,7 @@ import {
   clearLinkedTerminalInTree,
   type PaneNode, type LeafPane,
 } from './paneModel'
-import { invoke, on, offAll, b64ToText, textToB64 } from './lib/ipc'
+import { invoke, on, offAll, b64ToText } from './lib/ipc'
 import { useDragRegions } from './lib/useDragRegions'
 import { addBackgroundTask, removeBackgroundTask } from './lib/backgroundTaskStore'
 import { useWorkflowRuns } from './lib/workflowRunsStore'
@@ -880,7 +880,7 @@ export default function App() {
         ])
       }
     } catch { /* ignore */ }
-    invoke('window.close')
+    void invoke('window.close')
   }, [appConfig.soft_close, tabs])
 
   // ── Pane operations ───────────────────────────────────────────────────────────
@@ -1174,7 +1174,7 @@ export default function App() {
             onRescan={async (_, scanCwd) => {
               setProbScanning(true)
               try {
-                const r = await invoke('problems.scan', { path: scanCwd }) as { sources?: string[]; items?: ProbItem[] }
+                const r = await invoke<{ sources?: string[]; items?: ProbItem[] }>('problems.scan', { path: scanCwd })
                 setProbSources(r.sources ?? []); setProbItems(r.items ?? [])
               } catch { /* ignore */ }
               setProbScanning(false)

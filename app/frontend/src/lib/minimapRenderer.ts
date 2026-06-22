@@ -23,7 +23,7 @@ function rgbaCss(c: RGBA): string {
 }
 
 export function computeMinimapGeometry(
-  lineCount: number, height: number, topLine: number, visibleRows: number,
+  lineCount: number, height: number, topLine: number, _visibleRows: number,
 ): MinimapGeometry {
   if (lineCount <= 0 || height <= 0) return { firstLine: 0, lastLine: -1, rowHeight: MINIMAP_ROW_HEIGHT }
   if (lineCount <= MINIMAP_FULL_FILE_CAP) {

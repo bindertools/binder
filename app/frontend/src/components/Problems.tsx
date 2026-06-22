@@ -430,7 +430,7 @@ function CweListEmpty({ dismissedCount, onRestore }: { dismissedCount: number; o
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Problems({
-  tabId, cwd, sources, items, scanning,
+  tabId, cwd, sources: _sources, items, scanning,
   cweItems = [], cweScanning = false,
   onRescan, onOpenFile, onCweScan,
 }: Props) {

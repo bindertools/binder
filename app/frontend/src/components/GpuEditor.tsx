@@ -272,19 +272,6 @@ function nextVisibleLine(ln: number, folds: Map<number, number>): number {
   }
 }
 
-// The nearest visible line at or before `ln`, skipping collapsed ranges.
-function prevVisibleLine(ln: number, folds: Map<number, number>): number {
-  let result = ln
-  for (;;) {
-    let minAnchor = -1
-    for (const [anchor, end] of folds) {
-      if (result > anchor && result <= end) minAnchor = minAnchor < 0 ? anchor : Math.min(minAnchor, anchor)
-    }
-    if (minAnchor < 0) return result
-    result = minAnchor
-  }
-}
-
 // Reveal `ln` by removing any (possibly nested) folds that hide it.
 function unfoldContaining(ln: number, folds: Map<number, number>) {
   let changed = true
