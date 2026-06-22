@@ -133,8 +133,8 @@ jobs:
 
           # Allowed binary paths (build artifacts, resources)
           ALLOWED_PATTERNS=(
-            "installer/windows/build/"
-            "installer/windows/frontend/dist/"
+            "setup/windows/build/"
+            "setup/windows/frontend/dist/"
             "app/frontend/dist/"
             ".png" ".ico" ".icns"
           )

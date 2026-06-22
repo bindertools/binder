@@ -2,97 +2,31 @@ import React from 'react'
 
 interface Props { name: string; ext: string; isDir: boolean; isOpen?: boolean }
 
-// ── Color palettes — kept intact for future theme use ────────────────────────
-const EXT_COLORS: Record<string, string> = {
-  ts: '#3178c6', tsx: '#3178c6',
-  js: '#e8c84a', jsx: '#e8c84a', mjs: '#e8c84a', cjs: '#e8c84a',
-  go: '#00acd7',
-  py: '#3572a5',
-  rs: '#dea584',
-  json: '#cbcb41', jsonc: '#cbcb41',
-  md: '#519aba', mdx: '#519aba',
-  css: '#563d7c', scss: '#c6538c', sass: '#c6538c', less: '#1d365d',
-  html: '#e44d26', htm: '#e44d26',
-  sh: '#4eaa25', bash: '#4eaa25', zsh: '#4eaa25', fish: '#4eaa25',
-  ps1: '#012456', psm1: '#012456',
-  c: '#555599', h: '#a074c4', cpp: '#f34b7d', cc: '#f34b7d',
-  cs: '#178600',
-  java: '#b07219',
-  rb: '#701516',
-  php: '#4f5d95',
-  swift: '#f05138',
-  kt: '#a97bff', kts: '#a97bff',
-  sql: '#dad8d8',
-  graphql: '#e10098',
-  xml: '#f1662a', svg: '#ff9a00',
-  yaml: '#cb171e', yml: '#cb171e', toml: '#9c4121',
-  env: '#ecd53f',
-  lock: '#888888',
-  log: '#aaaaaa',
-  txt: '#cccccc',
-  gitignore: '#f54d27', gitattributes: '#f54d27',
-  dockerfile: '#0db7ed',
-  makefile: '#427819',
-  mod: '#00acd7', sum: '#00acd7',
-}
+// All icons render with `currentColor` so they pick up `.fe-node__icon`'s
+// color from the theme (see fullscreen.scss) — no per-type color palette.
 
-const NAMED_FILE_COLORS: Record<string, string> = {
-  dockerfile: '#0db7ed',
-  makefile: '#427819', 'makefile.linux': '#427819',
-  '.env': '#ecd53f', '.envrc': '#ecd53f',
-  'package.json': '#e8c84a', 'tsconfig.json': '#3178c6',
-  '.gitignore': '#f54d27', '.gitattributes': '#f54d27',
-  'go.mod': '#00acd7', 'go.sum': '#00acd7',
-  'readme.md': '#519aba',
-  'license': '#aaaaaa',
-}
+const LOCK_NAMES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock'])
+const IMAGE_EXTS = new Set(['svg', 'png', 'jpg', 'jpeg', 'gif', 'ico', 'webp', 'bmp', 'avif'])
+const SCRIPT_EXTS = new Set(['sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1'])
+const MARKUP_EXTS = new Set(['html', 'htm', 'xml', 'vue', 'svelte'])
+const STYLE_EXTS = new Set(['css', 'scss', 'sass', 'less'])
+const DATA_LIST_EXTS = new Set(['yaml', 'yml', 'toml'])
+const CODE_EXTS = new Set(['js', 'ts', 'mjs', 'cjs'])
 
-const FOLDER_COLORS: Record<string, string> = {
-  src: '#4ec9b0', source: '#4ec9b0',
-  app: '#75beff', apps: '#75beff',
-  lib: '#d4aa00', libs: '#d4aa00',
-  test: '#75e05a', tests: '#75e05a', __tests__: '#75e05a', spec: '#75e05a',
-  build: '#e8ae4a', dist: '#e8ae4a', out: '#e8ae4a', bin: '#e8ae4a',
-  public: '#7ac070',
-  assets: '#d4aa00', static: '#d4aa00',
-  components: '#61afef', component: '#61afef',
-  pages: '#c678dd',
-  styles: '#c6538c', css: '#c6538c',
-  config: '#6d8086', configs: '#6d8086', configuration: '#6d8086',
-  scripts: '#4eaa25',
-  docs: '#519aba', doc: '#519aba', documentation: '#519aba',
-  node_modules: '#e8ae4a',
-  '.git': '#f54d27',
-  '.github': '#888888',
-  frontend: '#61afef', backend: '#75beff',
-  installer: '#e8ae4a',
-  windows: '#0078d4', macos: '#aaaaaa', linux: '#dd4814',
-}
-
-function iconColor(name: string, ext: string): string {
-  const lower = name.toLowerCase()
-  if (NAMED_FILE_COLORS[lower]) return NAMED_FILE_COLORS[lower]
-  return EXT_COLORS[ext] ?? '#7a8899'
-}
-
-function folderColor(name: string): string {
-  return FOLDER_COLORS[name.toLowerCase()] ?? '#7a8899'
-}
-
-// ── Folder: outlined shape, stroke = theme color, barely-there fill tint ─────
-function FolderShape({ color, open }: { color: string; open: boolean }) {
+// ── Folder: flat single-tone shape ────────────────────────────────────────────
+function FolderShape({ open }: { open: boolean }) {
   if (open) {
     return (
       <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
-        {/* back panel */}
+        {/* body */}
         <path
-          d="M1 4h14v7.5c0 .83-.67 1.5-1.5 1.5h-11C1.67 13 1 12.33 1 11.5V4z"
-          fill={color + '20'} stroke={color} strokeWidth="1"
+          d="M1 3.5C1 2.67 1.67 2 2.5 2H5.8l1.4 2H13.5c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5h-11C1.67 12 1 11.33 1 10.5v-7z"
+          fill="currentColor" fillOpacity="0.5"
         />
-        {/* tab */}
+        {/* lifted front flap */}
         <path
-          d="M1 4V3.5C1 2.67 1.67 2 2.5 2H5.8l1.4 2H1z"
-          fill={color + '30'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+          d="M1.2 5.8a1 1 0 0 1 .97-.8h11.66a1 1 0 0 1 .97 1.22l-.8 3.8a1.2 1.2 0 0 1-1.17.98H3.13a1.2 1.2 0 0 1-1.17-.98l-.8-3.8a1 1 0 0 1 .04-.42z"
+          fill="currentColor"
         />
       </svg>
     )
@@ -101,26 +35,180 @@ function FolderShape({ color, open }: { color: string; open: boolean }) {
     <svg width="16" height="14" viewBox="0 0 16 14" fill="none" style={{ flexShrink: 0 }}>
       <path
         d="M1 3.5C1 2.67 1.67 2 2.5 2H5.8l1.4 2H13.5c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5h-11C1.67 12 1 11.33 1 10.5v-7z"
-        fill={color + '20'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+        fill="currentColor"
       />
     </svg>
   )
 }
 
-// ── File: compact outlined document, corner fold, minimal fill ───────────────
-function FileDoc({ color }: { color: string }) {
+// ── Generic file: outlined document, corner fold ──────────────────────────────
+function FileDoc() {
   return (
     <svg width="13" height="15" viewBox="0 0 13 15" fill="none" style={{ flexShrink: 0 }}>
       <path
         d="M2 1h7l3 3v10H2V1z"
-        fill={color + '18'} stroke={color} strokeWidth="1" strokeLinejoin="round"
+        fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"
       />
-      <path d="M9 1v3h3" fill="none" stroke={color} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9 1v3h3" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+// ── React/component files (jsx/tsx): atom glyph ───────────────────────────────
+function AtomIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+      <g stroke="currentColor" strokeWidth="1.1" fill="none">
+        <ellipse cx="8" cy="8" rx="6.5" ry="2.6" />
+        <ellipse cx="8" cy="8" rx="6.5" ry="2.6" transform="rotate(60 8 8)" />
+        <ellipse cx="8" cy="8" rx="6.5" ry="2.6" transform="rotate(120 8 8)" />
+      </g>
+    </svg>
+  )
+}
+
+// ── JS/TS/JSON: curly braces ───────────────────────────────────────────────────
+function BracesIcon() {
+  return (
+    <svg width="14" height="16" viewBox="0 0 14 16" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M5.3 1.5c-1.4 0-2.1.8-2.1 2.1v1.7c0 .9-.4 1.4-1.7 1.7 1.3.3 1.7.8 1.7 1.7v1.7c0 1.3.7 2.1 2.1 2.1"
+        stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+      <path d="M8.7 1.5c1.4 0 2.1.8 2.1 2.1v1.7c0 .9.4 1.4 1.7 1.7-1.3.3-1.7.8-1.7 1.7v1.7c0 1.3-.7 2.1-2.1 2.1"
+        stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ── package.json: hexagonal box ───────────────────────────────────────────────
+function PackageIcon() {
+  return (
+    <svg width="14" height="15" viewBox="0 0 14 15" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M7 .8 12.8 4v6.3L7 13.5 1.2 10.3V4z"
+        fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
+      <path d="M1.2 4 7 7.3l5.8-3.3M7 7.3v6.2"
+        stroke="currentColor" strokeWidth="1" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ── CSS/SCSS/LESS: hash ─────────────────────────────────────────────────────────
+function HashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" style={{ flexShrink: 0 }}>
+      <path d="M5.2 1.5 3.4 12.5" />
+      <path d="M10.6 1.5 8.8 12.5" />
+      <path d="M2.3 5h10.4" />
+      <path d="M1.4 9h10.4" />
+    </svg>
+  )
+}
+
+// ── HTML/XML/Vue: angle brackets ────────────────────────────────────────────────
+function AngleIcon() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M5.5 2 1.5 7l4 5" />
+      <path d="M10.5 2 14.5 7l-4 5" />
+    </svg>
+  )
+}
+
+// ── Markdown: badge with "M" + down-arrow ───────────────────────────────────────
+function MarkdownIcon() {
+  return (
+    <svg width="16" height="13" viewBox="0 0 16 13" fill="none" style={{ flexShrink: 0 }}>
+      <rect x="0.5" y="0.5" width="15" height="12" rx="1.5" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1" />
+      <path d="M2.5 9V4l2 2.5L6.5 4v5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 4v3.2M9.4 6 11 7.8 12.6 6" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ── Images: picture frame with mountains ────────────────────────────────────────
+function ImageIcon() {
+  return (
+    <svg width="15" height="14" viewBox="0 0 15 14" fill="none" style={{ flexShrink: 0 }}>
+      <rect x="0.5" y="0.5" width="14" height="13" rx="1.5" fill="currentColor" fillOpacity="0.1" stroke="currentColor" strokeWidth="1" />
+      <circle cx="4.5" cy="4.5" r="1.3" fill="currentColor" />
+      <path d="M1.5 11 5 7l2.5 2.7L11 6l3 4.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ── YAML/TOML: stacked lines ─────────────────────────────────────────────────────
+function ListIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" style={{ flexShrink: 0 }}>
+      <path d="M1.5 2.5h11" />
+      <path d="M1.5 7h11" />
+      <path d="M1.5 11.5h7" />
+    </svg>
+  )
+}
+
+// ── Lockfiles: padlock ───────────────────────────────────────────────────────────
+function LockIcon() {
+  return (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="none" style={{ flexShrink: 0 }}>
+      <rect x="1.5" y="6.5" width="10" height="7" rx="1.3" fill="currentColor" fillOpacity="0.14" stroke="currentColor" strokeWidth="1" />
+      <path d="M3.7 6.5V4.3a2.8 2.8 0 0 1 5.6 0v2.2" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <circle cx="6.5" cy="10" r="1" fill="currentColor" />
+    </svg>
+  )
+}
+
+// ── .env: key ──────────────────────────────────────────────────────────────────
+function KeyIcon() {
+  return (
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="4" cy="6" r="3" />
+      <path d="M6.8 6H13M10.5 6V8.3M12.3 6V8" />
+    </svg>
+  )
+}
+
+// ── Shell/PowerShell scripts: terminal prompt ───────────────────────────────────
+function ScriptIcon() {
+  return (
+    <svg width="15" height="13" viewBox="0 0 15 13" fill="none" style={{ flexShrink: 0 }}>
+      <rect x="0.5" y="0.5" width="14" height="12" rx="1.5" fill="currentColor" fillOpacity="0.1" stroke="currentColor" strokeWidth="1" />
+      <path d="M2.8 4 5 6.2 2.8 8.4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 8.4h4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ── .gitignore / .gitattributes: branch ─────────────────────────────────────────
+function GitIcon() {
+  return (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="3" cy="3" r="1.6" />
+      <circle cx="3" cy="12" r="1.6" />
+      <circle cx="10" cy="8" r="1.6" />
+      <path d="M3 4.6V10.4" />
+      <path d="M3 6.5a3.5 3.5 0 0 0 3.5 3.5H8.4" />
     </svg>
   )
 }
 
 export default function FileIcon({ name, ext, isDir, isOpen = false }: Props) {
-  if (isDir) return <FolderShape color={folderColor(name)} open={isOpen} />
-  return <FileDoc color={iconColor(name, ext)} />
+  if (isDir) return <FolderShape open={isOpen} />
+
+  const lower = name.toLowerCase()
+
+  if (lower === 'package.json') return <PackageIcon />
+  if (ext === 'lock' || LOCK_NAMES.has(lower)) return <LockIcon />
+  if (ext === 'jsx' || ext === 'tsx') return <AtomIcon />
+  if (CODE_EXTS.has(ext) || ext === 'json' || ext === 'jsonc') return <BracesIcon />
+  if (STYLE_EXTS.has(ext)) return <HashIcon />
+  if (MARKUP_EXTS.has(ext)) return <AngleIcon />
+  if (ext === 'md' || ext === 'mdx') return <MarkdownIcon />
+  if (IMAGE_EXTS.has(ext)) return <ImageIcon />
+  if (DATA_LIST_EXTS.has(ext)) return <ListIcon />
+  if (lower === '.env' || lower.startsWith('.env.')) return <KeyIcon />
+  if (SCRIPT_EXTS.has(ext)) return <ScriptIcon />
+  if (lower === '.gitignore' || lower === '.gitattributes') return <GitIcon />
+
+  return <FileDoc />
 }

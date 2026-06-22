@@ -12,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@cmdide/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
+      '@binder/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
     },
   },
   server: {
@@ -22,13 +22,6 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'monaco-editor': ['monaco-editor'],
-        },
-      },
-    },
     chunkSizeWarningLimit: 5000,
   },
 })

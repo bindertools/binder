@@ -4,7 +4,11 @@
 
 #include <cmark.h>
 
+#ifdef _WIN32
 #include <windows.h> // already pulled in by httplib.h, but explicit for clarity
+#else
+#include <filesystem>
+#endif
 
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -27,6 +31,7 @@ namespace {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+#ifdef _WIN32
 // UTF-8 string → fs::path-compatible wstring for Win32 file APIs.
 static std::wstring to_wpath(const std::string& s) {
     if (s.empty()) return {};
@@ -35,6 +40,7 @@ static std::wstring to_wpath(const std::string& s) {
     MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), n);
     return w;
 }
+#endif
 
 static std::string lower_ext(const std::string& path) {
     auto dot = path.rfind('.');
@@ -99,7 +105,11 @@ static const char kMdShellTail[] = "</div></body></html>";
 
 static std::string render_markdown(const std::string& path_utf8) {
     // Read file
+#ifdef _WIN32
     std::ifstream f(to_wpath(path_utf8), std::ios::binary);
+#else
+    std::ifstream f(path_utf8, std::ios::binary);
+#endif
     if (!f) return "";
     std::string md((std::istreambuf_iterator<char>(f)), {});
 
@@ -121,13 +131,16 @@ struct PreviewServer {
     bool                      running_ = false;
     std::mutex                mu_;
 
-    // Converts a URL path segment to an absolute Windows file path.
-    // URL path for Windows: "/C:/Users/x/file.html" → "C:\Users\x\file.html"
+    // Converts a URL path segment to a filesystem path component.
+    // On Windows: "/C:/Users/x/file.html" → "C:\Users\x\file.html"
+    // On non-Windows: "/home/user/file.html" → "home/user/file.html" (leading '/' is re-added later)
     static std::string url_to_fspath(std::string url_path) {
         // Strip leading '/'
         if (!url_path.empty() && url_path[0] == '/') url_path.erase(0, 1);
+#ifdef _WIN32
         // Forward slashes to backslashes (Windows)
         for (char& c : url_path) if (c == '/') c = '\\';
+#endif
         return url_path;
     }
 
@@ -137,9 +150,10 @@ struct PreviewServer {
 
         s->Get("/(.*)", [](const httplib::Request& req, httplib::Response& res) {
             std::string fspath = url_to_fspath(req.path);
-            if (fspath.empty() || fspath.size() < 3) { // must have at least "C:\"
-                res.status = 404; return;
-            }
+            if (fspath.empty()) { res.status = 404; return; }
+
+#ifdef _WIN32
+            if (fspath.size() < 3) { res.status = 404; return; }
 
             // Basic path sanity check: must be absolute (drive letter on Windows)
             bool is_abs = fspath.size() >= 3 && fspath[1] == ':' &&
@@ -171,6 +185,29 @@ struct PreviewServer {
             if (!f) { res.status = 404; return; }
             std::string body((std::istreambuf_iterator<char>(f)), {});
             res.set_content(body, mime_for(ext).c_str());
+#else
+            // On non-Windows, fspath is a POSIX absolute path (leading '/' was stripped
+            // by url_to_fspath, so restore it).
+            std::string abs_path = "/" + fspath;
+
+            // Canonicalise to prevent path traversal.
+            std::error_code ec;
+            auto canon_path = std::filesystem::weakly_canonical(abs_path, ec);
+            if (ec) { res.status = 404; return; }
+
+            std::string ext = lower_ext(abs_path);
+            if (ext == ".md" || ext == ".markdown") {
+                std::string html = render_markdown(canon_path.string());
+                if (html.empty()) { res.status = 404; return; }
+                res.set_content(html, "text/html; charset=utf-8");
+                return;
+            }
+
+            std::ifstream f(canon_path, std::ios::binary);
+            if (!f) { res.status = 404; return; }
+            std::string body((std::istreambuf_iterator<char>(f)), {});
+            res.set_content(body, mime_for(ext).c_str());
+#endif
         });
 
         return s;

@@ -1,4 +1,4 @@
-/* Hide scrollbar — no Tailwind utility for scrollbar-width:none + ::-webkit-scrollbar */
+/* Hide scrollbar */
 .tabbar__strip {
   scrollbar-width: none;
 }
@@ -6,7 +6,22 @@
   display: none;
 }
 
-/* Drag-over state: dashed accent outline */
+/* Tab height is controlled by items-stretch on the h-full strip */
+.tabbar__tab {
+  border-right: 1px solid transparent;
+}
+
+/* No separator lines — tabs flow as a single unified strip */
+
+/* Active tab: slightly elevated + bottom border indicator */
+.tabbar__tab--active {
+  border-left-color: transparent !important;
+}
+.tabbar__tab--active + .tabbar__tab {
+  border-left-color: transparent !important;
+}
+
+/* Drag-over state */
 .tabbar--dragover {
   background: rgba(10,132,255,0.05) !important;
   outline: 1px dashed rgba(10,132,255,0.3);

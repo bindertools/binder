@@ -1,0 +1,79 @@
+/* Interactive gutter overlay: pin/mark dots and fold chevrons, drawn as DOM
+   elements (over the WebGL canvas) so they get real CSS hover/cursor states. */
+
+.gpu-gutter-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.gpu-gutter-row {
+  position: absolute;
+  left: 0;
+}
+
+.gpu-pin-dot {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.gpu-pin-dot .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gpu-gutter-active-color);
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease;
+}
+
+.gpu-pin-dot:hover .dot {
+  opacity: 0.5;
+}
+
+.gpu-pin-dot.pinned .dot {
+  opacity: 1;
+  background: var(--gpu-error-color);
+}
+
+.gpu-fold-btn {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--gpu-gutter-color);
+  transition: color 0.1s ease;
+}
+
+.gpu-fold-btn:hover,
+.gpu-fold-btn.current {
+  color: var(--gpu-gutter-active-color);
+}
+
+/* Completions popup scrollbar — themed to match the rest of the app instead
+   of the default browser scrollbar. */
+.gpu-completions-popup {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+}
+.gpu-completions-popup::-webkit-scrollbar       { width: 6px; }
+.gpu-completions-popup::-webkit-scrollbar-track { background: transparent; }
+.gpu-completions-popup::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }

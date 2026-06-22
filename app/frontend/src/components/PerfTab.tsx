@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { PerfData } from '../types'
-import { StartPerfMonitor, StopPerfMonitor } from '../../wailsjs/go/main/App'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
+import { invoke, on, offAll } from '../lib/ipc'
 import { Skeleton } from './Skeleton'
 import './PerfTab.scss'
 
@@ -84,7 +83,18 @@ function SparkCard({ label, color, points, current }: { label: string; color: st
   )
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
+const NetUpIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 9V1M3 3l3-3 3 3"/>
+  </svg>
+)
+const NetDownIcon = () => (
+  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M6 1v8M3 7l3 3 3-3"/>
+  </svg>
+)
+
+function StatRow({ label, value }: { label: React.ReactNode; value: string }) {
   return (
     <div className="perf-stat">
       <span className="perf-stat__label">{label}</span>
@@ -137,9 +147,10 @@ export default function PerfTab({ tabId, active }: Props) {
   useEffect(() => {
     if (!active) return
     const event = `perf:data:${tabId}`
-    StartPerfMonitor(tabId).catch(() => {})
+    invoke('sysinfo.perf.start', { id: tabId }).catch(() => {})
 
-    EventsOn(event, (d: PerfData) => {
+    on(event, (raw: unknown) => {
+      const d = raw as PerfData
       setData(d)
       const push = (arr: number[], v: number) => {
         arr.push(v)
@@ -152,8 +163,8 @@ export default function PerfTab({ tabId, active }: Props) {
     })
 
     return () => {
-      StopPerfMonitor(tabId).catch(() => {})
-      EventsOff(event)
+      invoke('sysinfo.perf.stop', { id: tabId }).catch(() => {})
+      offAll(event)
     }
   }, [tabId, active])
 
@@ -165,7 +176,7 @@ export default function PerfTab({ tabId, active }: Props) {
         <GaugeCard value={data.cpu_percent}  label="CPU"  color="var(--accent)" />
         <GaugeCard value={data.mem_percent}  label="RAM"  color="var(--color-success)" />
         <GaugeCard value={data.disk_percent} label="Disk" color="var(--color-warning)" />
-        {data.gpu_available && <GaugeCard value={data.gpu_percent} label="GPU" color="#BF5AF2" sublabel={data.gpu_name} />}
+        {data.gpu_available && <GaugeCard value={data.gpu_percent} label="GPU" color="var(--color-purple)" sublabel={data.gpu_name} />}
       </div>
 
       <div className="perf__sparks">
@@ -176,10 +187,10 @@ export default function PerfTab({ tabId, active }: Props) {
       <div className="perf__stats-card">
         <StatRow label="Memory"  value={`${fmt(data.mem_used)} / ${fmt(data.mem_total)}`} />
         <StatRow label="Disk"    value={`${fmt(data.disk_used)} / ${fmt(data.disk_total)}`} />
-        <StatRow label="Net ↑"   value={fmt(data.net_bytes_sent)} />
-        <StatRow label="Net ↓"   value={fmt(data.net_bytes_recv)} />
+        <StatRow label={<>Net <NetUpIcon /></>}   value={fmt(data.net_bytes_sent)} />
+        <StatRow label={<>Net <NetDownIcon /></>} value={fmt(data.net_bytes_recv)} />
         {data.gpu_available && (
-          <StatRow label="GPU" value={`${data.gpu_name} — ${data.gpu_percent.toFixed(0)}%`} />
+          <StatRow label="GPU" value={`${data.gpu_name} (${data.gpu_percent.toFixed(0)}%)`} />
         )}
       </div>
     </div>

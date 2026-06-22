@@ -2,11 +2,11 @@ blank_issues_enabled: false
 
 contact_links:
   - name: Theme Submission
-    url: https://github.com/Command-IDE/cmdide-themes/issues/new?template=community_theme_submission.md
+    url: https://github.com/BinderTools/binder-themes/issues/new?template=community_theme_submission.md
     about: Submit a community theme — please use the themes repository for this.
   - name: Plugin SDK Questions
-    url: https://github.com/Command-IDE/terminal-IDE/discussions
+    url: https://github.com/BinderTools/binder/discussions
     about: Questions about building plugins? Start a discussion.
   - name: Security Vulnerability
-    url: https://github.com/Command-IDE/terminal-IDE/security/advisories/new
+    url: https://github.com/BinderTools/binder/security/advisories/new
     about: Report a security vulnerability privately — do not open a public issue.

@@ -1,4 +1,8 @@
-export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'problems' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
+import type { PageId } from '../paneModel'
+
+export type { PageId }
+
+export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'debug' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
 
 export interface ProbItem {
   file: string
@@ -13,6 +17,7 @@ export interface Tab {
   id: string
   type: TabType
   title: string
+  color?: string      // custom accent color for the tab pill's bottom border
   parentId?: string   // for editor/database/preview/problems tabs
   // editor-only
   filePath?: string
@@ -21,6 +26,8 @@ export interface Tab {
   gotoLine?: number   // navigate to this line when the editor mounts / value changes
   // terminal-only
   initialCwd?: string
+  activePage?: PageId   // last sidebar page seen on this terminal tab
+  autoNamed?: boolean   // true = title was set by CWD auto-namer; false = user manually renamed
   // database-only
   dbPath?: string
   // preview-only
@@ -79,6 +86,33 @@ export interface PortInfo {
   state: string
 }
 
+export interface PortForward {
+  id: string
+  name: string
+  protocol: 'tcp' | 'udp' | 'both'
+  listen_port: number
+  target_host: string
+  target_port: number
+  enabled: boolean
+  status: 'running' | 'stopped' | 'error'
+  error?: string
+}
+
+export interface EndpointItem {
+  framework:           string
+  method:              string
+  path:                string
+  file:                string
+  line:                number
+  col:                 number
+  snippet:             string
+  has_rate_limit:      boolean
+  has_auth:            boolean
+  rate_limit_evidence: string
+  auth_evidence:       string
+  severity:            'high' | 'medium' | 'info'
+}
+
 export interface PerfData {
   cpu_percent: number
   mem_used: number
@@ -105,6 +139,26 @@ export interface GitRecognitionConfig {
   show_git_branch: boolean
 }
 
+export interface GitFileEntry {
+  file: string
+  status: string  // M=modified, A=added, D=deleted, R=renamed, C=copied
+}
+
+export interface GitStatus {
+  branch: string
+  remote: string
+  ahead: number
+  behind: number
+  staged: GitFileEntry[]
+  unstaged: GitFileEntry[]
+  untracked: string[]
+}
+
+export interface GitStash {
+  ref: string
+  message: string
+}
+
 export interface AppConfig {
   default_directory: string
   indent_guides: boolean
@@ -123,4 +177,5 @@ export interface AppConfig {
   file_word_wrap: boolean
   scroll_speed: number
   preferred_shell: string  // "zsh" | "bash" | "sh" | "" (auto-detect)
+  database_privacy: boolean
 }

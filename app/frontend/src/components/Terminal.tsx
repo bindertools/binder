@@ -1,28 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import { Terminal as XTerm } from '@xterm/xterm'
-import type { ITheme } from '@xterm/xterm'
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import type { InstalledPluginCommand } from '../plugins'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import {
-  CreateTerminal,
-  SetTerminalAlignment,
-  ExecuteCommand,
-  InterruptCommand,
-  CloseTerminal,
-  GetClipboardText,
-  SetClipboardText,
-  GetTerminalCwd,
-  SetTerminalCwd,
-  SelectDirectory,
-  GetCompletions,
-  CtrlClickPath,
-  TerminalInput,
-  ResizeTerminal,
-} from '../../wailsjs/go/main/App'
+import { invoke, on, offAll } from '../lib/ipc'
 import '@xterm/xterm/css/xterm.css'
+import TerminalBlockList from './TerminalBlockList'
+import GitBranchIcon from './GitBranchIcon'
+import { type CommandBlock, isBackgroundCommand, deriveStatus } from '../lib/terminalBlocks'
 
 interface Props {
   tabId: string
@@ -33,6 +21,18 @@ interface Props {
   commandAlignment?: 'default' | 'top' | 'bottom'
   pluginCommands?: Record<string, InstalledPluginCommand>
   onCwdChange?: (cwd: string) => void
+}
+
+// The native bridge's hand-rolled JSON parser (vendored webview.h) rejects a
+// raw, unescaped DEL byte (0x7F) inside a JSON string — e.g. xterm's onData
+// sends literal DEL for Backspace, which corrupts the whole IPC envelope and
+// silently drops the keystroke. Base64-encoding pty input before it crosses
+// the bridge sidesteps that entirely (Terminal::Write already expects it).
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str)
+  let binary = ''
+  for (const b of bytes) binary += String.fromCharCode(b)
+  return btoa(binary)
 }
 
 // Completion dropdown state (React state for rendering)
@@ -62,7 +62,7 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/explorer',        desc: 'open native file explorer' },
   { cmd: '/pack',            desc: 'zip current directory' },
   { cmd: '/pack --dryrun',   desc: 'preview what would be zipped' },
-  { cmd: '/ports',           desc: 'open ports monitor tab' },
+  { cmd: '/ports',           desc: 'open ports & endpoints tab' },
   { cmd: '/performance',     desc: 'open performance monitor tab' },
   { cmd: '/fullscreen',      desc: 'open fullscreen IDE explorer' },
   { cmd: '/fs',              desc: 'open fullscreen IDE explorer (alias)' },
@@ -98,10 +98,11 @@ export default function Terminal({
   pluginCommands = {},
   onCwdChange,
 }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<XTerm | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
-  const activeRef = useRef(active)
+  const containerRef           = useRef<HTMLDivElement>(null)
+  const rootRef                = useRef<HTMLDivElement>(null)
+  const termRef                = useRef<XTerm | null>(null)
+  const fitRef                 = useRef<FitAddon | null>(null)
+  const activeRef              = useRef(active)
   useEffect(() => { activeRef.current = active }, [active])
   const ptyModeRef = useRef(false)
 
@@ -128,34 +129,56 @@ export default function Terminal({
 
   // Focus management: when a PTY process starts/ends, transfer focus to/from the input bar.
   useEffect(() => {
-    if (commandAlignment === 'default') return
     const startEv = `terminal:pty:start:${tabId}`
     const endEv   = `terminal:pty:end:${tabId}`
-    EventsOn(startEv, () => { setIsPtyActive(true);  termRef.current?.focus() })
-    EventsOn(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
-    return () => { EventsOff(startEv); EventsOff(endEv) }
-  }, [tabId, commandAlignment])
+    on(startEv, () => {
+      setIsPtyActive(true)
+      setTimeout(() => { fitRef.current?.fit(); termRef.current?.focus() }, 50)
+    })
+    on(endEv,   () => { setIsPtyActive(false); setTimeout(() => inputBarRef.current?.focus(), 50) })
+    return () => { offAll(startEv); offAll(endEv) }
+  }, [tabId])
 
   // Keep Go terminal in sync when the user changes alignment via Settings.
   useEffect(() => {
-    SetTerminalAlignment(tabId, commandAlignment).catch(() => {})
+    invoke('terminal.setalignment', { id: tabId, alignment: commandAlignment }).catch(() => {})
   }, [tabId, commandAlignment])
 
-  // Structured prompt data pushed from Go when alignment is top/bottom.
+  // Structured prompt data pushed from Go after each command completes.
   const [barPrompt, setBarPrompt] = useState({ path: '', branch: '', ts: '' })
   // Ref so the submitRef closure always sees the latest bar prompt without going stale.
   const barPromptRef = useRef({ path: '', branch: '', ts: '' })
   useEffect(() => { barPromptRef.current = barPrompt }, [barPrompt])
 
+  // Command blocks: the primary visible output surface.
+  const [blocks, setBlocks] = useState<CommandBlock[]>([])
+  const blocksRef = useRef<CommandBlock[]>([])
+  const blocksRafRef = useRef<number | null>(null)
+  const scheduleBlocksUpdate = () => {
+    if (blocksRafRef.current != null) return
+    blocksRafRef.current = requestAnimationFrame(() => {
+      blocksRafRef.current = null
+      setBlocks([...blocksRef.current])
+    })
+  }
+
   useEffect(() => {
-    if (commandAlignment === 'default') return
     const ev = `terminal:bar-prompt:${tabId}`
-    EventsOn(ev, (data: { path: string; branch: string; ts: string }) => {
+    on(ev, (raw: unknown) => {
+      const data = raw as { path: string; branch: string; ts: string; exitCode?: number }
       setBarPrompt(data)
       barPromptRef.current = data
+      const list = blocksRef.current
+      const last = list[list.length - 1]
+      if (last?.status === 'running') {
+        const exitCode = data.exitCode ?? 0
+        last.exitCode = exitCode
+        last.status = deriveStatus(exitCode, isBackgroundCommand(last.command))
+        scheduleBlocksUpdate()
+      }
     })
-    return () => EventsOff(ev)
-  }, [tabId, commandAlignment])
+    return () => offAll(ev)
+  }, [tabId])
 
   const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
   const [cwd, setCwd] = useState('')
@@ -174,24 +197,38 @@ export default function Terminal({
   const historyIdxRef = useRef(-1)   // -1 = not navigating history
   const savedInputRef = useRef('')   // current input saved when entering history
 
+  // Undo stack for the input bar (Ctrl+Z) — one entry per edit, holding the
+  // value *before* that edit.
+  const undoStackRef = useRef<string[]>([])
+
   useEffect(() => {
-    GetTerminalCwd(tabId).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
+    invoke<string>('terminal.cwd', { id: tabId }).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
     const event = `terminal:cwd:${tabId}`
-    EventsOn(event, (path: string) => { cwdRef.current = path; setCwd(path); onCwdChange?.(path) })
-    return () => EventsOff(event)
+    on(event, (path: unknown) => { const p = path as string; cwdRef.current = p; setCwd(p); onCwdChange?.(p) })
+    return () => offAll(event)
   }, [tabId])
 
   useEffect(() => {
     const handler = (e: Event) => {
       const { terminalId } = (e as CustomEvent).detail
       if (terminalId !== tabId) return
-      SelectDirectory().then(path => { if (path) SetTerminalCwd(tabId, path) }).catch(() => {})
+      invoke<string>('shell.selectdir').then(path => { if (path) invoke('terminal.setcwd', { id: tabId, cwd: path }).catch(() => {}) }).catch(() => {})
     }
     window.addEventListener('terminal:select-dir', handler)
     return () => window.removeEventListener('terminal:select-dir', handler)
+  }, [tabId])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { terminalId, path } = (e as CustomEvent<{ terminalId: string; path: string }>).detail
+      if (terminalId !== tabId || !path) return
+      invoke('terminal.setcwd', { id: tabId, cwd: path }).catch(() => {})
+    }
+    window.addEventListener('terminal:cd-to', handler)
+    return () => window.removeEventListener('terminal:cd-to', handler)
   }, [tabId])
 
   // When defaultZoom changes (config reload), update xterm font size and refit.
@@ -229,7 +266,24 @@ export default function Terminal({
       window.dispatchEvent(new CustomEvent('ide:open-url', { detail: { url, tabId } }))
     }))
     term.open(container)
-    fitAddon.fit()
+
+    // GPU-accelerated rendering: WebGL primary, Canvas fallback, DOM last resort.
+    // Must be loaded after open() so the canvas element exists.
+    const tryCanvas = () => {
+      try { term.loadAddon(new CanvasAddon()) } catch { /* stay on DOM renderer */ }
+    }
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        try { webgl.dispose() } catch { /* already disposed */ }
+        tryCanvas()
+      })
+      term.loadAddon(webgl)
+    } catch {
+      tryCanvas()
+    }
+
+    if (container.offsetWidth > 0 && container.offsetHeight > 0) fitAddon.fit()
     termRef.current = term
     fitRef.current = fitAddon
 
@@ -240,13 +294,20 @@ export default function Terminal({
     let ctrlCTimer: ReturnType<typeof setTimeout> | null = null
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown' || !e.ctrlKey || e.key !== 'c') return true
+      // While a real interactive program owns the terminal (claude, vim, ssh, …),
+      // Ctrl+C must always reach it immediately — a stale selection left over
+      // from an earlier copy must never swallow the interrupt.
+      if (ptyModeRef.current) {
+        ctrlCCopies = 0
+        return true
+      }
       const selection = term.getSelection()
       if (selection) {
         ctrlCCopies++
         if (ctrlCTimer) clearTimeout(ctrlCTimer)
         if (ctrlCCopies === 1) {
           // First press with selection: copy, keep selection, block kill
-          SetClipboardText(selection).catch(() => {})
+          invoke('clipboard.set', { text: selection }).catch(() => {})
           ctrlCTimer = setTimeout(() => { ctrlCCopies = 0 }, 1000)
           return false // block xterm from sending ^C
         }
@@ -268,7 +329,7 @@ export default function Terminal({
     //   • directories  → cd (SetCwd + new prompt)
     //   • files        → open in editor tab
 
-    const isPathChar = (c: string) => /[a-zA-Z0-9_./\\-]/.test(c)
+    const isPathChar = (c: string) => /[a-zA-Z0-9_./\\-]/.test(c) || c === ':'
 
     // Set the cursor on the xterm canvas/row elements so the user sees a pointer
     // while Ctrl is held, indicating that clicking is available.
@@ -286,7 +347,7 @@ export default function Terminal({
       if (!e.ctrlKey) return
 
       // Use the xterm screen element as the coordinate reference
-      const screen = container.querySelector('.xterm-screen') as HTMLElement | null
+      const screen = container.querySelector('.xterm-screen')
       if (!screen) return
 
       // Cell dimensions via xterm's internal render service
@@ -337,7 +398,16 @@ export default function Terminal({
         return
       }
 
-      CtrlClickPath(tabId, token).catch(() => {})
+      e.preventDefault()
+      invoke('shell.ctrlclick', { tabId, path: token }).then((result: unknown) => {
+        const r = result as { resolved: string; isDir: boolean; exists: boolean }
+        if (r.exists && r.isDir) {
+          const escaped = r.resolved.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+          invoke('terminal.execute', { id: tabId, cmd: 'cd "' + escaped + '"' }).catch(() => {})
+        } else if (r.exists && !r.isDir) {
+          window.dispatchEvent(new CustomEvent('ide:ctrl-click-file', { detail: { path: r.resolved } }))
+        }
+      }).catch(() => {})
     }
 
     container.addEventListener('mousemove', handleCtrlMouseMove)
@@ -345,31 +415,76 @@ export default function Terminal({
     window.addEventListener('keydown', handleCtrlKeyDown)
     window.addEventListener('keyup',   handleCtrlKeyUp)
 
+    // Ctrl+C must interrupt a running foreground command no matter what's
+    // focused within this terminal — the input bar's own onKeyDown only fires
+    // while it has focus. Skipped while a PTY is active (xterm's own custom
+    // key handler above already forwards ^C to the pty) and while the input
+    // bar has focus (its handler covers that case and would double-fire).
+    const handleGlobalInterrupt = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.key === 'c')) return
+      if (!activeRef.current || ptyModeRef.current) return
+      if (document.activeElement === inputBarRef.current) return
+      const last = blocksRef.current[blocksRef.current.length - 1]
+      if (last?.status !== 'running') return
+      const el = document.activeElement
+      if (el && el !== document.body && !rootRef.current?.contains(el)) return
+      e.preventDefault()
+      void invoke('terminal.interrupt', { id: tabId })
+    }
+    window.addEventListener('keydown', handleGlobalInterrupt)
+
+    // Ctrl+scroll zoom: applies to both the hidden xterm (PTY mode) and the
+    // visible command-block UI (via the --term-font-size CSS variable below).
+    // Attached to the root wrapper, not the xterm container, since the
+    // container is zero-size whenever no PTY is active.
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
       e.preventDefault()
-      const current = termRef.current?.options.fontSize ?? 13
+      const current = termRef.current?.options.fontSize ?? fontSize
       const next = e.deltaY < 0 ? Math.min(current + 1, 36) : Math.max(current - 1, 8)
       if (termRef.current) termRef.current.options.fontSize = next
       fitRef.current?.fit()
       setFontSize(next)
     }
-    container.addEventListener('wheel', handleWheel, { passive: false })
+    const root = rootRef.current
+    root?.addEventListener('wheel', handleWheel, { passive: false })
 
-    CreateTerminal(tabId, initialCwd ?? '').catch(() => {})
+    invoke('terminal.start', { id: tabId, shell: '', cwd: initialCwd ?? '', cols: 80, rows: 24, alignment: commandAlignmentRef.current }).catch(() => {})
 
     const outEvent = `terminal:output:${tabId}`
-    EventsOn(outEvent, (data: string) => { term.write(data) })
+    // Use termRef.current (not the closure `term`) so that if the component
+    // remounts and creates a new xterm instance, the handler always writes to
+    // the currently-active terminal, not a stale/disposed one.
+    on(outEvent, (raw: unknown) => {
+      const data = raw as string
+      termRef.current?.write(data)
+      if (ptyModeRef.current) return
+      // 'clear'/'cls' sends an ANSI clear-screen sequence — drop every earlier
+      // block (keeping only the in-flight 'clear' block itself) so the block
+      // list actually empties instead of just printing a confirmation line.
+      if (data.includes('\x1b[2J')) {
+        const last = blocksRef.current[blocksRef.current.length - 1]
+        blocksRef.current = last ? [last] : []
+      }
+      const list = blocksRef.current
+      const last = list[list.length - 1]
+      if (last?.status === 'running') {
+        last.outputRaw += data
+        scheduleBlocksUpdate()
+      }
+    })
 
     // PTY mode: switch to raw pass-through when an interactive process is running
     const ptyStartEvent = `terminal:pty:start:${tabId}`
     const ptyEndEvent   = `terminal:pty:end:${tabId}`
-    EventsOn(ptyStartEvent, () => { ptyModeRef.current = true  })
-    EventsOn(ptyEndEvent,   () => { ptyModeRef.current = false })
+    on(ptyStartEvent, () => { ptyModeRef.current = true  })
+    on(ptyEndEvent,   () => { ptyModeRef.current = false })
 
-    // Forward xterm resize events to the backend PTY
+    // Forward xterm resize events to the backend PTY.
+    // Guard against 0×0 — ConPTY panics on zero-dimension resize (can happen
+    // during panel split layout transitions before the container gets its final size).
     term.onResize(({ cols, rows }) => {
-      ResizeTerminal(tabId, cols, rows).catch(() => {})
+      if (cols > 0 && rows > 0) invoke('terminal.resize', { id: tabId, cols, rows }).catch(() => {})
     })
 
     // lineRef is declared at component scope (useRef) — accessible here and in handlers.
@@ -385,15 +500,9 @@ export default function Terminal({
           const cmd = lineRef.current
           lineRef.current = ''
           term.write('\r\n')
-          ExecuteCommand(tabId, cmd)
+          void invoke('terminal.execute', { id: tabId, cmd })
         }
       })
-    }
-
-    const eraseChars = (count: number) => {
-      if (count <= 0) return
-      term.write(`\x1b[${count}D\x1b[K`)
-      lineRef.current = lineRef.current.slice(0, -count)
     }
 
     // Returns the dir/partial/prefix for the token the cursor is on, or null if
@@ -408,14 +517,6 @@ export default function Terminal({
       const partial = lastSlash >= 0 ? token.slice(lastSlash + 1) : token
       const prefix = line.slice(0, line.length - partial.length)
       return { dir, partial, prefix }
-    }
-
-    // Get xterm cell dimensions (internal API, with fallback).
-    const cellDims = () => {
-      const core = (term as any)._core
-      const h = core?._renderService?.dimensions?.css?.cell?.height ?? (fontSize * 1.2)
-      const w = core?._renderService?.dimensions?.css?.cell?.width ?? (fontSize * 0.62)
-      return { h, w }
     }
 
     // ── completion menu ───────────────────────────────────────────────────────
@@ -441,21 +542,7 @@ export default function Terminal({
 
       const ITEM_H = 26
       const menuH = Math.min(filtered.length * ITEM_H + 8, 220)
-
-      let top: number, left: number
-      if (commandAlignmentRef.current !== 'default' && inputBarRef.current) {
-        ;({ top, left } = barMenuPos(menuH))
-      } else {
-        const { h, w } = cellDims()
-        const rect = container.getBoundingClientRect()
-        const cursorRow = term.buffer.active.cursorY
-        const cursorCol = term.buffer.active.cursorX
-        const slashCol = Math.max(0, cursorCol - line.length)
-        left = rect.left + 8 + slashCol * w
-        const below = rect.top + 6 + (cursorRow + 1) * h
-        const above = rect.top + 6 + cursorRow * h - menuH
-        top = below + menuH > window.innerHeight - 8 ? above : below
-      }
+      const { top, left } = barMenuPos(menuH)
 
       setMenu({
         matches:      filtered.map(c => c.cmd),
@@ -478,7 +565,7 @@ export default function Terminal({
       if (!parsed) { setMenu(null); return }
       const { dir, partial, prefix } = parsed
 
-      GetCompletions(tabId, dir, partial)
+      invoke<string[]>('complete.path', { tabId, dir, prefix: partial })
         .then((matches: string[]) => {
           if (!matches || matches.length === 0) { setMenu(null); return }
 
@@ -491,21 +578,7 @@ export default function Terminal({
 
           const ITEM_H = 26
           const menuH = Math.min(filtered.length * ITEM_H + 8, 220)
-
-          let top: number, left: number
-          if (commandAlignmentRef.current !== 'default' && inputBarRef.current) {
-            ;({ top, left } = barMenuPos(menuH))
-          } else {
-            const { h, w } = cellDims()
-            const rect = container.getBoundingClientRect()
-            const cursorRow = term.buffer.active.cursorY
-            const cursorCol = term.buffer.active.cursorX
-            const partialStartCol = cursorCol - partial.length
-            const below = rect.top + 6 + (cursorRow + 1) * h
-            const above = rect.top + 6 + cursorRow * h - menuH
-            top = below + menuH > window.innerHeight - 8 ? above : below
-            left = Math.max(rect.left + 8, rect.left + 8 + partialStartCol * w)
-          }
+          const { top, left } = barMenuPos(menuH)
 
           setMenu({
             matches: filtered,
@@ -522,10 +595,9 @@ export default function Terminal({
     }
     updateMenuRef.current = updateMenu
 
-    // Input-bar submit: echo the command to xterm then execute it.
-    // Slash-command plugin interception is replicated here so /plugins etc. still work.
+    // Input-bar submit: push a new command block, then execute it.
     submitRef.current = (value: string) => {
-      if (!value.trim()) { term.write('\r\n'); return }
+      if (!value.trim()) return
       const hist = historyRef.current
       if (hist.length === 0 || hist[hist.length - 1] !== value) {
         hist.push(value)
@@ -544,148 +616,59 @@ export default function Terminal({
               detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
             }))
           }
-          ExecuteCommand(tabId, '')
+          void invoke('terminal.execute', { id: tabId, cmd: '' })
           return
         }
       }
-      // In bar mode, echo the command with a styled prompt prefix so it looks
-      // identical to the default-mode "prompt + command" line.
-      // Bar already shows path/time/branch — just echo the command itself.
-      if (commandAlignmentRef.current !== 'default') {
-        term.write(`\x1b[38;5;246m❯\x1b[0m ${value}\r\n`)
-      } else {
-        term.write(value + '\r\n')
+
+      const block: CommandBlock = {
+        id: `${tabId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        command: value,
+        cwd: barPromptRef.current.path || cwdRef.current,
+        branch: barPromptRef.current.branch,
+        ts: barPromptRef.current.ts,
+        outputRaw: '',
+        status: 'running',
+        exitCode: null,
       }
-      ExecuteCommand(tabId, value)
+      blocksRef.current = [...blocksRef.current, block].slice(-200)
+      scheduleBlocksUpdate()
+
+      void invoke('terminal.execute', { id: tabId, cmd: value })
     }
 
     // Apply a specific match from the menu (used by click handler).
     applyMatchRef.current = (match: string) => {
       const m = menuRef.current
       if (!m) return
-      if (commandAlignmentRef.current !== 'default') {
-        // Input-bar mode: update the bar's value, keep focus on bar
-        const newVal = m.prefix + match
-        setInputBarValue(newVal)
-        lineRef.current = newVal
-        setMenu(null)
-        inputBarRef.current?.focus()
-      } else {
-        eraseChars(m.appliedLen)
-        term.write(match)
-        lineRef.current = m.prefix + match
-        setMenu(null)
-        term.focus()
-      }
+      const newVal = m.prefix + match
+      setInputBarValue(newVal)
+      lineRef.current = newVal
+      setMenu(null)
+      inputBarRef.current?.focus()
     }
 
     // Tab: apply selected match, then advance selection for next Tab.
     const handleTab = () => {
       const m = menuRef.current
       if (!m || m.matches.length === 0) return
-      const isBar = commandAlignmentRef.current !== 'default'
 
       if (!m.applied) {
         const match = m.matches[0]
-        if (isBar) {
-          const newVal = m.prefix + match
-          setInputBarValue(newVal)
-          lineRef.current = newVal
-        } else {
-          eraseChars(m.appliedLen)
-          term.write(match)
-          lineRef.current = m.prefix + match
-        }
+        const newVal = m.prefix + match
+        setInputBarValue(newVal)
+        lineRef.current = newVal
         setMenu({ ...m, applied: true, appliedLen: match.length, selectedIdx: 0 })
       } else {
         const nextIdx = (m.selectedIdx + 1) % m.matches.length
         const match = m.matches[nextIdx]
-        if (isBar) {
-          const newVal = m.prefix + match
-          setInputBarValue(newVal)
-          lineRef.current = newVal
-        } else {
-          eraseChars(m.appliedLen)
-          term.write(match)
-          lineRef.current = m.prefix + match
-        }
+        const newVal = m.prefix + match
+        setInputBarValue(newVal)
+        lineRef.current = newVal
         setMenu({ ...m, appliedLen: match.length, selectedIdx: nextIdx })
       }
     }
     handleTabRef.current = handleTab
-
-    // ── keyboard ──────────────────────────────────────────────────────────────
-
-    // Replace whatever is currently typed on the line with `text`.
-    const replaceInput = (text: string) => {
-      const cur = lineRef.current
-      if (cur.length > 0) term.write('\b \b'.repeat(cur.length))
-      term.write(text)
-      lineRef.current = text
-    }
-
-    const onContainerKeyDown = (e: KeyboardEvent) => {
-      if (ptyModeRef.current) return
-
-      if (e.key === 'Tab') {
-        e.preventDefault()
-        e.stopPropagation()
-        handleTab()
-        return
-      }
-      if (e.key === 'Escape') {
-        const m = menuRef.current
-        if (m) {
-          e.preventDefault()
-          if (m.applied) {
-            eraseChars(m.appliedLen)
-            term.write(m.originalPartial)
-            lineRef.current = m.prefix + m.originalPartial
-          }
-          setMenu(null)
-        }
-        return
-      }
-
-      // ── Up/Down arrows: command history navigation ───────────────────────
-      // Runs in capture phase so stopImmediatePropagation prevents xterm from
-      // generating the \x1b[A / \x1b[B escape sequences entirely.
-      if (e.key === 'ArrowUp' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        const hist = historyRef.current
-        if (hist.length === 0) return
-        if (historyIdxRef.current === -1) {
-          savedInputRef.current = lineRef.current
-          historyIdxRef.current = hist.length - 1
-        } else if (historyIdxRef.current > 0) {
-          historyIdxRef.current--
-        } else {
-          return // already at oldest entry
-        }
-        setMenu(null)
-        replaceInput(hist[historyIdxRef.current])
-        return
-      }
-
-      if (e.key === 'ArrowDown' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        if (historyIdxRef.current === -1) return
-        const hist = historyRef.current
-        if (historyIdxRef.current === hist.length - 1) {
-          historyIdxRef.current = -1
-          setMenu(null)
-          replaceInput(savedInputRef.current)
-        } else {
-          historyIdxRef.current++
-          setMenu(null)
-          replaceInput(hist[historyIdxRef.current])
-        }
-        return
-      }
-    }
-    container.addEventListener('keydown', onContainerKeyDown, { capture: true })
 
     // ── paste ─────────────────────────────────────────────────────────────────
 
@@ -697,7 +680,7 @@ export default function Terminal({
       const text = e.clipboardData?.getData('text/plain') ?? ''
       if (!text) return
       if (ptyModeRef.current) {
-        TerminalInput(tabId, text).catch(() => {})
+        invoke('terminal.input', { id: tabId, data: utf8ToBase64(text) }).catch(() => {})
       } else {
         processPaste(text)
       }
@@ -706,192 +689,44 @@ export default function Terminal({
 
     // ── input ─────────────────────────────────────────────────────────────────
 
-    const undoStack: string[] = []
-
+    // xterm is only the active input surface during PTY passthrough (interactive
+    // full-screen programs); the input row handles everything else.
     term.onData((data: string) => {
-      // In bar mode xterm is display-only; the input bar handles all typing.
-      if (commandAlignmentRef.current !== 'default' && !ptyModeRef.current) return
-
-      // PTY mode: raw pass-through — the process drives the display
-      if (ptyModeRef.current) {
-        TerminalInput(tabId, data).catch(() => {})
-        return
-      }
-
-      // Enter
-      if (data === '\r' || data === '\n') {
-        setMenu(null)
-        undoStack.length = 0
-        const line = lineRef.current
-        lineRef.current = ''
-        // Push non-empty commands to history, avoid consecutive duplicates
-        if (line.trim()) {
-          const hist = historyRef.current
-          if (hist.length === 0 || hist[hist.length - 1] !== line) {
-            hist.push(line)
-            if (hist.length > 500) hist.shift()
-          }
-        }
-        historyIdxRef.current = -1
-        savedInputRef.current = ''
-        term.write('\r\n')
-
-        // Intercept installed plugin slash commands on the frontend so
-        // metadata-driven tabs and command handlers work before reaching Go.
-        if (line.startsWith('/')) {
-          const cmdName = line.slice(1).split(/\s+/)[0].toLowerCase()
-          const pluginCmd = pluginCommandsRef.current[cmdName]
-          if (pluginCmd) {
-            if (pluginCmd.handler) {
-              pluginCmd.handler()
-            } else if (pluginCmd.tabType) {
-              window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
-                detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
-              }))
-            }
-            // Ask Go to re-draw the prompt so the terminal stays usable.
-            ExecuteCommand(tabId, '')
-            return
-          }
-        }
-
-        ExecuteCommand(tabId, line)
-        return
-      }
-
-      // Backspace
-      if (data === '\x7f' || data === '\b') {
-        if (lineRef.current.length > 0) {
-          undoStack.push(lineRef.current)
-          lineRef.current = lineRef.current.slice(0, -1)
-          term.write('\b \b')
-          updateMenu()
-        } else {
-          setMenu(null)
-        }
-        return
-      }
-
-      // Ctrl+C — kill (copy-with-selection is handled in the keydown capture listener)
-      if (data === '\x03') {
-        setMenu(null)
-        undoStack.length = 0
-        historyIdxRef.current = -1
-        savedInputRef.current = ''
-        term.write('^C\r\n')
-        lineRef.current = ''
-        InterruptCommand(tabId)
-        return
-      }
-
-      // Ctrl+A — select current input line (visually move to start)
-      if (data === '\x01') {
-        if (lineRef.current.length > 0) {
-          // Move cursor back to beginning of line
-          term.write('\x1b[' + lineRef.current.length + 'D')
-          // Select all by re-writing (can't easily use xterm selection API here)
-          // Re-draw so cursor is at start, content is still there
-          term.write(lineRef.current)
-          term.write('\x1b[' + lineRef.current.length + 'D')
-        }
-        return
-      }
-
-      // Ctrl+Z — undo last typed characters
-      if (data === '\x1a') {
-        if (undoStack.length > 0) {
-          const prev = undoStack.pop()!
-          const cur = lineRef.current
-          // Erase current, write previous
-          if (cur.length > 0) {
-            term.write('\b \b'.repeat(cur.length))
-          }
-          term.write(prev)
-          lineRef.current = prev
-          updateMenu()
-        }
-        return
-      }
-
-      // Ctrl+L
-      if (data === '\x0c') {
-        setMenu(null)
-        term.write('\x1b[2J\x1b[H')
-        lineRef.current = ''
-        ExecuteCommand(tabId, 'clear')
-        return
-      }
-
-      // Ctrl+U
-      if (data === '\x15') {
-        setMenu(null)
-        if (lineRef.current.length > 0) {
-          undoStack.push(lineRef.current)
-          term.write('\x1b[' + lineRef.current.length + 'D' +
-            ' '.repeat(lineRef.current.length) +
-            '\x1b[' + lineRef.current.length + 'D')
-          lineRef.current = ''
-        }
-        return
-      }
-
-      // Tab — handled by container keydown listener
-      if (data === '\x09') return
-
-      // Ctrl+V
-      if (data === '\x16') {
-        GetClipboardText().then(text => {
-          if (!text) return
-          if (ptyModeRef.current) {
-            TerminalInput(tabId, text).catch(() => {})
-          } else {
-            processPaste(text)
-          }
-        }).catch(() => {})
-        return
-      }
-
-      // Other control characters
-      if (data.charCodeAt(0) < 32) return
-
-      // Printable: write, update menu in real time
-      if (data.length > 1) {
-        processPaste(data)
-      } else {
-        undoStack.push(lineRef.current)
-        if (undoStack.length > 100) undoStack.shift()
-        lineRef.current += data
-        term.write(data)
-        updateMenu()
-      }
+      if (!ptyModeRef.current) return
+      invoke('terminal.input', { id: tabId, data: utf8ToBase64(data) }).catch(() => {})
     })
 
     // Allow plugins to execute commands in this terminal
     const handlePluginExec = (e: Event) => {
       const { terminalId, cmd } = (e as CustomEvent).detail
-      if (terminalId === tabId) ExecuteCommand(tabId, cmd)
+      if (terminalId === tabId) void invoke('terminal.execute', { id: tabId, cmd })
     }
     window.addEventListener('plugin:execute', handlePluginExec)
 
-    const ro = new ResizeObserver(() => fitAddon.fit())
-    ro.observe(containerRef.current!)
+    // Guard: skip fit() when the container has no size (e.g. during panel split
+    // layout transitions) to prevent xterm from resizing to 0 cols/rows.
+    const ro = new ResizeObserver(() => {
+      const el = containerRef.current
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) fitAddon.fit()
+    })
+    ro.observe(containerRef.current)
 
     return () => {
       ro.disconnect()
-      container.removeEventListener('wheel', handleWheel)
-      container.removeEventListener('keydown', onContainerKeyDown, { capture: true })
+      root?.removeEventListener('wheel', handleWheel)
       container.removeEventListener('mousemove', handleCtrlMouseMove)
       container.removeEventListener('mousedown', handleCtrlClick)
       window.removeEventListener('keydown', handleCtrlKeyDown)
       window.removeEventListener('keyup',   handleCtrlKeyUp)
+      window.removeEventListener('keydown', handleGlobalInterrupt)
       window.removeEventListener('paste', onWindowPaste)
       window.removeEventListener('plugin:execute', handlePluginExec)
-      EventsOff(outEvent)
-      EventsOff(ptyStartEvent)
-      EventsOff(ptyEndEvent)
+      offAll(outEvent)
+      offAll(ptyStartEvent)
+      offAll(ptyEndEvent)
       ptyModeRef.current = false
-      CloseTerminal(tabId)
-      term.dispose()
+      void invoke('terminal.stop', { id: tabId })
+      try { term.dispose() } catch { /* GPU context may already be gone */ }
       termRef.current = null
       fitRef.current = null
       applyMatchRef.current = null
@@ -900,30 +735,64 @@ export default function Terminal({
 
   useEffect(() => {
     if (active) {
-      fitRef.current?.fit()
-      if (commandAlignment !== 'default' && !isPtyActive) {
+      const el = containerRef.current
+      if (el && el.offsetWidth > 0 && el.offsetHeight > 0) fitRef.current?.fit()
+      if (!isPtyActive) {
         setTimeout(() => inputBarRef.current?.focus(), 50)
       } else {
         termRef.current?.focus()
       }
     }
-  }, [active, commandAlignment, isPtyActive])
+  }, [active, isPtyActive])
+
+  // True while the most recent command hasn't returned yet — locks the input
+  // row like a traditional terminal waiting for its prompt back.
+  const isCommandRunning = blocks.length > 0 && blocks[blocks.length - 1].status === 'running'
 
   // ── input-bar handlers (bar modes only) ─────────────────────────────────────
   const handleInputBarChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
+    const stack = undoStackRef.current
+    const prev = lineRef.current
+    if (stack[stack.length - 1] !== prev) {
+      stack.push(prev)
+      if (stack.length > 200) stack.shift()
+    }
     setInputBarValue(value)
     lineRef.current = value
     updateMenuRef.current()
   }, [])
 
+  // Select the entire scrollback output (for copying), used as Ctrl+A's
+  // fallback when the input bar has nothing of its own to select.
+  const selectAllOutput = React.useCallback(() => {
+    const blocksEl = rootRef.current?.querySelector('.term-blocks')
+    if (!blocksEl) return
+    const sel = window.getSelection()
+    if (!sel) return
+    const range = document.createRange()
+    range.selectNodeContents(blocksEl)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }, [])
+
   const handleInputBarKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // While the previous command is still running, the input is locked like a
+    // traditional shell waiting for its prompt back — only Ctrl+C is honored.
+    if (isCommandRunning) {
+      if (e.ctrlKey && e.key === 'c') {
+        e.preventDefault()
+        void invoke('terminal.interrupt', { id: tabId })
+      }
+      return
+    }
     if (e.key === 'Enter') {
       e.preventDefault()
       const value = inputBarValue
       setInputBarValue('')
       setMenu(null)
       lineRef.current = ''
+      undoStackRef.current = []
       submitRef.current(value)
     } else if (e.key === 'Tab') {
       e.preventDefault()
@@ -931,11 +800,30 @@ export default function Terminal({
       handleTabRef.current()
     } else if (e.key === 'Escape') {
       setMenu(null)
-    } else if (e.ctrlKey && (e.key === 'c' || e.key === 'u')) {
+    } else if (e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
+      e.preventDefault()
+      if (inputBarValue) (e.target as HTMLInputElement).select()
+      else selectAllOutput()
+    } else if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault()
+      const stack = undoStackRef.current
+      if (stack.length === 0) return
+      const prev = stack.pop()!
+      setInputBarValue(prev)
+      lineRef.current = prev
+    } else if (e.ctrlKey && e.key === 'c') {
       e.preventDefault()
       setInputBarValue('')
       setMenu(null)
       lineRef.current = ''
+      undoStackRef.current = []
+      void invoke('terminal.interrupt', { id: tabId })
+    } else if (e.ctrlKey && e.key === 'u') {
+      e.preventDefault()
+      setInputBarValue('')
+      setMenu(null)
+      lineRef.current = ''
+      undoStackRef.current = []
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       const hist = historyRef.current
@@ -948,6 +836,7 @@ export default function Terminal({
       } else { return }
       const v = hist[historyIdxRef.current]
       setInputBarValue(v); lineRef.current = v
+      undoStackRef.current = []
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       if (historyIdxRef.current === -1) return
@@ -961,8 +850,9 @@ export default function Terminal({
         const v = hist[historyIdxRef.current]
         setInputBarValue(v); lineRef.current = v
       }
+      undoStackRef.current = []
     }
-  }, [inputBarValue]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inputBarValue, isCommandRunning, selectAllOutput]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── render ────────────────────────────────────────────────────────────────────
   const cwdLabel = React.useMemo(() => {
@@ -975,106 +865,102 @@ export default function Terminal({
   // the CWD-state-derived cwdLabel while Go hasn't sent a bar-prompt yet.
   const barPath = barPrompt.path || cwdLabel
 
-  // ── Breadcrumb bar ─────────────────────────────────────────────────────────
-  // CSS border-triangle technique: each segment is a plain <div> with a solid
-  // background.  An absolutely-positioned child with width:0/height:0 and
-  // transparent top/bottom borders + solid left border creates a right-pointing
-  // triangle that extends OVER the next segment.  Because the triangle's
-  // transparent halves reveal the next segment's background, the join is
-  // seamless — no clip-path, no characters, no gaps.
-  const H  = 36  // bar height px (h-9)
-  const AW = 34  // arrow width  px
-  const hasTs = !!barPrompt.ts
-  const hasBr = !!barPrompt.branch
-
-  const inputBar = commandAlignment !== 'default' ? (
+  // ── Input row ──────────────────────────────────────────────────────────────
+  // Always-visible, styled like a command block header but hosting the live
+  // input. Positioned above the block list ('top') or below it (default/'bottom').
+  const inputRow = (
     <div
       className={[
-        'flex items-stretch h-9 shrink-0',
+        'term-input-row flex items-stretch min-h-9 shrink-0',
         commandAlignment === 'top' ? 'border-b' : 'border-t',
         'border-[var(--border-color)]',
       ].join(' ')}
     >
-      {!isPtyActive && (
-        <div style={{ display: 'flex', flexShrink: 0, height: H, gap: 0, margin: 0, padding: 0 }}>
-
-          {hasTs && (
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              background: 'rgb(18,48,100)', color: 'rgb(110,190,255)',
-              height: H, margin: 0, marginRight: -1, paddingLeft: 10, paddingRight: 10,
-              fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-              position: 'relative', zIndex: 2,
-            }}>
-              {barPrompt.ts}
-            </div>
-          )}
-
-          <div style={{
-            display: 'flex', alignItems: 'center',
-            background: 'rgb(12,60,18)', color: 'rgb(140,230,110)',
-            height: H, margin: 0, marginRight: hasBr ? -1 : 0, paddingLeft: 10, paddingRight: 10,
-            fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-            maxWidth: 260, overflow: 'hidden',
-            position: 'relative', zIndex: 1,
-          }}>
-            {barPath}
-          </div>
-
-          {hasBr && (
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              background: 'rgb(80,38,0)', color: 'rgb(255,175,50)',
-              height: H, margin: 0, paddingLeft: 10, paddingRight: 10,
-              fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap', userSelect: 'none',
-              position: 'relative', zIndex: 0,
-            }}>
-              {barPrompt.branch}
-            </div>
-          )}
-        </div>
+      <span className={`term-dot term-dot--${isPtyActive || isCommandRunning ? 'running' : 'idle'}`} />
+      <span className="term-cwd">{barPath}</span>
+      {barPrompt.branch && (
+        <span className="term-branch-tag">
+          <GitBranchIcon />
+          {barPrompt.branch}
+        </span>
       )}
-
-      {isPtyActive && (
-        <div className="flex items-center px-4 text-[11px] font-mono text-[var(--tab-color)] opacity-40 italic select-none shrink-0">
+      <span className="term-arrow">{'❯'}</span>
+      {isPtyActive ? (
+        <div className="flex items-center px-2 text-[11px] font-mono text-[var(--tab-color)] opacity-40 italic select-none shrink-0">
           Running…
         </div>
-      )}
-
-      {/* ── text input ──────────────────────────────────────────────────── */}
-      <div className="flex items-center flex-1 min-w-0 px-3">
+      ) : (
         <input
           ref={inputBarRef}
           type="text"
-          value={isPtyActive ? '' : inputBarValue}
+          value={isCommandRunning ? '' : inputBarValue}
           onChange={handleInputBarChange}
           onKeyDown={handleInputBarKeyDown}
-          disabled={isPtyActive}
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-white font-mono text-[13px] caret-white"
+          readOnly={isCommandRunning}
+          placeholder={isCommandRunning ? 'Running… (Ctrl+C to interrupt)' : undefined}
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-mono caret-[var(--info-bar-hover-color)] px-2 placeholder:italic placeholder:opacity-40"
+          style={{ fontSize: 'inherit' }}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
         />
-      </div>
+      )}
+      {barPrompt.ts && <span className="term-ts">{barPrompt.ts}</span>}
     </div>
-  ) : null
+  )
+
+  // In 'default' alignment the input row flows inline as the next line after
+  // the last block's output (like a real shell prompt), instead of being
+  // pinned to the bottom of the pane. 'top'/'bottom' remain pinned bars; a
+  // pinned row is also kept in 'default' while a PTY is active so there's
+  // still a status row once the block list is hidden.
+  const showInlineInputRow = commandAlignment === 'default' && !isPtyActive
+  const showPinnedInputRow = commandAlignment !== 'default' || isPtyActive
+
+  // Clicking anywhere in the terminal pane (other than an interactive element,
+  // like the "click to expand" output toggle) sends focus to the input bar so
+  // the user can start typing immediately — mirrors opening/switching to this
+  // terminal tab, which also focuses it via the effect above.
+  //
+  // Deferred to mouseup (rather than mousedown) and skipped when the click
+  // produced a text selection: focusing the input bar on mousedown would
+  // collapse any selection the user is in the middle of dragging out in the
+  // output area, making it impossible to select/copy terminal output.
+  const handlePaneMouseUp = (e: React.MouseEvent) => {
+    if (isPtyActive) return
+    const target = e.target as HTMLElement
+    if (target.closest('input, button, a, .term-output-more')) return
+    if (window.getSelection()?.toString()) return
+    inputBarRef.current?.focus()
+  }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {commandAlignment === 'top' && inputBar}
-      <div ref={containerRef} className="flex-1 px-2 py-1.5 bg-[var(--app-bg)] overflow-hidden" />
-      {commandAlignment === 'bottom' && inputBar}
+    <div
+      ref={rootRef}
+      className="flex-1 flex flex-col overflow-hidden"
+      style={{ '--term-font-size': `${fontSize}px` } as React.CSSProperties}
+      onMouseUp={handlePaneMouseUp}
+    >
+      {commandAlignment === 'top' && inputRow}
+      {!isPtyActive && (
+        <TerminalBlockList blocks={blocks} inputRow={showInlineInputRow ? inputRow : undefined} />
+      )}
+      <div
+        ref={containerRef}
+        className={isPtyActive ? 'flex-1 px-3 py-2 bg-[var(--app-bg)] overflow-hidden' : 'term-xterm-hidden'}
+      />
+      {commandAlignment !== 'top' && showPinnedInputRow && inputRow}
 
       {menu && ReactDOM.createPortal(
         <div
-          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-y-auto max-h-[220px] min-w-[180px] shadow-lg font-mono text-[12px] py-1 backdrop-blur-[12px] no-scrollbar"
+          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-y-auto max-h-[220px] min-w-[180px] font-mono text-[12px] py-1 backdrop-blur-[12px] no-scrollbar"
           style={{ top: menu.top, left: menu.left }}
         >
           {menu.matches.map((m, i) => (
             <div
               key={m + i}
-              className={`flex items-center justify-between gap-4 px-3 py-[5px] cursor-pointer text-[var(--info-bar-hover-color)] whitespace-nowrap leading-[1.4] transition-[background] duration-[100ms]${i === menu.selectedIdx && menu.applied ? ' bg-surface-selected text-accent-hover' : i === menu.selectedIdx ? ' bg-surface-overlay text-white' : ' hover:bg-surface-raised'}`}
+              className={`flex items-center justify-between gap-4 px-3 py-[5px] cursor-pointer text-[var(--info-bar-hover-color)] whitespace-nowrap leading-[1.4] transition-[background] duration-[100ms]${i === menu.selectedIdx && menu.applied ? ' bg-surface-selected text-accent-hover' : i === menu.selectedIdx ? ' bg-surface-overlay text-[var(--info-bar-hover-color)]' : ' hover:bg-surface-raised'}`}
               onMouseDown={e => {
                 e.preventDefault() // keep terminal focus
                 applyMatchRef.current?.(m)

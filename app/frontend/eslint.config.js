@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   // Ignore generated / build output
-  { ignores: ['dist/**', 'wailsjs/**', 'node_modules/**'] },
+  { ignores: ['dist/**', 'node_modules/**'] },
 
   {
     extends: [
@@ -29,9 +29,20 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
 
       // ── TypeScript ────────────────────────────────────────────────────────────
-      // `any` is used intentionally in Wails bindings and some dynamic dispatch;
-      // warn rather than error so existing usages are visible but non-blocking.
+      // `any` is used intentionally in Wails bindings, xterm.js internals, and
+      // plugin dispatch. Set to 'warn' so usages are visible but non-blocking.
       '@typescript-eslint/no-explicit-any': 'warn',
+      // These type-checked rules fire heavily on the intentional `any` patterns
+      // above. Kept as warnings so we can track and fix over time.
+      '@typescript-eslint/no-unsafe-assignment':   'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-argument':     'warn',
+      '@typescript-eslint/no-unsafe-return':       'warn',
+      '@typescript-eslint/no-unsafe-call':         'warn',
+      // Unnecessary type assertions — common where types are inferred correctly
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+      // Promise-in-event-handler pattern is intentional in React JSX props
+      '@typescript-eslint/no-misused-promises': 'warn',
 
       // Unused vars: allow underscore-prefixed names (common Go-convention carry-over)
       '@typescript-eslint/no-unused-vars': [

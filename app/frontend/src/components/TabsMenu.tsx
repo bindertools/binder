@@ -60,15 +60,15 @@ const TabTypeIcon = ({ type }: { type: string }) => {
 }
 
 // ── group ordering & labels ───────────────────────────────────────────────────
-const GROUP_ORDER  = ['terminal','editor','preview','database','problems','config','ports','perf','fullscreen','plugins']
+const GROUP_ORDER  = ['terminal','editor','preview','database','debug','config','ports','perf','fullscreen','plugins']
 const GROUP_LABELS: Record<string, string> = {
   terminal:   'Terminals',
   editor:     'Files',
   preview:    'Previews',
   database:   'Databases',
-  problems:   'Problems',
+  debug:      'Debug',
   config:     'Settings',
-  ports:      'Ports',
+  ports:      'Ports & Endpoints',
   perf:       'Performance',
   fullscreen: 'Fullscreen',
   plugins:    'Plugins',
@@ -118,7 +118,7 @@ export default function TabsMenu({
     if (t.type === 'terminal') return (terminalCwds[t.id] ?? '').replace(/\\/g, '/')
     if (t.type === 'editor')   return (t.filePath  ?? '').replace(/\\/g, '/')
     if (t.type === 'database') return (t.dbPath    ?? '').replace(/\\/g, '/')
-    if (t.type === 'problems') return (t.problemsCwd ?? '').replace(/\\/g, '/')
+    if (t.type === 'debug') return (t.problemsCwd ?? '').replace(/\\/g, '/')
     return ''
   }
 
@@ -132,7 +132,7 @@ export default function TabsMenu({
       <div className="fixed inset-0 z-[9996]" onClick={onDismiss} />
 
       {/* drawer panel */}
-      <div className="fixed top-[42px] left-0 z-[9997] w-[290px] flex flex-col bg-[var(--info-bar-bg)] border-r border-b border-[var(--border-color)] rounded-br-xl shadow-[var(--shadow-overlay)] max-h-[calc(100vh-52px)]">
+      <div className="fixed top-[36px] left-0 z-[9997] w-[290px] flex flex-col bg-[var(--info-bar-bg)] border-r border-b border-[var(--border-color)] rounded-br-xl max-h-[calc(100vh-46px)]">
 
         {/* ── search ─────────────────────────────────────────────────────────── */}
         <div className="px-2.5 py-2 border-b border-[var(--border-color)] shrink-0">
@@ -147,7 +147,7 @@ export default function TabsMenu({
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Filter tabs…"
-              className="flex-1 bg-transparent border-0 outline-none text-white font-ui text-[12px] placeholder-[var(--tab-color)]"
+              className="flex-1 bg-transparent border-0 outline-none text-[var(--info-bar-hover-color)] font-ui text-[12px] placeholder-[var(--tab-color)]"
               onKeyDown={e => {
                 if (e.key === 'Escape') { e.stopPropagation(); onDismiss() }
               }}
@@ -156,7 +156,7 @@ export default function TabsMenu({
             {query && (
               <button
                 onClick={() => setQuery('')}
-                className="shrink-0 flex items-center justify-center w-3.5 h-3.5 rounded text-[var(--tab-color)] hover:text-white transition-colors"
+                className="shrink-0 flex items-center justify-center w-3.5 h-3.5 rounded text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] transition-colors"
               >
                 <svg width="8" height="8" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>

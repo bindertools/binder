@@ -70,8 +70,9 @@
 .ps-search-icon {
   position: absolute;
   left: 12px;
+  display: flex;
+  align-items: center;
   color: var(--info-bar-color);
-  font-size: 15px;
   pointer-events: none;
 }
 .ps-search {
@@ -279,6 +280,7 @@
 /* ── Shared atoms ─────────────────────────────────────────────────────────── */
 .ps-link        { color: var(--accent-hover); text-decoration: none; }
 .ps-link:hover  { text-decoration: underline; }
+.ps-link--external { display: inline-flex; align-items: center; gap: 4px; }
 .ps-muted       { color: var(--info-bar-color); }
 
 .ps-chip {

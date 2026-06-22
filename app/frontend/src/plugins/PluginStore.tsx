@@ -5,18 +5,55 @@ import {
   getExternalPlugins, saveExternalPlugin, removeExternalPlugin,
   ExternalPluginRecord,
 } from './index'
-import { FetchExternalPlugin } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import './PluginStore.scss'
 
 type StoreTab = 'browse' | 'external'
 
 interface Props { onPluginChange: () => void }
 
-const CATEGORY_ICONS: Record<PluginCategory | string, string> = {
-  development:  '⌨',
-  productivity: '◈',
-  utilities:    '⚒',
-  other:        '⊡',
+function IconCategoryDev() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1.5" y="3.5" width="12" height="8" rx="1.3"/>
+      <path d="M4 6.5h.01M7.5 6.5h.01M11 6.5h.01M4.5 9h6"/>
+    </svg>
+  )
+}
+
+function IconCategoryProductivity() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="7.5" r="6"/>
+      <circle cx="7.5" cy="7.5" r="2.5"/>
+    </svg>
+  )
+}
+
+function IconCategoryUtilities() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 2.5a3.2 3.2 0 0 0-4.2 4.2L2 10l2 2 3.3-3.3a3.2 3.2 0 0 0 4.2-4.2l-1 1-1.5-1.5 1-1z"/>
+    </svg>
+  )
+}
+
+function IconCategoryOther() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="8.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="1.5" y="8.5" width="5" height="5" rx="1"/>
+      <rect x="8.5" y="8.5" width="5" height="5" rx="1"/>
+    </svg>
+  )
+}
+
+const CATEGORY_ICONS: Record<string, () => React.JSX.Element> = {
+  development:  IconCategoryDev,
+  productivity: IconCategoryProductivity,
+  utilities:    IconCategoryUtilities,
+  other:        IconCategoryOther,
 }
 
 function IconDownload() {
@@ -41,6 +78,23 @@ function IconTrash() {
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2.5 4h10M6 4V3h3v1" />
       <path d="M3.5 4l.8 8h6.4l.8-8" />
+    </svg>
+  )
+}
+
+function IconSearch() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="6.5" cy="6.5" r="4.5"/>
+      <path d="M10 10l3 3"/>
+    </svg>
+  )
+}
+
+function IconExternalLink() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M5 9L9 5M9 5H5.5M9 5V8.5"/>
     </svg>
   )
 }
@@ -82,7 +136,7 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
       setFetchError(null)
       setFetching(prev => new Set([...prev, entry.id]))
       try {
-        const result = await FetchExternalPlugin(entry.githubUrl)
+        const result = await invoke<any>('plugin.fetch', { id: entry.githubUrl })
         const record: ExternalPluginRecord = {
           id:          result.id || entry.id,
           name:        result.name || entry.name,
@@ -115,7 +169,7 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
   return (
     <div className="ps__center">
       <div className="ps-search-wrap">
-        <span className="ps-search-icon">⌕</span>
+        <span className="ps-search-icon"><IconSearch /></span>
         <input
           className="ps-search"
           placeholder="Search plugins…"
@@ -163,7 +217,10 @@ function BrowseTab({ onPluginChange }: { onPluginChange: () => void }) {
               <div key={entry.id} className={`ps-card${isInst ? ' ps-card--installed' : ''}`}>
                 <div className="ps-card__top">
                   <div className="ps-card__icon">
-                    {CATEGORY_ICONS[entry.category] ?? '⊡'}
+                    {(() => {
+                      const CategoryIcon = CATEGORY_ICONS[entry.category] ?? IconCategoryOther
+                      return <CategoryIcon />
+                    })()}
                   </div>
                   <div className="ps-card__identity">
                     <div className="ps-card__name">{entry.name}</div>
@@ -224,7 +281,7 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
     setStatus('loading')
     setMsg('')
     try {
-      const result = await FetchExternalPlugin(safeGithubUrl)
+      const result = await invoke<any>('plugin.fetch', { id: safeGithubUrl })
       const record: ExternalPluginRecord = {
         id:          result.id,
         name:        result.name,
@@ -262,8 +319,8 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
           <div className="ps-ext__title">Install from GitHub</div>
           <p className="ps-ext__desc">
             Paste the URL of any public GitHub repository built with the{' '}
-            <a className="ps-link" href="https://github.com/cmdide/plugin-sdk" target="_blank" rel="noreferrer">
-              CMD IDE Plugin SDK
+            <a className="ps-link" href="https://github.com/BinderTools/plugin-sdk" target="_blank" rel="noreferrer">
+              Binder Plugin SDK
             </a>. The repository must include a compiled <code>dist/index.js</code> bundle.
           </p>
         </div>
@@ -293,9 +350,9 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
           <div className="ps-ext__reqs-title">Requirements</div>
           <ul className="ps-ext__reqs-list">
             <li>Repository must be <strong>public</strong> on GitHub</li>
-            <li>Must include <code>dist/index.js</code> — a compiled ESM bundle that exports a <code>Plugin</code> object as its default export</li>
-            <li>Must be built using the <a className="ps-link" href="https://github.com/cmdide/plugin-sdk" target="_blank" rel="noreferrer">CMD IDE Plugin SDK</a></li>
-            <li>External plugins are <strong>not verified</strong> by the CMD IDE team — only install code you trust</li>
+            <li>Must include <code>dist/index.js</code>: a compiled ESM bundle that exports a <code>Plugin</code> object as its default export</li>
+            <li>Must be built using the <a className="ps-link" href="https://github.com/BinderTools/plugin-sdk" target="_blank" rel="noreferrer">Binder Plugin SDK</a></li>
+            <li>External plugins are <strong>not verified</strong> by the Binder team. Only install code you trust</li>
           </ul>
         </div>
 
@@ -311,8 +368,9 @@ function ExternalTab({ onPluginChange }: { onPluginChange: () => void }) {
                   </div>
                   <div className="ps-row__meta">
                     {toSafeGithubUrl(ext.githubUrl) ? (
-                      <a className="ps-link" href={toSafeGithubUrl(ext.githubUrl)!} target="_blank" rel="noreferrer">
-                        {toSafeGithubUrl(ext.githubUrl)!.replace('https://github.com/', '')} ↗
+                      <a className="ps-link ps-link--external" href={toSafeGithubUrl(ext.githubUrl)!} target="_blank" rel="noreferrer">
+                        {toSafeGithubUrl(ext.githubUrl)!.replace('https://github.com/', '')}
+                        <IconExternalLink />
                       </a>
                     ) : (
                       <span className="ps-muted">{ext.githubUrl}</span>

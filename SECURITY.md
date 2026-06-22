@@ -21,7 +21,7 @@ If you discover a security vulnerability, report it privately using one of these
 
 Use GitHub's built-in private reporting:
 
-1. Go to the [Security tab](https://github.com/Command-IDE/terminal-IDE/security) of this repository
+1. Go to the [Security tab](https://github.com/BinderTools/binder/security) of this repository
 2. Click **"Report a vulnerability"**
 3. Fill out the advisory form
 
@@ -62,8 +62,8 @@ We aim to keep you informed throughout the process and will credit reporters in 
 
 The following are **in scope** for this policy:
 
-- The cmdIDE desktop application (this repository)
-- The [cmdIDE Plugin SDK](packages/)
+- The Binder desktop application (this repository)
+- The [Binder Plugin SDK](packages/)
 - The [themes repository](app/themes/)
 - Official shell backend submodules
 
@@ -79,7 +79,7 @@ The following are **out of scope**:
 
 ## Security Considerations for Plugin Authors
 
-cmdIDE plugins execute JavaScript in a sandboxed WebView context. Plugin authors should:
+Binder plugins execute JavaScript in a sandboxed WebView context. Plugin authors should:
 
 - Not request unnecessary Wails backend bindings
 - Not read or write files outside the user's working directory without explicit permission

@@ -1,15 +1,18 @@
 #include "pack.hpp"
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
 #include <zip.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -23,6 +26,7 @@ namespace {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+#ifdef _WIN32
 static std::wstring to_wpath(const std::string& s) {
     if (s.empty()) return {};
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
@@ -40,6 +44,9 @@ static std::string to_utf8(const std::wstring& w) {
 }
 
 static fs::path from_u8(const std::string& s) { return fs::path(to_wpath(s)); }
+#else
+static fs::path from_u8(const std::string& s) { return fs::path(s); }
+#endif
 
 static std::string lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -117,6 +124,7 @@ static bool create_zip(const fs::path& root, const std::string& out_path_utf8,
     static constexpr int64_t kMaxFileBytes = 50LL * 1024 * 1024;
 
     int zip_err = 0;
+#ifdef _WIN32
     // libzip on Windows: zip_open takes a UTF-8 path but internally uses the
     // system codepage.  Convert to wide and use a short canonical path to
     // guarantee ASCII safety for the output path.
@@ -132,8 +140,10 @@ static bool create_zip(const fs::path& root, const std::string& out_path_utf8,
     // Convert the (possibly short) wide path to the system codepage for libzip.
     char ansi_out[MAX_PATH] = {};
     WideCharToMultiByte(CP_ACP, 0, short_wout, -1, ansi_out, MAX_PATH, nullptr, nullptr);
-
     zip_t* z = zip_open(ansi_out, ZIP_CREATE | ZIP_TRUNCATE, &zip_err);
+#else
+    zip_t* z = zip_open(out_path_utf8.c_str(), ZIP_CREATE | ZIP_TRUNCATE, &zip_err);
+#endif
     if (!z) {
         zip_error_t ze;
         zip_error_init_with_code(&ze, zip_err);
@@ -153,6 +163,8 @@ static bool create_zip(const fs::path& root, const std::string& out_path_utf8,
         }
 
         fs::path abs = root / from_u8(e.rel_path);
+
+#ifdef _WIN32
         std::wstring wabs = abs.wstring();
 
         // Read file via Win32 (handles Unicode paths correctly).
@@ -167,6 +179,11 @@ static bool create_zip(const fs::path& root, const std::string& out_path_utf8,
         ReadFile(h, content.data(), (DWORD)fsize.QuadPart, &bytes_read, nullptr);
         CloseHandle(h);
         content.resize(bytes_read);
+#else
+        std::ifstream fh(abs, std::ios::binary);
+        if (!fh) continue;
+        std::string content((std::istreambuf_iterator<char>(fh)), {});
+#endif
 
         data_store.push_back(std::move(content));
         const auto& buf = data_store.back();

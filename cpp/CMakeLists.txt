@@ -1,19 +1,97 @@
 cmake_minimum_required(VERSION 3.26)
-project(cmdide-backend LANGUAGES CXX)
+project(binder-backend LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# On Windows: statically link the MSVC runtime so exes have zero DLL dependencies.
+# This matches the old Wails build which was a single truly standalone exe.
+if(WIN32)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+
+# CMake 4.x changed FindOpenSSL search logic; httplib's config calls find_dependency(OpenSSL)
+# and can no longer locate it in the vcpkg tree without an explicit root hint.
+if(WIN32 AND DEFINED _VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    set(OPENSSL_ROOT_DIR "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}" CACHE PATH "")
+endif()
+
 find_package(httplib CONFIG REQUIRED)
 find_package(cmark CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
+find_package(unofficial-tree-sitter CONFIG REQUIRED)
 
-add_executable(cmdide-backend
-    src/main.cpp
-    src/ipc.cpp
+# ── Vendored tree-sitter grammars (parser.c per language, no external deps) ────
+add_library(binder-grammars STATIC
+    third_party/grammars/tree-sitter-json/src/parser.c
+    third_party/grammars/tree-sitter-javascript/src/parser.c
+    third_party/grammars/tree-sitter-javascript/src/scanner.c
+    third_party/grammars/tree-sitter-typescript/typescript/src/parser.c
+    third_party/grammars/tree-sitter-typescript/typescript/src/scanner.c
+    third_party/grammars/tree-sitter-typescript/tsx/src/parser.c
+    third_party/grammars/tree-sitter-typescript/tsx/src/scanner.c
+    third_party/grammars/tree-sitter-c/src/parser.c
+    third_party/grammars/tree-sitter-cpp/src/parser.c
+    third_party/grammars/tree-sitter-cpp/src/scanner.c
+    third_party/grammars/tree-sitter-c-sharp/src/parser.c
+    third_party/grammars/tree-sitter-c-sharp/src/scanner.c
+    third_party/grammars/tree-sitter-rust/src/parser.c
+    third_party/grammars/tree-sitter-rust/src/scanner.c
+    third_party/grammars/tree-sitter-go/src/parser.c
+    third_party/grammars/tree-sitter-java/src/parser.c
+    third_party/grammars/tree-sitter-lua/src/parser.c
+    third_party/grammars/tree-sitter-lua/src/scanner.c
+    third_party/grammars/tree-sitter-python/src/parser.c
+    third_party/grammars/tree-sitter-python/src/scanner.c
+    third_party/grammars/tree-sitter-bash/src/parser.c
+    third_party/grammars/tree-sitter-bash/src/scanner.c
+    third_party/grammars/tree-sitter-zig/src/parser.c
+    third_party/grammars/tree-sitter-toml/src/parser.c
+    third_party/grammars/tree-sitter-toml/src/scanner.c
+    third_party/grammars/tree-sitter-dockerfile/src/parser.c
+    third_party/grammars/tree-sitter-dockerfile/src/scanner.c
+    third_party/grammars/tree-sitter-yaml/src/parser.c
+    third_party/grammars/tree-sitter-yaml/src/scanner.c
+    third_party/grammars/tree-sitter-css/src/parser.c
+    third_party/grammars/tree-sitter-css/src/scanner.c
+    third_party/grammars/tree-sitter-scss/src/parser.c
+    third_party/grammars/tree-sitter-scss/src/scanner.c
+    third_party/grammars/tree-sitter-markdown/src/parser.c
+    third_party/grammars/tree-sitter-markdown/src/scanner.c
+    third_party/grammars/tree-sitter-html/src/parser.c
+    third_party/grammars/tree-sitter-html/src/scanner.c
+)
+set_target_properties(binder-grammars PROPERTIES LINKER_LANGUAGE C)
+target_include_directories(binder-grammars PRIVATE
+    third_party/grammars/tree-sitter-json/src
+    third_party/grammars/tree-sitter-javascript/src
+    third_party/grammars/tree-sitter-typescript/typescript/src
+    third_party/grammars/tree-sitter-typescript/tsx/src
+    third_party/grammars/tree-sitter-c/src
+    third_party/grammars/tree-sitter-cpp/src
+    third_party/grammars/tree-sitter-c-sharp/src
+    third_party/grammars/tree-sitter-rust/src
+    third_party/grammars/tree-sitter-go/src
+    third_party/grammars/tree-sitter-java/src
+    third_party/grammars/tree-sitter-lua/src
+    third_party/grammars/tree-sitter-python/src
+    third_party/grammars/tree-sitter-bash/src
+    third_party/grammars/tree-sitter-zig/src
+    third_party/grammars/tree-sitter-toml/src
+    third_party/grammars/tree-sitter-dockerfile/src
+    third_party/grammars/tree-sitter-yaml/src
+    third_party/grammars/tree-sitter-css/src
+    third_party/grammars/tree-sitter-scss/src
+    third_party/grammars/tree-sitter-markdown/src
+    third_party/grammars/tree-sitter-html/src
+)
+
+# ── Backend static library (shared by binder-backend.exe and binder-host) ──────
+add_library(binder-backend-lib STATIC
     src/terminal.cpp
     src/fileops.cpp
     src/config.cpp
@@ -23,25 +101,56 @@ add_executable(cmdide-backend
     src/session.cpp
     src/pack.cpp
     src/updater.cpp
+    src/git.cpp
+    src/workflows.cpp
+    src/workflow_yaml.cpp
+    src/workflow_expr.cpp
+    src/workflow_runner.cpp
+    src/process_registry.cpp
+    src/editor_buffer.cpp
+    src/file_watcher.cpp
+    src/port_forward.cpp
 )
 
-target_link_libraries(cmdide-backend PRIVATE
+target_include_directories(binder-backend-lib PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
+
+target_link_libraries(binder-backend-lib PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib
     cmark::cmark
     unofficial::sqlite3::sqlite3
     libzip::zip
-    iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable, GetIfTable
-    psapi      # EnumProcesses, GetProcessMemoryInfo, GetModuleFileNameExW
-    winhttp    # WinHttpOpen — GitHub API and update downloads
+    unofficial::tree-sitter::tree-sitter
+    binder-grammars
 )
 
 if(WIN32)
-    target_compile_definitions(cmdide-backend PRIVATE
+    target_link_libraries(binder-backend-lib PUBLIC
+        iphlpapi   # GetExtendedTcpTable, GetExtendedUdpTable
+        psapi      # EnumProcesses, GetProcessMemoryInfo
+        ws2_32     # Winsock (port_forward TCP/UDP relay)
+    )
+endif()
+
+if(UNIX AND NOT APPLE)
+    # OpenSSL is needed by cpp-httplib on Linux
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(binder-backend-lib PUBLIC
+        OpenSSL::SSL OpenSSL::Crypto util)
+endif()
+
+if(WIN32)
+    target_compile_definitions(binder-backend-lib PUBLIC
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         _UNICODE
         UNICODE
     )
 endif()
+
+# ── WebView host and setup ─────────────────────────────────────────────────────
+add_subdirectory(host)
+add_subdirectory(setup)

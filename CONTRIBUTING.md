@@ -1,4 +1,4 @@
-# Contributing to cmdIDE
+# Contributing to Binder
 
 Thank you for taking the time to contribute. This document covers how to report bugs, propose features, and submit pull requests.
 
@@ -30,8 +30,8 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 | I want to… | What to do |
 |---|---|
-| Report a bug | [Open a Bug Report issue](https://github.com/Command-IDE/terminal-IDE/issues/new?template=bug_report.yml) |
-| Request a feature | [Open a Feature Request issue](https://github.com/Command-IDE/terminal-IDE/issues/new?template=feature_request.yml) |
+| Report a bug | [Open a Bug Report issue](https://github.com/BinderTools/binder/issues/new?template=bug_report.yml) |
+| Request a feature | [Open a Feature Request issue](https://github.com/BinderTools/binder/issues/new?template=feature_request.yml) |
 | Submit a theme | See the [themes repository](app/themes/CONTRIBUTING.md) |
 | Build a plugin | See the [Plugin SDK](packages/) |
 | Fix a typo or doc | Open a PR directly — no issue needed |
@@ -42,7 +42,7 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ## Reporting Bugs
 
-Use the [Bug Report](https://github.com/Command-IDE/terminal-IDE/issues/new?template=bug_report.yml) issue template. Include:
+Use the [Bug Report](https://github.com/BinderTools/binder/issues/new?template=bug_report.yml) issue template. Include:
 
 - Your OS and version
 - Steps to reliably reproduce the issue
@@ -55,7 +55,7 @@ The more specific your report, the faster it can be triaged.
 
 ## Requesting Features
 
-Use the [Feature Request](https://github.com/Command-IDE/terminal-IDE/issues/new?template=feature_request.yml) issue template. Good feature requests describe:
+Use the [Feature Request](https://github.com/BinderTools/binder/issues/new?template=feature_request.yml) issue template. Good feature requests describe:
 
 - The problem you're trying to solve (not just the solution you want)
 - How you currently work around it, if at all
@@ -77,8 +77,8 @@ Features that are narrow in scope and have clear user value get prioritized. Ver
 ### Clone and Initialize
 
 ```bash
-git clone --recurse-submodules https://github.com/Command-IDE/terminal-IDE
-cd terminal-IDE
+git clone --recurse-submodules https://github.com/BinderTools/binder
+cd binder
 ```
 
 If you already cloned without submodules:
@@ -203,4 +203,4 @@ Themes live in their own repository at [`app/themes/`](app/themes/). To contribu
 
 ## Community Plugins
 
-Plugins are built using the [cmdIDE Plugin SDK](packages/) and distributed via GitHub repositories. See the SDK documentation for how to build, test, and publish a plugin. Plugin PRs to this repo are not required — plugins are installed directly from their own GitHub repos via the in-app store.
+Plugins are built using the [Binder Plugin SDK](packages/) and distributed via GitHub repositories. See the SDK documentation for how to build, test, and publish a plugin. Plugin PRs to this repo are not required — plugins are installed directly from their own GitHub repos via the in-app store.

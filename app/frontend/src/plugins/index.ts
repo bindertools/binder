@@ -1,6 +1,6 @@
-import type { Plugin, PluginCommand } from '@cmdide/plugin-sdk'
+import type { Plugin, PluginCommand } from '@binder/plugin-sdk'
 export type { Plugin }
-export type { PluginCommand, PluginTabProps, PluginContext } from '@cmdide/plugin-sdk'
+export type { PluginCommand, PluginTabProps, PluginContext } from '@binder/plugin-sdk'
 
 // Bundled source of the AI Chat Manager plugin (pre-built, embedded at compile time).
 // This lets the plugin work immediately without requiring a manual install from the store.
@@ -17,8 +17,8 @@ export interface InstalledPluginCommand {
 }
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
-const KEY_INSTALLED = 'cmdide:plugins:installed'
-const KEY_EXTERNAL  = 'cmdide:plugins:external'
+const KEY_INSTALLED = 'binder:plugins:installed'
+const KEY_EXTERNAL  = 'binder:plugins:external'
 
 // ── Install state ─────────────────────────────────────────────────────────────
 export function getInstalledIds(): string[] {
@@ -68,7 +68,7 @@ export function removeExternalPlugin(id: string): void {
 // ── Async plugin loader ───────────────────────────────────────────────────────
 // Two bundle formats are supported:
 //
-//   IIFE  — assigns to window.__cmdide_plugin__, loaded with new Function().
+//   IIFE  — assigns to window.__binder_plugin__, loaded with new Function().
 //           Newer plugins; avoids blob-URL CSP restrictions and shares the
 //           host's React instance (window.React, set in main.tsx).
 //
@@ -79,7 +79,7 @@ export function removeExternalPlugin(id: string): void {
 export async function loadInstalledPlugins(): Promise<Plugin[]> {
   const ids = getInstalledIds()
   const plugins: Plugin[] = []
-  const GLOBAL_KEY = '__cmdide_plugin__'
+  const GLOBAL_KEY = '__binder_plugin__'
 
   for (const id of ids) {
     try {
@@ -95,7 +95,7 @@ export async function loadInstalledPlugins(): Promise<Plugin[]> {
         // IIFE bundles assign the plugin object to window[GLOBAL_KEY] and
         // reference global React set up by main.tsx.
         ;(window as any)[GLOBAL_KEY] = undefined
-        // eslint-disable-next-line no-new-func
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
         new Function(code)()
         const plugin = (window as any)[GLOBAL_KEY]
         ;(window as any)[GLOBAL_KEY] = undefined
@@ -167,14 +167,14 @@ export function bootstrapBuiltins(): void {
   const AI_ID = 'ai'
   const existing = getExternalPlugins().find(p => p.id === AI_ID)
   // Re-seed if never installed or if the bundled code has changed
-  if (!existing || existing.code !== aiPluginCode) {
+  if (existing?.code !== aiPluginCode) {
     saveExternalPlugin({
       id: AI_ID,
       name: 'AI Chat Manager',
       description: 'Local Ollama chat manager with a two-panel workspace and persistent multi-chat sessions.',
-      author: 'Command-IDE',
+      author: 'BinderTools',
       version: '1.0.0',
-      githubUrl: 'https://github.com/Command-IDE/ai-plugin',
+      githubUrl: 'https://github.com/BinderTools/ai-plugin',
       code: aiPluginCode,
     })
     installPlugin(AI_ID)

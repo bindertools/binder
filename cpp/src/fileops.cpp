@@ -3,11 +3,16 @@
 
 #include <spdlog/spdlog.h>
 
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#endif
 
+#ifndef _WIN32
+#include <sys/stat.h>  // stat() for cross-platform mtime
+#endif
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -24,15 +29,21 @@ namespace {
 
 // Build a std::filesystem::path from a UTF-8 encoded string.
 fs::path from_u8(const std::string& s) {
+#ifdef _WIN32
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
                                 nullptr, 0);
     std::wstring w(n, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
                         w.data(), n);
     return fs::path(std::move(w));
+#else
+    // On macOS/Linux std::filesystem::path accepts UTF-8 directly.
+    return fs::path(s);
+#endif
 }
 
 int64_t get_mtime(const fs::path& p) {
+#ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA fad{};
     if (!GetFileAttributesExW(p.wstring().c_str(), GetFileExInfoStandard, &fad))
         return 0;
@@ -41,6 +52,12 @@ int64_t get_mtime(const fs::path& p) {
     uli.HighPart = fad.ftLastWriteTime.dwHighDateTime;
     // 100-ns intervals since 1601-01-01 → Unix seconds
     return static_cast<int64_t>((uli.QuadPart - 116444736000000000ULL) / 10000000ULL);
+#else
+    // C++17 portable: use POSIX stat() which directly gives Unix mtime.
+    struct stat st{};
+    if (::stat(p.c_str(), &st) != 0) return 0;
+    return static_cast<int64_t>(st.st_mtime);
+#endif
 }
 
 std::string lower(std::string s) {
@@ -140,19 +157,34 @@ std::string detect_language(const std::string& path) {
 json readdir(const std::string& path) {
     auto p = from_u8(path);
     std::error_code ec;
-    json entries = json::array();
+    std::vector<fs::directory_entry> entries;
     for (auto& e : fs::directory_iterator(p, ec)) {
         if (ec) { ec.clear(); continue; }
+        entries.push_back(e);
+        ec.clear();
+    }
+
+    // Dirs first, then files; both sorted case-insensitively — matches tree().
+    std::sort(entries.begin(), entries.end(),
+              [](const fs::directory_entry& a, const fs::directory_entry& b) {
+                  bool da = a.is_directory(), db = b.is_directory();
+                  if (da != db) return da;
+                  return lower(a.path().filename().u8string()) <
+                         lower(b.path().filename().u8string());
+              });
+
+    json out = json::array();
+    for (auto& e : entries) {
         int64_t sz = e.is_regular_file(ec) ? static_cast<int64_t>(e.file_size(ec)) : 0;
-        entries.push_back({
+        ec.clear();
+        out.push_back({
             {"name",  e.path().filename().u8string()},
             {"isDir", e.is_directory()},
             {"size",  sz},
             {"mtime", get_mtime(e.path())},
         });
-        ec.clear();
     }
-    return entries;
+    return out;
 }
 
 json tree(const std::string& path) {
