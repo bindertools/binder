@@ -327,9 +327,33 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                     "\r\nAvailable themes: dark  minimal  dracula  nord  solarized-dark"
                     "  solarized-light  monokai  tokyo-night  catppuccin-mocha  one-dark\r\n")));
             } else if (name == "preview") {
-                if (!slash_args.empty())
-                    emit("app:open-preview", json({{"type","url"},{"url",slash_args},
-                                                    {"path",slash_args},{"terminalId",id}}));
+                if (!slash_args.empty()) {
+                    static const std::regex kUrlRe("^[a-zA-Z][a-zA-Z0-9+.-]*://.*");
+                    static const std::regex kPortRe("^[0-9]{1,5}$");
+                    if (std::regex_match(slash_args, kUrlRe)) {
+                        emit("app:open-preview", json({{"type","url"},{"url",slash_args},
+                                                        {"path",slash_args},{"terminalId",id}}));
+                    } else if (std::regex_match(slash_args, kPortRe)) {
+                        std::string url = "http://127.0.0.1:" + slash_args;
+                        emit("app:open-preview", json({{"type","url"},{"url",url},
+                                                        {"path",url},{"terminalId",id}}));
+                    } else {
+                        std::string target = slash_args;
+                        if (!fs::path(target).is_absolute())
+                            try { target = fs::weakly_canonical(fs::path(cwd) / target).string(); } catch (...) {}
+
+                        json start_args, start_resp; std::string dummy3 = seq;
+                        preview_ops::dispatch("preview.start", start_args, dummy3, start_resp);
+                        std::string base_url = start_resp.value("url", std::string{});
+                        if (!base_url.empty()) {
+                            std::string url_path = target;
+                            for (char& c : url_path) if (c == '\\') c = '/';
+                            if (url_path.empty() || url_path[0] != '/') url_path = "/" + url_path;
+                            emit("app:open-preview", json({{"type","html"},{"url",base_url + url_path},
+                                                            {"path",target},{"terminalId",id}}));
+                        }
+                    }
+                }
             } else if (name == "problems") {
                 emit("app:open-problems", json({{"cwd",cwd},{"terminalId",id},
                                                 {"sources",json::array()},{"items",json::array()}}));
