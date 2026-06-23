@@ -114,7 +114,9 @@ static std::string render_markdown(const std::string& path_utf8) {
     std::string md((std::istreambuf_iterator<char>(f)), {});
 
     // cmark → HTML fragment
-    char* html_raw = cmark_markdown_to_html(md.data(), md.size(), CMARK_OPT_DEFAULT);
+    // CMARK_OPT_UNSAFE keeps raw HTML (e.g. <div style="text-align:center">)
+    // instead of replacing it with an empty comment.
+    char* html_raw = cmark_markdown_to_html(md.data(), md.size(), CMARK_OPT_UNSAFE);
     if (!html_raw) return "";
     std::string html_fragment(html_raw);
     free(html_raw);

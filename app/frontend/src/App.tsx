@@ -1336,7 +1336,8 @@ export default function App() {
     return null
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs, terminalCwds, appConfig, currentZoom, resolvedTheme, pluginCommands, plugins,
-      forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal])
+      forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal,
+      livePreviews, activeLivePreviewKey])
 
   // ── Determine if tree has only one pane ───────────────────────────────────────
   const isOnlyPane = useMemo(() => getAllLeaves(activeLayout.root).length <= 1, [activeLayout])
