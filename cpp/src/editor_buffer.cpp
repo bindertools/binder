@@ -2526,7 +2526,7 @@ void rebuild_completion_symbols(Buffer& b) {
                     if (first != std::string::npos) {
                         size_t last = line.find_last_not_of(" \t\r");
                         detail = line.substr(first, last - first + 1);
-                        if (detail.size() > 80) detail = detail.substr(0, 80) + "...";
+                        if (detail.size() > 80) { detail.resize(80); detail += "..."; }
                     }
 
                     b.completion_symbols[name] = CompletionSymbol{cq->capture_kinds[cap.index], detail};
