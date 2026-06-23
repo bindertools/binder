@@ -45,9 +45,11 @@ inline std::string ExtractAssets() {
     const char* zipData = static_cast<const char*>(LockResource(hData));
     DWORD       zipSize = SizeofResource(hMod, hRes);
 
-    // Derive a stable dir name from the first 64 bytes of the zip
+    // Derive a stable dir name from the full zip content, so any change to the
+    // embedded frontend (even one that doesn't touch the first bytes of the
+    // archive) gets re-extracted instead of reusing a stale temp copy.
     uint32_t hash = 0x811c9dc5u;
-    for (DWORD i = 0; i < std::min(zipSize, (DWORD)64); ++i)
+    for (DWORD i = 0; i < zipSize; ++i)
         hash = (hash ^ (unsigned char)zipData[i]) * 0x01000193u;
 
     char tmp[MAX_PATH];

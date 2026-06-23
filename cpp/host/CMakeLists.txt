@@ -36,8 +36,11 @@ if(WIN32)
         splash_windows.cpp jumplist_windows.cpp
         resources.rc)
 
-    # Ensure the zip is generated before the RC compiler embeds it
+    # Ensure the zip is generated before the RC compiler embeds it, and that the
+    # RC compile (and relink) actually reruns when only the zip's contents change
+    # (vite's hashed output filenames mean resources.rc itself never changes).
     add_dependencies(binder-host gen_frontend_zip)
+    set_source_files_properties(resources.rc PROPERTIES OBJECT_DEPENDS "${GENERATED_ZIP}")
 
 else()
     add_executable(binder-host main.cpp dispatch.cpp)
