@@ -59,6 +59,7 @@
 
 /* ── Main panel ──────────────────────────────────────────────────────────────── */
 .db-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -329,6 +330,46 @@
   font-size: 12px;
   opacity: 0.55;
   font-family: var(--font-ui) !important;
+}
+
+/* ── Cell editing ────────────────────────────────────────────────────────────── */
+.db-cell--editing {
+  padding: 0 !important;
+}
+
+.db-cell-input {
+  width: 100%;
+  min-width: 80px;
+  height: 100%;
+  background: var(--app-bg);
+  border: 1px solid var(--accent-border);
+  outline: none;
+  color: var(--info-bar-hover-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────────── */
+.db-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 70%;
+  background: var(--info-bar-bg);
+  border: 1px solid rgba(255,69,58,0.3);
+  color: var(--color-error);
+  border-radius: var(--r-md);
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  z-index: 50;
 }
 
 /* ── JSON view ───────────────────────────────────────────────────────────────── */

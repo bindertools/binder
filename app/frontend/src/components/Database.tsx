@@ -2,11 +2,44 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { invoke } from '../lib/ipc'
 import SidebarPanel from './shared/SidebarPanel'
 import { PageSidebarNavItem } from './shared/PageSidebarNav'
+import ContextMenu, { ContextMenuEntry } from './ContextMenu'
 import './Database.scss'
 
 interface DBColumn { name: string; type: string; notnull?: boolean; pk?: boolean }
-interface DBTable  { name: string; columns: DBColumn[]; rows: any[][]; row_count: number }
+interface DBTable  { name: string; columns: DBColumn[]; rows: any[][]; row_count: number; has_rowid?: boolean; rowids?: number[] }
 interface DBSchema  { tables: DBTable[] }
+
+// Wraps an identifier in double quotes for use in generated SQL, escaping any
+// embedded quotes so table/column names round-trip safely.
+function quoteIdent(name: string): string {
+  return '"' + name.replace(/"/g, '""') + '"'
+}
+
+// Builds a WHERE clause that addresses exactly one row. Prefers the SQLite
+// rowid (fetched alongside the row data); falls back to matching on every
+// column's value for WITHOUT ROWID tables, which can be ambiguous for
+// duplicate rows but is the best available option.
+function rowWhere(table: DBTable, ri: number): { clause: string; params: any[] } | null {
+  if (table.has_rowid && table.rowids) {
+    const rid = table.rowids[ri]
+    if (rid === undefined) return null
+    return { clause: 'rowid = ?', params: [rid] }
+  }
+  const row = table.rows[ri]
+  if (!row) return null
+  const clauses: string[] = []
+  const params: any[] = []
+  table.columns.forEach((col, i) => {
+    const v = row[i]
+    if (v === null || v === undefined) {
+      clauses.push(`${quoteIdent(col.name)} IS NULL`)
+    } else {
+      clauses.push(`${quoteIdent(col.name)} = ?`)
+      params.push(v)
+    }
+  })
+  return { clause: clauses.join(' AND '), params }
+}
 
 interface Props {
   dbPath:       string
@@ -148,7 +181,14 @@ export default function Database({ dbPath, privacyMode }: Props) {
   const [filter,        setFilter]        = useState('')
   const [revealedCells, setRevealedCells] = useState<Set<string>>(new Set())
   const [jsonRevealed,  setJsonRevealed]  = useState(false)
+  const [editingCell,   setEditingCell]   = useState<{ ri: number; ci: number } | null>(null)
+  const [editValue,     setEditValue]     = useState('')
+  const [ctxMenu,       setCtxMenu]       = useState<
+    { x: number; y: number; kind: 'cell' | 'row' | 'col'; ri?: number; ci: number } | null
+  >(null)
+  const [toast,         setToast]         = useState<string | null>(null)
   const filterRef = useRef<HTMLInputElement>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -194,17 +234,106 @@ export default function Database({ dbPath, privacyMode }: Props) {
     })
   }, [])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4500)
+    return () => clearTimeout(t)
+  }, [toast])
+
   const table      = schema?.tables?.find(t => t.name === selectedTable) ?? null
   const tableCount = schema?.tables?.length ?? 0
 
-  const filteredRows = useMemo(() => {
+  // Re-reads the schema without disturbing selection/filter state, used after
+  // a write so the grid reflects the edit immediately.
+  const reload = useCallback(() => {
+    return invoke<unknown>('db.read', { path: dbPath }).then(raw => {
+      setSchema(raw as DBSchema)
+    })
+  }, [dbPath])
+
+  const runExec = useCallback(async (sql: string, params: any[]) => {
+    try {
+      await invoke('db.exec', { path: dbPath, sql, params })
+      await reload()
+    } catch (e) {
+      setToast(String(e))
+    }
+  }, [dbPath, reload])
+
+  const startEditCell = useCallback((ri: number, ci: number) => {
+    if (!table) return
+    const v = table.rows[ri]?.[ci]
+    setEditValue(v === null || v === undefined ? '' : String(v))
+    setEditingCell({ ri, ci })
+  }, [table])
+
+  const commitEditCell = useCallback(async () => {
+    if (!table || !editingCell) return
+    const { ri, ci } = editingCell
+    const col = table.columns[ci]
+    const where = rowWhere(table, ri)
+    setEditingCell(null)
+    if (!where) { setToast('Cannot locate this row to edit'); return }
+    const sql = `UPDATE ${quoteIdent(table.name)} SET ${quoteIdent(col.name)} = ? WHERE ${where.clause}`
+    await runExec(sql, [editValue, ...where.params])
+  }, [table, editingCell, editValue, runExec])
+
+  const clearCell = useCallback((ri: number, ci: number) => {
+    if (!table) return
+    const col = table.columns[ci]
+    const where = rowWhere(table, ri)
+    if (!where) { setToast('Cannot locate this row'); return }
+    const sql = `UPDATE ${quoteIdent(table.name)} SET ${quoteIdent(col.name)} = NULL WHERE ${where.clause}`
+    runExec(sql, where.params)
+  }, [table, runExec])
+
+  const clearRow = useCallback((ri: number) => {
+    if (!table) return
+    const where = rowWhere(table, ri)
+    if (!where) { setToast('Cannot locate this row'); return }
+    const sets = table.columns.map(c => `${quoteIdent(c.name)} = NULL`).join(', ')
+    const sql = `UPDATE ${quoteIdent(table.name)} SET ${sets} WHERE ${where.clause}`
+    runExec(sql, where.params)
+  }, [table, runExec])
+
+  const deleteRow = useCallback((ri: number) => {
+    if (!table) return
+    const where = rowWhere(table, ri)
+    if (!where) { setToast('Cannot locate this row'); return }
+    const sql = `DELETE FROM ${quoteIdent(table.name)} WHERE ${where.clause}`
+    runExec(sql, where.params)
+  }, [table, runExec])
+
+  const clearColumn = useCallback((ci: number) => {
+    if (!table) return
+    const col = table.columns[ci]
+    const sql = `UPDATE ${quoteIdent(table.name)} SET ${quoteIdent(col.name)} = NULL`
+    runExec(sql, [])
+  }, [table, runExec])
+
+  const deleteColumn = useCallback((ci: number) => {
+    if (!table) return
+    const col = table.columns[ci]
+    const sql = `ALTER TABLE ${quoteIdent(table.name)} DROP COLUMN ${quoteIdent(col.name)}`
+    runExec(sql, [])
+  }, [table, runExec])
+
+  // Holds original row indices (not the rows themselves) so cell edits can
+  // still address the correct rowid/row data even while a filter is active.
+  const filteredIndices = useMemo(() => {
     if (!table) return []
-    if (!filter.trim()) return table.rows
+    const indices = table.rows.map((_, i) => i)
+    if (!filter.trim()) return indices
     const q = filter.toLowerCase()
-    return table.rows.filter(row =>
-      row.some(cell => cell !== null && cell !== undefined && String(cell).toLowerCase().includes(q)),
+    return indices.filter(i =>
+      table.rows[i].some(cell => cell !== null && cell !== undefined && String(cell).toLowerCase().includes(q)),
     )
   }, [table, filter])
+
+  const filteredRows = useMemo(
+    () => filteredIndices.map(i => table!.rows[i]),
+    [filteredIndices, table],
+  )
 
   const fileName = dbPath.replace(/\\/g, '/').split('/').pop() ?? dbPath
 
@@ -335,8 +464,14 @@ export default function Database({ dbPath, privacyMode }: Props) {
                     <thead>
                       <tr>
                         <th className="db-rownum-th">#</th>
-                        {table.columns.map(col => (
-                          <th key={col.name}>
+                        {table.columns.map((col, ci) => (
+                          <th
+                            key={col.name}
+                            onContextMenu={e => {
+                              e.preventDefault()
+                              setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'col', ci })
+                            }}
+                          >
                             <div className="db-col-header">
                               {col.pk && <span className="db-pk-badge">PK</span>}
                               <span className="db-col-name">{col.name}</span>
@@ -347,20 +482,51 @@ export default function Database({ dbPath, privacyMode }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRows.map((row, ri) => (
+                      {filteredIndices.map((ri, displayIdx) => {
+                        const row = table.rows[ri]
+                        return (
                         <tr key={ri}>
-                          <td className="db-rownum-td">{ri + 1}</td>
+                          <td
+                            className="db-rownum-td"
+                            onContextMenu={e => {
+                              e.preventDefault()
+                              setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'row', ri, ci: 0 })
+                            }}
+                          >{displayIdx + 1}</td>
                           {(row ?? []).map((cell, ci) => {
                             const isNull = cell === null || cell === undefined
                             const cellKey = `${ri}-${ci}`
                             const isRevealed = revealedCells.has(cellKey)
                             const shouldBlur = privacyMode && !isNull && !isRevealed
                             const isPrivacyCell = privacyMode && !isNull
+                            const isEditing = editingCell?.ri === ri && editingCell?.ci === ci
+                            if (isEditing) {
+                              return (
+                                <td key={ci} className="db-cell--editing">
+                                  <input
+                                    ref={editInputRef}
+                                    autoFocus
+                                    className="db-cell-input"
+                                    value={editValue}
+                                    onChange={e => setEditValue(e.target.value)}
+                                    onBlur={() => commitEditCell()}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') { e.preventDefault(); commitEditCell() }
+                                      else if (e.key === 'Escape') { e.preventDefault(); setEditingCell(null) }
+                                    }}
+                                  />
+                                </td>
+                              )
+                            }
                             return (
                               <td
                                 key={ci}
                                 className={isNull ? 'db-cell--null' : shouldBlur ? 'db-cell--blurred' : isPrivacyCell ? 'db-cell--revealed' : ''}
                                 onClick={isPrivacyCell ? () => toggleCell(cellKey) : undefined}
+                                onContextMenu={e => {
+                                  e.preventDefault()
+                                  setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'cell', ri, ci })
+                                }}
                                 title={shouldBlur ? 'Click to reveal' : isPrivacyCell ? 'Click to hide' : undefined}
                               >
                                 {isNull
@@ -373,7 +539,8 @@ export default function Database({ dbPath, privacyMode }: Props) {
                             )
                           })}
                         </tr>
-                      ))}
+                        )
+                      })}
                       {filteredRows.length === 0 && (
                         <tr>
                           <td colSpan={table.columns.length + 1} className="db-cell--empty">
@@ -383,6 +550,46 @@ export default function Database({ dbPath, privacyMode }: Props) {
                       )}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {ctxMenu && (() => {
+                const entries: ContextMenuEntry[] = []
+                if (ctxMenu.kind === 'cell') {
+                  entries.push(
+                    { kind: 'item', label: 'Edit Cell', onClick: () => startEditCell(ctxMenu.ri!, ctxMenu.ci) },
+                    { kind: 'item', label: 'Clear Cell', onClick: () => clearCell(ctxMenu.ri!, ctxMenu.ci) },
+                    { kind: 'sep' },
+                    { kind: 'item', label: 'Clear Row', onClick: () => clearRow(ctxMenu.ri!) },
+                    { kind: 'item', label: 'Delete Row', danger: true, onClick: () => deleteRow(ctxMenu.ri!) },
+                    { kind: 'sep' },
+                    { kind: 'item', label: 'Clear Column', onClick: () => clearColumn(ctxMenu.ci) },
+                    { kind: 'item', label: 'Delete Column', danger: true, onClick: () => deleteColumn(ctxMenu.ci) },
+                  )
+                } else if (ctxMenu.kind === 'row') {
+                  entries.push(
+                    { kind: 'item', label: 'Clear Row', onClick: () => clearRow(ctxMenu.ri!) },
+                    { kind: 'item', label: 'Delete Row', danger: true, onClick: () => deleteRow(ctxMenu.ri!) },
+                  )
+                } else {
+                  entries.push(
+                    { kind: 'item', label: 'Clear Column', onClick: () => clearColumn(ctxMenu.ci) },
+                    { kind: 'item', label: 'Delete Column', danger: true, onClick: () => deleteColumn(ctxMenu.ci) },
+                  )
+                }
+                return (
+                  <ContextMenu
+                    x={ctxMenu.x}
+                    y={ctxMenu.y}
+                    entries={entries}
+                    onClose={() => setCtxMenu(null)}
+                  />
+                )
+              })()}
+
+              {toast && (
+                <div className="db-toast" onClick={() => setToast(null)}>
+                  <WarningIcon /> {toast}
                 </div>
               )}
 

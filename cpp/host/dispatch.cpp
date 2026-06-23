@@ -1387,17 +1387,28 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 }
                 tobj["row_count"] = row_count;
 
-                // Rows (capped at kRowLimit)
-                json rows = json::array();
+                // Rows (capped at kRowLimit). Try to also fetch the implicit
+                // rowid so the frontend can address specific rows for editing;
+                // WITHOUT ROWID tables don't have one, so fall back gracefully.
+                json rows   = json::array();
+                json rowids = json::array();
+                bool has_rowid = true;
                 {
-                    std::string sql = "SELECT * FROM \"" + tname + "\" LIMIT " +
-                                      std::to_string(kRowLimit);
+                    std::string sql = "SELECT rowid AS __rowid__, * FROM \"" + tname +
+                                      "\" LIMIT " + std::to_string(kRowLimit);
                     sqlite3_stmt* stmt = nullptr;
-                    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
-                        int ncols = sqlite3_column_count(stmt);
+                    if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                        has_rowid = false;
+                        sql = "SELECT * FROM \"" + tname + "\" LIMIT " + std::to_string(kRowLimit);
+                        sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+                    }
+                    if (stmt) {
+                        int ncols    = sqlite3_column_count(stmt);
+                        int col_base = has_rowid ? 1 : 0;
                         while (sqlite3_step(stmt) == SQLITE_ROW) {
+                            if (has_rowid) rowids.push_back(sqlite3_column_int64(stmt, 0));
                             json row = json::array();
-                            for (int i = 0; i < ncols; ++i) {
+                            for (int i = col_base; i < ncols; ++i) {
                                 switch (sqlite3_column_type(stmt, i)) {
                                     case SQLITE_NULL:
                                         row.push_back(nullptr);
@@ -1421,13 +1432,83 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                         sqlite3_finalize(stmt);
                     }
                 }
-                tobj["rows"] = rows;
+                tobj["rows"]      = rows;
+                tobj["has_rowid"] = has_rowid;
+                if (has_rowid) tobj["rowids"] = rowids;
 
                 tables_arr.push_back(tobj);
             }
 
             sqlite3_close(db);
             d->resolve_ok(captured_seq, {{"tables", tables_arr}});
+        }).detach();
+        return;
+    }
+
+    // ── Database write (SQLite: cell/row/column edits) ────────────────────────
+    if (type == "db.exec") {
+        std::string db_path = args.value("path", std::string{});
+        std::string sql     = args.value("sql", std::string{});
+        json params          = args.value("params", json::array());
+        if (db_path.empty() || sql.empty()) {
+            resolve_err(seq, "db.exec: missing path or sql");
+            return;
+        }
+
+        std::string captured_seq    = seq;
+        std::string captured_path   = db_path;
+        std::string captured_sql    = sql;
+        json        captured_params = params;
+        auto* d = this;
+
+        std::thread([d, captured_seq, captured_path, captured_sql, captured_params]() {
+            sqlite3* db = nullptr;
+            int rc = sqlite3_open_v2(captured_path.c_str(), &db,
+                                     SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX, nullptr);
+            if (rc != SQLITE_OK) {
+                std::string err = db ? sqlite3_errmsg(db) : "cannot open database";
+                if (db) sqlite3_close(db);
+                d->resolve_err(captured_seq, "Cannot open database: " + err);
+                return;
+            }
+
+            sqlite3_stmt* stmt = nullptr;
+            if (sqlite3_prepare_v2(db, captured_sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                std::string err = sqlite3_errmsg(db);
+                sqlite3_close(db);
+                d->resolve_err(captured_seq, "SQL prepare failed: " + err);
+                return;
+            }
+
+            int idx = 1;
+            for (const auto& p : captured_params) {
+                if (p.is_null()) {
+                    sqlite3_bind_null(stmt, idx);
+                } else if (p.is_boolean()) {
+                    sqlite3_bind_int(stmt, idx, p.get<bool>() ? 1 : 0);
+                } else if (p.is_number_integer()) {
+                    sqlite3_bind_int64(stmt, idx, p.get<int64_t>());
+                } else if (p.is_number_float()) {
+                    sqlite3_bind_double(stmt, idx, p.get<double>());
+                } else {
+                    sqlite3_bind_text(stmt, idx, p.get<std::string>().c_str(), -1, SQLITE_TRANSIENT);
+                }
+                ++idx;
+            }
+
+            int step_rc = sqlite3_step(stmt);
+            if (step_rc != SQLITE_DONE && step_rc != SQLITE_ROW) {
+                std::string err = sqlite3_errmsg(db);
+                sqlite3_finalize(stmt);
+                sqlite3_close(db);
+                d->resolve_err(captured_seq, "SQL execution failed: " + err);
+                return;
+            }
+
+            int changes = sqlite3_changes(db);
+            sqlite3_finalize(stmt);
+            sqlite3_close(db);
+            d->resolve_ok(captured_seq, {{"changes", changes}});
         }).detach();
         return;
     }
