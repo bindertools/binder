@@ -284,7 +284,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
     const where = rowWhere(table, ri)
     if (!where) { setToast('Cannot locate this row'); return }
     const sql = `UPDATE ${quoteIdent(table.name)} SET ${quoteIdent(col.name)} = NULL WHERE ${where.clause}`
-    runExec(sql, where.params)
+    void runExec(sql, where.params)
   }, [table, runExec])
 
   const clearRow = useCallback((ri: number) => {
@@ -293,7 +293,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
     if (!where) { setToast('Cannot locate this row'); return }
     const sets = table.columns.map(c => `${quoteIdent(c.name)} = NULL`).join(', ')
     const sql = `UPDATE ${quoteIdent(table.name)} SET ${sets} WHERE ${where.clause}`
-    runExec(sql, where.params)
+    void runExec(sql, where.params)
   }, [table, runExec])
 
   const deleteRow = useCallback((ri: number) => {
@@ -301,21 +301,21 @@ export default function Database({ dbPath, privacyMode }: Props) {
     const where = rowWhere(table, ri)
     if (!where) { setToast('Cannot locate this row'); return }
     const sql = `DELETE FROM ${quoteIdent(table.name)} WHERE ${where.clause}`
-    runExec(sql, where.params)
+    void runExec(sql, where.params)
   }, [table, runExec])
 
   const clearColumn = useCallback((ci: number) => {
     if (!table) return
     const col = table.columns[ci]
     const sql = `UPDATE ${quoteIdent(table.name)} SET ${quoteIdent(col.name)} = NULL`
-    runExec(sql, [])
+    void runExec(sql, [])
   }, [table, runExec])
 
   const deleteColumn = useCallback((ci: number) => {
     if (!table) return
     const col = table.columns[ci]
     const sql = `ALTER TABLE ${quoteIdent(table.name)} DROP COLUMN ${quoteIdent(col.name)}`
-    runExec(sql, [])
+    void runExec(sql, [])
   }, [table, runExec])
 
   // Holds original row indices (not the rows themselves) so cell edits can
@@ -511,7 +511,7 @@ export default function Database({ dbPath, privacyMode }: Props) {
                                     onChange={e => setEditValue(e.target.value)}
                                     onBlur={() => commitEditCell()}
                                     onKeyDown={e => {
-                                      if (e.key === 'Enter') { e.preventDefault(); commitEditCell() }
+                                      if (e.key === 'Enter') { e.preventDefault(); void commitEditCell() }
                                       else if (e.key === 'Escape') { e.preventDefault(); setEditingCell(null) }
                                     }}
                                   />

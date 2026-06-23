@@ -71,6 +71,32 @@ jobs:
         run: npx eslint src
         working-directory: app/frontend
 
+  # ── C/C++ — cppcheck ────────────────────────────────────────────────────────────
+  cpp-lint:
+    name: C/C++ — cppcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,performance,portability \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --suppress=missingInclude \
+            --suppress=unmatchedSuppression \
+            -I cpp/src -I cpp/host \
+            cpp/src cpp/host cpp/setup
+
   # ── Auto-fix — ESLint ─────────────────────────────────────────────────────────
   # When ESLint fails on a PR, run `eslint --fix`, commit any resulting changes
   # straight to the PR's branch, and leave a comment summarizing what changed.
