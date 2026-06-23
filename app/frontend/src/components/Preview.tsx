@@ -1,6 +1,7 @@
 import React, { useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import './Preview.scss'
 
 type PreviewType = 'markdown' | 'html' | 'url'
@@ -89,7 +90,7 @@ export default function Preview({ previewType, src, path }: Props) {
         {previewType === 'markdown' && (
           <div className="preview-md-scroll">
             <div className="preview-md-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{src}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{src}</ReactMarkdown>
             </div>
           </div>
         )}
