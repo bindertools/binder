@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
+import { MonitorPlay } from 'lucide-react'
 import type { PageId } from '../paneModel'
 
 export type { PageId }
@@ -19,6 +20,7 @@ interface Props {
   showPlugins:        boolean
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
+  onOpenLivePreview:  () => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -218,11 +220,12 @@ const CLOSE_DELAY_MS = 220
 interface MoreMenuProps {
   active:             boolean
   onOpenNotepad:      () => void
+  onOpenLivePreview:  () => void
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
 }
 
-function MoreMenu({ active, onOpenNotepad, recentPaths, onSelectRecentPath }: MoreMenuProps) {
+function MoreMenu({ active, onOpenNotepad, onOpenLivePreview, recentPaths, onSelectRecentPath }: MoreMenuProps) {
   const [open, setOpen] = useState(false)
   const pinnedRef  = useRef(false)
   const btnRef     = useRef<HTMLButtonElement>(null)
@@ -294,6 +297,14 @@ function MoreMenu({ active, onOpenNotepad, recentPaths, onSelectRecentPath }: Mo
                 Notepad
               </button>
 
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 bg-transparent border-0 cursor-pointer text-[12px] text-left text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised transition-colors"
+                onClick={() => { close(); onOpenLivePreview() }}
+              >
+                <MonitorPlay size={16} strokeWidth={1.5} />
+                Live Preview
+              </button>
+
               <div className="mx-3 my-1.5 h-px bg-sep" />
 
               <div className="px-3 pb-1 text-[10px] uppercase tracking-wider opacity-50">Recent Paths</div>
@@ -346,7 +357,7 @@ function MoreMenu({ active, onOpenNotepad, recentPaths, onSelectRecentPath }: Mo
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, showPlugins, recentPaths, onSelectRecentPath }: Props) {
+export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, showPlugins, recentPaths, onSelectRecentPath, onOpenLivePreview }: Props) {
   return (
     <div
       className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
@@ -379,8 +390,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
           <WorkflowsIcon />
         </SidebarBtn>
         <MoreMenu
-          active={activePage === 'notepad'}
+          active={activePage === 'notepad' || activePage === 'livepreview'}
           onOpenNotepad={() => onNavigate('notepad')}
+          onOpenLivePreview={onOpenLivePreview}
           recentPaths={recentPaths}
           onSelectRecentPath={onSelectRecentPath}
         />

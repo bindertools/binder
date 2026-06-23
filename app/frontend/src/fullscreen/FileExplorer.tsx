@@ -226,6 +226,10 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     invoke('shell.reveal', { path: node.path }).catch(() => {})
   }, [])
 
+  const handleOpenPreview = useCallback((node: FileNode) => {
+    window.dispatchEvent(new CustomEvent('ide:open-preview', { detail: { path: node.path } }))
+  }, [])
+
   const collapseAll = useCallback(() => {
     setExpanded(new Set())
   }, [])
@@ -239,12 +243,15 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
       { label: 'Rename',     action: () => startRename(node) },
       { label: 'Copy Path',  action: () => handleCopyPath(node) },
     ]
+    if (!node.isDir && (node.ext === 'md' || node.ext === 'markdown' || node.ext === 'html' || node.ext === 'htm')) {
+      items.push({ label: 'Open Live Preview', action: () => handleOpenPreview(node) })
+    }
     if (onAddToGitIgnore) {
       items.push({ label: 'Add to .gitignore', action: () => onAddToGitIgnore(node) })
     }
     items.push({ divider: true }, { label: 'Delete', danger: true, action: () => handleDelete(node) })
     return items
-  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete, onAddToGitIgnore])
+  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleOpenPreview, handleDelete, onAddToGitIgnore])
 
   // ── Empty-area context menu — acts on root dir ─────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [

@@ -26,13 +26,6 @@ const IcoFile = () => (
     <path d="M10 1v4h4"/>
   </svg>
 )
-const IcoPreview = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-    <rect x="1" y="2" width="14" height="12" rx="1.5"/>
-    <path d="M1 6h14"/>
-    <circle cx="8" cy="10" r="2"/>
-  </svg>
-)
 const IcoDb = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
     <ellipse cx="8" cy="4" rx="6" ry="2.5"/>
@@ -53,18 +46,16 @@ const TabTypeIcon = ({ type }: { type: string }) => {
   switch (type) {
     case 'terminal':  return <IcoTerminal />
     case 'editor':    return <IcoFile />
-    case 'preview':   return <IcoPreview />
     case 'database':  return <IcoDb />
     default:          return <IcoTab />
   }
 }
 
 // ── group ordering & labels ───────────────────────────────────────────────────
-const GROUP_ORDER  = ['terminal','editor','preview','database','debug','config','ports','perf','fullscreen','plugins']
+const GROUP_ORDER  = ['terminal','editor','database','debug','config','ports','perf','fullscreen','plugins']
 const GROUP_LABELS: Record<string, string> = {
   terminal:   'Terminals',
   editor:     'Files',
-  preview:    'Previews',
   database:   'Databases',
   debug:      'Debug',
   config:     'Settings',

@@ -2,7 +2,7 @@ import React, { useReducer, useEffect, useLayoutEffect, useRef, useState, useCal
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
-import Preview from './components/Preview'
+import LivePreviewPage, { type LivePreviewEntry } from './components/LivePreviewPage'
 import Problems, { type CweItem } from './components/Problems'
 import ConfigEditor from './components/ConfigEditor'
 import ZoomIndicator from './components/ZoomIndicator'
@@ -157,7 +157,6 @@ type TabAction =
   | { type: 'add-terminal';    id?: string; initialCwd?: string; parentId?: string; keepActive?: boolean }
   | { type: 'open-file';       payload: OpenFilePayload }
   | { type: 'open-database';   payload: OpenDatabasePayload }
-  | { type: 'open-preview';    payload: OpenPreviewPayload }
   | { type: 'open-problems';   payload: OpenProblemsPayload }
   | { type: 'open-config';     terminalId?: string }
   | { type: 'open-tab';        tabType: string; title: string; terminalId?: string; cwd?: string }
@@ -217,20 +216,6 @@ function tabReducer(state: TabState, action: TabAction): TabState {
       if (existing) return { ...state, activeId: existing.id }
       const fileName = payload.path.replace(/\\/g, '/').split('/').pop() ?? payload.path
       const tab: Tab = { id: nextId(), type: 'database', title: fileName, dbPath: payload.path, parentId: payload.terminalId }
-      return insertNearParent(state, tab, payload.terminalId)
-    }
-
-    case 'open-preview': {
-      const { payload } = action
-      const previewKey = payload.type === 'url' ? payload.url! : payload.path!
-      const existing = state.tabs.find(t => t.type === 'preview' && t.previewPath === previewKey)
-      if (existing) return { ...state, activeId: existing.id }
-      const title = previewKey.replace(/\\/g, '/').split('/').pop() ?? previewKey
-      const previewSrc = payload.type === 'url' ? payload.url! : (payload.url ?? payload.content ?? '')
-      const tab: Tab = {
-        id: nextId(), type: 'preview', title,
-        previewType: payload.type, previewSrc, previewPath: previewKey, parentId: payload.terminalId,
-      }
       return insertNearParent(state, tab, payload.terminalId)
     }
 
@@ -527,6 +512,42 @@ export default function App() {
   const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
   const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
   const [recentPaths,    setRecentPaths]    = useState<string[]>(loadRecentPaths)
+  const [livePreviews,         setLivePreviews]         = useState<LivePreviewEntry[]>([])
+  const [activeLivePreviewKey, setActiveLivePreviewKey] = useState<string | null>(null)
+
+  // ── Sidebar navigation ────────────────────────────────────────────────────────
+
+  const handleSidebarNavigate = useCallback((page: PageId) => {
+    updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: page })) }))
+  }, [activeWorkspaceId, updateLayout])
+
+  // ── Live preview ─────────────────────────────────────────────────────────────
+  // Previews live outside the tab system so opening one redirects to the Live
+  // Preview page instead of hiding the terminal/editor behind a new tab.
+  const openLivePreview = useCallback((payload: OpenPreviewPayload) => {
+    const key = payload.type === 'url' ? payload.url! : payload.path!
+    const src = payload.type === 'url' ? payload.url! : (payload.url ?? payload.content ?? '')
+    const title = key.replace(/\\/g, '/').split('/').pop() ?? key
+    setLivePreviews(prev => {
+      const idx = prev.findIndex(p => p.key === key)
+      const entry: LivePreviewEntry = { key, type: payload.type, src, title }
+      if (idx === -1) return [...prev, entry]
+      const next = [...prev]; next[idx] = entry; return next
+    })
+    setActiveLivePreviewKey(key)
+    handleSidebarNavigate('livepreview')
+  }, [handleSidebarNavigate])
+
+  const closeLivePreview = useCallback((key: string) => {
+    setLivePreviews(prev => prev.filter(p => p.key !== key))
+    setActiveLivePreviewKey(prev => prev === key ? null : prev)
+  }, [])
+
+  // Manually opening the page (vs. being redirected to it) always shows the list.
+  const handleOpenLivePreviewPage = useCallback(() => {
+    setActiveLivePreviewKey(null)
+    handleSidebarNavigate('livepreview')
+  }, [handleSidebarNavigate])
 
   const pathDwellRef = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
 
@@ -773,20 +794,37 @@ export default function App() {
     on('app:open-preview', (...args: any[]) => {
       const payload = args[0] as OpenPreviewPayload
       if (!payload?.type) return
-      dispatch({ type: 'open-preview', payload })
+      openLivePreview(payload)
     })
     return () => offAll('app:open-preview')
-  }, [])
+  }, [openLivePreview])
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const { url, tabId } = (e as CustomEvent<{ url: string; tabId: string }>).detail
+      const { url } = (e as CustomEvent<{ url: string }>).detail
       if (!url) return
-      dispatch({ type: 'open-preview', payload: { type: 'url', url, path: url, terminalId: tabId } })
+      openLivePreview({ type: 'url', url })
     }
     window.addEventListener('ide:open-url', handler)
     return () => window.removeEventListener('ide:open-url', handler)
-  }, [])
+  }, [openLivePreview])
+
+  // Live preview of a local .md/.html file, requested from the file explorer's context menu.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail
+      if (!path) return
+      void (async () => {
+        const result = await invoke<{ url: string; ok: boolean }>('preview.start').catch(() => null)
+        if (!result?.url) return
+        const urlPath = path.replace(/\\/g, '/')
+        const url = result.url + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+        openLivePreview({ type: 'html', url, path })
+      })()
+    }
+    window.addEventListener('ide:open-preview', handler)
+    return () => window.removeEventListener('ide:open-preview', handler)
+  }, [openLivePreview])
 
   useEffect(() => {
     on('app:open-problems', () => {
@@ -945,12 +983,6 @@ export default function App() {
       updateLayout(workspaceId, l => ({ ...l, root: addTabToLeaf(l.root, pane.id, newId) }))
     }
   }, [tabs, layouts, updateLayout])
-
-  // ── Sidebar navigation ────────────────────────────────────────────────────────
-
-  const handleSidebarNavigate = useCallback((page: PageId) => {
-    updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: page })) }))
-  }, [activeWorkspaceId, updateLayout])
 
   // Switches the given pane to the Code Editor page and asks its FullscreenIDE
   // to open `filePath` — used by the Workflows page's "Edit Workflow" button so
@@ -1204,6 +1236,15 @@ export default function App() {
         {pane.activePage === 'notepad' && (
           <NotepadPage cwd={paneCwd} />
         )}
+        {pane.activePage === 'livepreview' && (
+          <LivePreviewPage
+            previews={livePreviews}
+            activeKey={activeLivePreviewKey}
+            onSelect={setActiveLivePreviewKey}
+            onClose={closeLivePreview}
+            onBackToList={() => setActiveLivePreviewKey(null)}
+          />
+        )}
       </div>
     )
   }
@@ -1229,7 +1270,6 @@ export default function App() {
           onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
       )
     }
-    if (tab.type === 'preview') return <Preview previewType={tab.previewType!} src={tab.previewSrc!} path={tab.previewPath!} />
     if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} cwd={activeCwd} />
     if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={true} />
     if (tab.type === 'plugins' && __PLUGINS__) return <PluginStore onPluginChange={reloadPlugins} />
@@ -1373,6 +1413,7 @@ export default function App() {
           showPlugins={__PLUGINS__}
           recentPaths={recentPaths}
           onSelectRecentPath={handleSelectRecentPath}
+          onOpenLivePreview={handleOpenLivePreviewPage}
         />
 
         {/* Pane column: global tab bar on top, split area below */}

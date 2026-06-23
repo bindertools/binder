@@ -23,14 +23,6 @@ const IcoDatabase = () => (
     <path d="M2 7v3c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V7"/>
   </svg>
 )
-const IcoPreview = () => (
-  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-    <rect x="1" y="2" width="14" height="12" rx="2"/>
-    <path d="M1 6h14"/>
-    <circle cx="4" cy="4" r=".8" fill="currentColor" stroke="none"/>
-    <circle cx="7" cy="4" r=".8" fill="currentColor" stroke="none"/>
-  </svg>
-)
 const IcoDebug = () => (
   <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
     <rect x="5" y="3" width="6" height="9" rx="3"/>
@@ -56,7 +48,6 @@ function TabIcon({ type }: { type: string }) {
   if (type === 'terminal') return <IcoTerminal />
   if (type === 'editor')   return <IcoEditor />
   if (type === 'database') return <IcoDatabase />
-  if (type === 'preview')  return <IcoPreview />
   if (type === 'debug')    return <IcoDebug />
   return <IcoGeneric />
 }

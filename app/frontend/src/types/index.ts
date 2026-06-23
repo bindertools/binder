@@ -2,7 +2,7 @@ import type { PageId } from '../paneModel'
 
 export type { PageId }
 
-export type TabType = 'terminal' | 'editor' | 'database' | 'preview' | 'debug' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
+export type TabType = 'terminal' | 'editor' | 'database' | 'debug' | 'config' | 'ports' | 'perf' | 'plugins' | (string & {})
 
 export interface ProbItem {
   file: string
@@ -30,10 +30,6 @@ export interface Tab {
   autoNamed?: boolean   // true = title was set by CWD auto-namer; false = user manually renamed
   // database-only
   dbPath?: string
-  // preview-only
-  previewType?: 'markdown' | 'html' | 'url'
-  previewSrc?: string
-  previewPath?: string
   // problems-only
   problemsCwd?: string
   problemsSources?: string[]
@@ -52,7 +48,6 @@ export interface OpenPreviewPayload {
   path?: string
   content?: string
   url?: string
-  terminalId?: string
 }
 
 export interface OpenFilePayload {
