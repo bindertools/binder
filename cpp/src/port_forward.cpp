@@ -107,7 +107,7 @@ void pump(SOCKET from, SOCKET to) {
     shutdown(to, SD_SEND);
 }
 
-void handle_tcp_connection(SOCKET client, std::string target_host, int target_port) {
+void handle_tcp_connection(SOCKET client, const std::string& target_host, int target_port) {
     addrinfo hints{};
     hints.ai_family   = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -184,7 +184,7 @@ void udp_reply_pump(SOCKET listen_sock, SOCKET upstream, sockaddr_in client_addr
     closesocket(upstream);
 }
 
-void udp_relay_loop(RunningRelay* relay, std::string target_host, int target_port) {
+void udp_relay_loop(RunningRelay* relay, const std::string& target_host, int target_port) {
     std::mutex clients_mu;
     std::map<std::string, SOCKET> clients; // "ip:port" -> upstream socket connected to target
     std::vector<std::thread> reply_threads;

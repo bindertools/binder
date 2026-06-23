@@ -48,6 +48,7 @@ static sqlite3* db() {
     // Double-checked initialisation inside the mutex.
     if (g_db_ok) return g_db;
     std::lock_guard<std::mutex> lk(g_db_mu);
+    // cppcheck-suppress identicalConditionAfterEarlyExit ; double-checked locking, g_db_ok can change under the mutex
     if (g_db_ok) return g_db;
 
 #ifdef _WIN32

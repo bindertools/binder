@@ -154,7 +154,7 @@ void InstallerApp::GetReleases(const std::string& seq) {
         }
 
         std::string pub = r.value("published_at", std::string{});
-        if (pub.size() >= 10) pub = pub.substr(0, 10);
+        if (pub.size() >= 10) pub.resize(10);
 
         releases_cache_.push_back({tag, r.value("name", tag), pub,
                                    prerelease, dl_url, r.value("body", std::string{})});

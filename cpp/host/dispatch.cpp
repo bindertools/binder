@@ -2006,7 +2006,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                         std::string snippet = lines[li];
                         size_t sp = snippet.find_first_not_of(" \t");
                         if (sp != std::string::npos) snippet = snippet.substr(sp);
-                        if (snippet.size() > 160) snippet = snippet.substr(0, 160) + "...";
+                        if (snippet.size() > 160) { snippet.resize(160); snippet += "..."; }
 
                         json item;
                         item["framework"]           = pat.framework;

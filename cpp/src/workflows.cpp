@@ -23,7 +23,7 @@ static std::string trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
-static std::string strip_quotes(std::string s) {
+static std::string strip_quotes(const std::string& s) {
     if (s.size() >= 2 && (s.front() == '"' || s.front() == '\'') && s.back() == s.front())
         return s.substr(1, s.size() - 2);
     return s;

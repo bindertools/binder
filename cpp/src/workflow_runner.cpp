@@ -235,7 +235,7 @@ std::pair<std::string, std::string> parse_owner_repo(const std::string& projectP
     auto r = run_capture(projectPath, {"git", "remote", "get-url", "origin"});
     if (r.code != 0) return {"local", "workspace"};
     std::string url = trim(r.out);
-    if (url.size() > 4 && url.substr(url.size() - 4) == ".git") url = url.substr(0, url.size() - 4);
+    if (url.size() > 4 && url.substr(url.size() - 4) == ".git") url.resize(url.size() - 4);
     auto pos = url.find_last_of("/:");
     if (pos == std::string::npos) return {"local", "workspace"};
     std::string repo = url.substr(pos + 1);
@@ -765,7 +765,7 @@ bool run_uses_shim(const std::string& usesRaw, const YamlNode& withNode, const f
     std::string ref = substitute(usesRaw, ctx);
     std::string name = ref;
     auto at = name.find('@');
-    if (at != std::string::npos) name = name.substr(0, at);
+    if (at != std::string::npos) name.resize(at);
 
     if (name == "actions/checkout") {
         emitOut("\x1b[90m  using sandbox checkout (working tree already at HEAD)\x1b[0m\r\n");
