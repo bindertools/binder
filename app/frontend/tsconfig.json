@@ -19,8 +19,8 @@
     "paths": {
       "react":              ["node_modules/@types/react/index.d.ts"],
       "react/jsx-runtime":  ["node_modules/@types/react/jsx-runtime.d.ts"],
-      "@binder/plugin-sdk":   ["../../packages/plugin-sdk/index.ts"],
-      "@binder/plugin-sdk/*": ["../../packages/plugin-sdk/*"]
+      "@binder/app-sdk":   ["../../packages/plugin-sdk/index.ts"],
+      "@binder/app-sdk/*": ["../../packages/plugin-sdk/*"]
     }
   },
   "include": [
