@@ -378,7 +378,7 @@ function restoreLayoutFromStorage(tabs: Tab[]): { layouts: Record<string, Layout
         if (tabIds.length === 0) return null
         const ai = node.ai ?? 0
         const activeTabId = ai >= 0 && ai < tabs.length ? tabs[ai].id : tabIds[0]
-        return { type: 'leaf', id: node.id, tabIds, activeTabId, activePage: (node.pg ?? 'terminal') as LeafPane['activePage'] }
+        return { type: 'leaf', id: node.id, tabIds, activeTabId, activePage: (node.pg ?? 'terminal') }
       }
       if (!node.a || !node.b) return null
       const first  = des(node.a as typeof node)
