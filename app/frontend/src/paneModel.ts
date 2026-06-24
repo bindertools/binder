@@ -1,7 +1,9 @@
 let _paneCounter = 0
 function newPaneId() { return `pane-${Date.now()}-${++_paneCounter}` }
 
-export type PageId = 'terminal' | 'editor' | 'database' | 'debug' | 'settings' | 'plugins' | 'ports' | 'versioncontrol' | 'workflows' | 'notepad' | 'livepreview'
+export type CorePageId = 'terminal' | 'editor' | 'debug' | 'settings' | 'apps'
+// Any other page id is a dynamically-installed app's sidebar page (see src/apps/).
+export type PageId = CorePageId | string
 
 export interface LeafPane {
   type: 'leaf'

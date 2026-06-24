@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { CanvasAddon } from '@xterm/addon-canvas'
-import type { InstalledPluginCommand } from '../plugins'
+import type { InstalledAppCommand } from '../apps/sidebarRegistry'
 import { invoke, on, offAll } from '../lib/ipc'
 import '@xterm/xterm/css/xterm.css'
 import TerminalBlockList from './TerminalBlockList'
@@ -19,7 +19,7 @@ interface Props {
   initialCwd?: string
   defaultZoom?: number
   commandAlignment?: 'default' | 'top' | 'bottom'
-  pluginCommands?: Record<string, InstalledPluginCommand>
+  appCommands?: Record<string, InstalledAppCommand>
   onCwdChange?: (cwd: string) => void
 }
 
@@ -48,7 +48,7 @@ interface MenuState {
   left: number
 }
 
-// Built-in slash commands always available — no plugin required.
+// Built-in slash commands always available — no app required.
 const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/config',          desc: 'open settings & theme UI' },
   { cmd: '/config --raw',    desc: 'edit config.json directly' },
@@ -66,7 +66,7 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/performance',     desc: 'open performance monitor tab' },
   { cmd: '/fullscreen',      desc: 'open fullscreen IDE explorer' },
   { cmd: '/fs',              desc: 'open fullscreen IDE explorer (alias)' },
-  ...(__PLUGINS__ ? [{ cmd: '/plugins', desc: 'open plugin store' }] : []),
+  { cmd: '/apps',            desc: 'open the app store' },
   { cmd: '/uptime',          desc: 'show host-device system uptime' },
   { cmd: '/lang-map',        desc: 'language breakdown for current directory' },
   { cmd: '/lang-map <dir>',  desc: 'language breakdown for a directory' },
@@ -74,17 +74,16 @@ const STATIC_SLASH_COMMANDS: { cmd: string; desc: string }[] = [
   { cmd: '/help',            desc: 'show all commands' },
 ]
 
-// Build the full slash command list for autocomplete from installed plugins.
-function buildSlashCommands(pluginCommands: Record<string, InstalledPluginCommand>): { cmd: string; desc: string }[] {
-  const pluginEntries = Object.values(pluginCommands)
+// Build the full slash command list for autocomplete from installed apps.
+function buildSlashCommands(appCommands: Record<string, InstalledAppCommand>): { cmd: string; desc: string }[] {
+  const appEntries = Object.values(appCommands)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(command => ({
       cmd: `/${command.name}`,
       desc: command.description,
     }))
 
-
-  return [...STATIC_SLASH_COMMANDS, ...pluginEntries]
+  return [...STATIC_SLASH_COMMANDS, ...appEntries]
 }
 
 
@@ -95,7 +94,7 @@ export default function Terminal({
   initialCwd,
   defaultZoom = 1,
   commandAlignment = 'default',
-  pluginCommands = {},
+  appCommands = {},
   onCwdChange,
 }: Props) {
   const containerRef           = useRef<HTMLDivElement>(null)
@@ -180,14 +179,14 @@ export default function Terminal({
     return () => offAll(ev)
   }, [tabId])
 
-  const cwdRef = useRef('')        // tracks current cwd so plugin-tab dispatch can read it
+  const cwdRef = useRef('')        // tracks current cwd so app-tab dispatch can read it
   const [cwd, setCwd] = useState('')
   const [fontSize, setFontSize] = useState(() => Math.round(13 * defaultZoom))
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<MenuState | null>(null)
   useEffect(() => { menuRef.current = menu }, [menu])
-  const pluginCommandsRef = useRef(pluginCommands)
-  useEffect(() => { pluginCommandsRef.current = pluginCommands }, [pluginCommands])
+  const appCommandsRef = useRef(appCommands)
+  useEffect(() => { appCommandsRef.current = appCommands }, [appCommands])
 
   // Refs so JSX handlers can call functions defined inside the main useEffect
   const applyMatchRef = useRef<((match: string) => void) | null>(null)
@@ -537,7 +536,7 @@ export default function Terminal({
       const line = lineRef.current
       if (!line.startsWith('/') || line.includes(' ')) return false
 
-      const filtered = buildSlashCommands(pluginCommandsRef.current).filter(c => c.cmd.startsWith(line))
+      const filtered = buildSlashCommands(appCommandsRef.current).filter(c => c.cmd.startsWith(line))
       if (filtered.length === 0) { setMenu(null); return true }
 
       const ITEM_H = 26
@@ -608,12 +607,12 @@ export default function Terminal({
       lineRef.current = ''
       if (value.startsWith('/')) {
         const cmdName = value.slice(1).split(/\s+/)[0].toLowerCase()
-        const pluginCmd = pluginCommandsRef.current[cmdName]
-        if (pluginCmd) {
-          if (pluginCmd.handler) { pluginCmd.handler() }
-          else if (pluginCmd.tabType) {
-            window.dispatchEvent(new CustomEvent('terminal:open-plugin-tab', {
-              detail: { type: pluginCmd.tabType, title: pluginCmd.title, terminalId: tabId, cwd: cwdRef.current },
+        const appCmd = appCommandsRef.current[cmdName]
+        if (appCmd) {
+          if (appCmd.handler) { appCmd.handler() }
+          else if (appCmd.tabType) {
+            window.dispatchEvent(new CustomEvent('terminal:open-app-tab', {
+              detail: { type: appCmd.tabType, title: appCmd.title, terminalId: tabId, cwd: cwdRef.current },
             }))
           }
           void invoke('terminal.execute', { id: tabId, cmd: '' })
@@ -696,12 +695,12 @@ export default function Terminal({
       invoke('terminal.input', { id: tabId, data: utf8ToBase64(data) }).catch(() => {})
     })
 
-    // Allow plugins to execute commands in this terminal
-    const handlePluginExec = (e: Event) => {
+    // Allow apps to execute commands in this terminal
+    const handleAppExec = (e: Event) => {
       const { terminalId, cmd } = (e as CustomEvent).detail
       if (terminalId === tabId) void invoke('terminal.execute', { id: tabId, cmd })
     }
-    window.addEventListener('plugin:execute', handlePluginExec)
+    window.addEventListener('app:execute', handleAppExec)
 
     // Guard: skip fit() when the container has no size (e.g. during panel split
     // layout transitions) to prevent xterm from resizing to 0 cols/rows.
@@ -720,7 +719,7 @@ export default function Terminal({
       window.removeEventListener('keyup',   handleCtrlKeyUp)
       window.removeEventListener('keydown', handleGlobalInterrupt)
       window.removeEventListener('paste', onWindowPaste)
-      window.removeEventListener('plugin:execute', handlePluginExec)
+      window.removeEventListener('app:execute', handleAppExec)
       offAll(outEvent)
       offAll(ptyStartEvent)
       offAll(ptyEndEvent)

@@ -13,16 +13,14 @@ import Sidebar, { type PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
 import PortsTab from './components/PortsTab'
 import VersionControlPanel from './components/VersionControlPanel'
-import NotepadPage from './components/NotepadPage'
 import WorkflowsPanel from './components/WorkflowsPanel'
 import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
-import PluginStore from './plugins/PluginStore'
+import AppStore from './apps/AppStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import {
-  buildInstalledPluginCommandMap, loadInstalledPlugins, bootstrapBuiltins,
-  type InstalledPluginCommand, type Plugin, type PluginContext,
-} from './plugins'
+import { hydrateInstalledApps, onAppsChanged } from './apps/registry'
+import { useInstalledApps, useSidebarRegistry, buildInstalledAppCommandMap, type InstalledAppCommand } from './apps/sidebarRegistry'
+import type { AppContext } from './apps/types'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import {
   createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
@@ -412,22 +410,22 @@ const initialTab  = makeTerminalTab()
 const initialLeaf = createLeaf([initialTab.id], initialTab.id)
 const initialState: TabState = { tabs: [initialTab], activeId: initialTab.id }
 
-// ── PluginErrorBoundary ───────────────────────────────────────────────────────
+// ── AppTabErrorBoundary ───────────────────────────────────────────────────────
 
-class PluginErrorBoundary extends React.Component<
-  { pluginName: string; children: React.ReactNode },
+class AppTabErrorBoundary extends React.Component<
+  { appName: string; children: React.ReactNode },
   { error: Error | null }
 > {
   state = { error: null }
   static getDerivedStateFromError(error: Error) { return { error } }
-  componentDidCatch(error: Error) { console.error(`[plugins] ${this.props.pluginName} crashed`, error) }
+  componentDidCatch(error: Error) { console.error(`[apps] ${this.props.appName} crashed`, error) }
   render() {
     if (this.state.error) {
       return (
         <div className="h-full flex items-center justify-center p-6 bg-[var(--app-bg)]">
           <div className="max-w-[720px] w-full border border-sep rounded-[18px] p-5 bg-[rgba(255,255,255,0.03)] text-[var(--tab-color)] font-mono">
-            <div className="text-[12px] tracking-[0.12em] uppercase opacity-60 mb-2">Plugin Error</div>
-            <div className="text-[18px] font-bold mb-2.5">{this.props.pluginName} failed to render</div>
+            <div className="text-[12px] tracking-[0.12em] uppercase opacity-60 mb-2">App Error</div>
+            <div className="text-[18px] font-bold mb-2.5">{this.props.appName} failed to render</div>
             <div className="text-[12px] leading-[1.7] opacity-[0.82] whitespace-pre-wrap">
               {(this.state.error as Error).message}
             </div>
@@ -509,8 +507,6 @@ export default function App() {
   const [searchOpen,     setSearchOpen]     = useState(false)
   const [terminalCwds,   setTerminalCwds]   = useState<Record<string, string>>({})
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
-  const [plugins,        setPlugins]        = useState<Record<string, Plugin>>({})
-  const [pluginCommands, setPluginCommands] = useState<Record<string, InstalledPluginCommand>>({})
   const [recentPaths,    setRecentPaths]    = useState<string[]>(loadRecentPaths)
   const [livePreviews,         setLivePreviews]         = useState<LivePreviewEntry[]>([])
   const [activeLivePreviewKey, setActiveLivePreviewKey] = useState<string | null>(null)
@@ -551,18 +547,17 @@ export default function App() {
 
   const pathDwellRef = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
 
-  // ── Plugin loader ─────────────────────────────────────────────────────────────
-  const reloadPlugins = useCallback(async () => {
-    if (!__PLUGINS__) return
-    bootstrapBuiltins()
-    const loaded = await loadInstalledPlugins().catch(() => [] as Plugin[])
-    const map: Record<string, Plugin> = {}
-    for (const p of loaded) { if (p.tabType) map[p.tabType] = p }
-    setPlugins(map)
-    setPluginCommands(buildInstalledPluginCommandMap(loaded))
-  }, [])
+  // ── Installed apps ───────────────────────────────────────────────────────────
+  useEffect(() => { void hydrateInstalledApps() }, [])
 
-  useEffect(() => { void reloadPlugins() }, [reloadPlugins])
+  const installedApps = useInstalledApps()
+  const sidebarApps    = useSidebarRegistry()
+  const appsByTabType  = useMemo(() => {
+    const map: Record<string, typeof installedApps[number]> = {}
+    for (const a of installedApps) { if (a.tabType) map[a.tabType] = a }
+    return map
+  }, [installedApps])
+  const appCommands = useMemo(() => buildInstalledAppCommandMap(installedApps), [installedApps])
 
   // ── App config ───────────────────────────────────────────────────────────────
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
@@ -846,9 +841,8 @@ export default function App() {
     on('app:open-tab', (...args: any[]) => {
       const p = args[0] as { type: string; title: string; terminalId?: string; cwd?: string }
       if (!p?.type) return
-      if (p.type === 'plugins') {
-        if (!__PLUGINS__) return
-        updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'plugins' })) }))
+      if (p.type === 'apps') {
+        updateLayout(activeWorkspaceId, l => ({ ...l, root: updateLeafInTree(l.root, l.focusedPaneId, leaf => ({ ...leaf, activePage: 'apps' })) }))
         return
       }
       if (p.type === 'fullscreen') {
@@ -863,14 +857,13 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: Event) => {
-      if (!__PLUGINS__) return
       type Detail = { type: string; title: string; terminalId?: string; cwd?: string }
       const detail = (e as CustomEvent<Detail>).detail
       if (!detail?.type) return
       dispatch({ type: 'open-tab', tabType: detail.type, title: detail.title, terminalId: detail.terminalId, cwd: detail.cwd })
     }
-    window.addEventListener('terminal:open-plugin-tab', handler)
-    return () => window.removeEventListener('terminal:open-plugin-tab', handler)
+    window.addEventListener('terminal:open-app-tab', handler)
+    return () => window.removeEventListener('terminal:open-app-tab', handler)
   }, [])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -1222,9 +1215,7 @@ export default function App() {
             onApply={handleApplyColors} onSaveTheme={handleSaveTheme}
             keybindings={customBindings} onSaveKeybindings={handleSaveKeybindings} />
         )}
-        {pane.activePage === 'plugins' && __PLUGINS__ && (
-          <PluginStore onPluginChange={reloadPlugins} />
-        )}
+        {pane.activePage === 'apps' && <AppStore />}
         {pane.activePage === 'ports' && (
           <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} cwd={paneCwd} />
         )}
@@ -1233,9 +1224,6 @@ export default function App() {
         )}
         {/* 'workflows' page is rendered by the always-mounted WorkflowsPanel overlay
             below SplitPaneView, so its fetched list/content survive switching pages/tabs. */}
-        {pane.activePage === 'notepad' && (
-          <NotepadPage cwd={paneCwd} />
-        )}
         {pane.activePage === 'livepreview' && (
           <LivePreviewPage
             previews={livePreviews}
@@ -1245,6 +1233,23 @@ export default function App() {
             onBackToList={() => setActiveLivePreviewKey(null)}
           />
         )}
+        {/* Any other page id is a sidebar slot claimed by an installed app package
+            (see src/apps/). Notepad is the first one converted this way. */}
+        {(() => {
+          const sidebarApp = sidebarApps.find(s => s.id === pane.activePage)
+          if (!sidebarApp?.manifest.TabComponent) return null
+          const Comp = sidebarApp.manifest.TabComponent
+          const context: AppContext = {
+            cwd: paneCwd,
+            terminalId: paneTerminalId ?? undefined,
+            openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
+          }
+          return (
+            <AppTabErrorBoundary appName={sidebarApp.manifest.name}>
+              <Comp tabId={(paneTerminalId ?? sidebarApp.id) + '-' + pane.id} active={true} context={context} />
+            </AppTabErrorBoundary>
+          )
+        })()}
       </div>
     )
   }
@@ -1272,21 +1277,20 @@ export default function App() {
     }
     if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} cwd={activeCwd} />
     if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={true} />
-    if (tab.type === 'plugins' && __PLUGINS__) return <PluginStore onPluginChange={reloadPlugins} />
-    if (!__PLUGINS__) return null
-    const plugin = plugins[tab.type]
-    if (plugin?.TabComponent) {
-      const context: PluginContext = {
+    if (tab.type === 'apps')  return <AppStore />
+    const app = appsByTabType[tab.type]
+    if (app?.TabComponent) {
+      const context: AppContext = {
         terminalId: tab.parentId, cwd: tab.meta?.cwd,
         executeCommand: tab.parentId
-          ? (cmd: string) => window.dispatchEvent(new CustomEvent('plugin:execute', { detail: { terminalId: tab.parentId, cmd } }))
+          ? (cmd: string) => window.dispatchEvent(new CustomEvent('app:execute', { detail: { terminalId: tab.parentId, cmd } }))
           : undefined,
         openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
       }
       return (
-        <PluginErrorBoundary pluginName={plugin.name}>
-          <plugin.TabComponent tabId={tab.id} active={true} context={context} />
-        </PluginErrorBoundary>
+        <AppTabErrorBoundary appName={app.name}>
+          <app.TabComponent tabId={tab.id} active={true} context={context} />
+        </AppTabErrorBoundary>
       )
     }
     return null
@@ -1335,7 +1339,7 @@ export default function App() {
     // Terminal page with terminal active — rendered in overlay layer, nothing here
     return null
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs, terminalCwds, appConfig, currentZoom, resolvedTheme, pluginCommands, plugins,
+  }, [tabs, terminalCwds, appConfig, currentZoom, resolvedTheme, appCommands, appsByTabType, sidebarApps,
       forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal,
       livePreviews, activeLivePreviewKey])
 
@@ -1411,7 +1415,7 @@ export default function App() {
           onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
           onStartPageDrag={handleStartPageDrag}
-          showPlugins={__PLUGINS__}
+          installedPages={sidebarApps}
           recentPaths={recentPaths}
           onSelectRecentPath={handleSelectRecentPath}
           onOpenLivePreview={handleOpenLivePreviewPage}
@@ -1516,7 +1520,7 @@ export default function App() {
                   initialCwd={tab.initialCwd}
                   defaultZoom={currentZoom}
                   commandAlignment={(appConfig.command_alignment) ?? 'default'}
-                  pluginCommands={pluginCommands}
+                  appCommands={appCommands}
                   onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
                 />
               </div>

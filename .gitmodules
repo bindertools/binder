@@ -7,9 +7,3 @@
 [submodule "app/themes"]
 	path = app/themes
 	url = https://github.com/BinderTools/themes
-[submodule "packages/git"]
-	path = packages/git
-	url = https://github.com/BinderTools/git
-[submodule "packages/ai-plugin"]
-	path = packages/ai-plugin
-	url = https://github.com/BinderTools/ai-plugin

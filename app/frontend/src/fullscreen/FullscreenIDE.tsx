@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { invoke, on, offAll, b64ToText, textToB64 } from '../lib/ipc'
-import { isInstalled } from '../plugins'
 import FileExplorer, { FileNode } from './FileExplorer'
 import StructureView from './StructureView'
 import IDETabBar, { OpenFile } from './IDETabBar'
@@ -204,7 +203,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
 
   const refreshGitStatus = useCallback(() => {
     if (!cwd) return
-    if (isInstalled('git')) void fetchGitStatusMap(cwd).then(setGitStatusMap)
+    void fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
 
   useEffect(() => { refreshGitStatus() }, [refreshGitStatus])
@@ -642,7 +641,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
               onRefresh={refreshGitStatus}
               onLoadDir={loadDir}
               gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
-              onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
+              onAddToGitIgnore={handleAddToGitIgnore}
             />
           </div>
 

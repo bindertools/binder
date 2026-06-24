@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { MonitorPlay } from 'lucide-react'
 import type { PageId } from '../paneModel'
+import type { SidebarPageEntry } from '../apps/sidebarRegistry'
 
 export type { PageId }
 
@@ -17,7 +18,11 @@ interface Props {
   onNavigate:         (page: PageId) => void
   onSearch:           () => void
   onStartPageDrag:    (page: PageId, startX: number, startY: number) => void
-  showPlugins:        boolean
+  // Apps installed via the App Store that claim a sidebar slot (e.g. Notepad).
+  // Ports/Database/Version Control/Workflows are still core for now — see TODO
+  // in App.tsx renderSidebarPage; they'll move into this list as they're
+  // converted into their own app packages.
+  installedPages:     SidebarPageEntry[]
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
   onOpenLivePreview:  () => void
@@ -39,14 +44,6 @@ const EditorIcon = () => (
     <path d="M14 2v5a1 1 0 0 0 1 1h5"/>
     <path d="M5 14a1 1 0 0 0-1 1v2a1 1 0 0 1-1 1 1 1 0 0 1 1 1v2a1 1 0 0 0 1 1"/>
     <path d="M9 22a1 1 0 0 0 1-1v-2a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-2a1 1 0 0 0-1-1"/>
-  </svg>
-)
-
-const DatabaseIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <ellipse cx="12" cy="5" rx="9" ry="3"/>
-    <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
-    <path d="M3 12A9 3 0 0 0 21 12"/>
   </svg>
 )
 
@@ -75,6 +72,14 @@ const SettingsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3"/>
     <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </svg>
+)
+
+const DatabaseIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+    <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+    <path d="M3 12A9 3 0 0 0 21 12"/>
   </svg>
 )
 
@@ -111,7 +116,7 @@ const WorkflowsIcon = () => (
   </svg>
 )
 
-const PluginsIcon = () => (
+const AppsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 7h3a1 1 0 0 0 1-1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4h-1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/>
   </svg>
@@ -122,12 +127,6 @@ const MoreIcon = () => (
     <circle cx="12" cy="12" r="1"/>
     <circle cx="19" cy="12" r="1"/>
     <circle cx="5" cy="12" r="1"/>
-  </svg>
-)
-
-const NotepadIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
   </svg>
 )
 
@@ -219,13 +218,12 @@ const CLOSE_DELAY_MS = 220
 
 interface MoreMenuProps {
   active:             boolean
-  onOpenNotepad:      () => void
   onOpenLivePreview:  () => void
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
 }
 
-function MoreMenu({ active, onOpenNotepad, onOpenLivePreview, recentPaths, onSelectRecentPath }: MoreMenuProps) {
+function MoreMenu({ active, onOpenLivePreview, recentPaths, onSelectRecentPath }: MoreMenuProps) {
   const [open, setOpen] = useState(false)
   const pinnedRef  = useRef(false)
   const btnRef     = useRef<HTMLButtonElement>(null)
@@ -291,14 +289,6 @@ function MoreMenu({ active, onOpenNotepad, onOpenLivePreview, recentPaths, onSel
             >
               <button
                 className="flex items-center gap-2.5 w-full px-3 py-1.5 bg-transparent border-0 cursor-pointer text-[12px] text-left text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised transition-colors"
-                onClick={() => { close(); onOpenNotepad() }}
-              >
-                <NotepadIcon />
-                Notepad
-              </button>
-
-              <button
-                className="flex items-center gap-2.5 w-full px-3 py-1.5 bg-transparent border-0 cursor-pointer text-[12px] text-left text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised transition-colors"
                 onClick={() => { close(); onOpenLivePreview() }}
               >
                 <MonitorPlay size={16} strokeWidth={1.5} />
@@ -357,7 +347,7 @@ function MoreMenu({ active, onOpenNotepad, onOpenLivePreview, recentPaths, onSel
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, showPlugins, recentPaths, onSelectRecentPath, onOpenLivePreview }: Props) {
+export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, installedPages, recentPaths, onSelectRecentPath, onOpenLivePreview }: Props) {
   return (
     <div
       className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
@@ -374,14 +364,14 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         <SidebarBtn active={activePage === 'editor'} label="Code Editor" onClick={() => onNavigate('editor')} onMouseDown={e => onStartPageDrag('editor', e.clientX, e.clientY)}>
           <EditorIcon />
         </SidebarBtn>
+        <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
+          <DebugIcon />
+        </SidebarBtn>
         <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onMouseDown={e => onStartPageDrag('versioncontrol', e.clientX, e.clientY)}>
           <VersionControlIcon />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'database'} label="Database" onClick={() => onNavigate('database')} onMouseDown={e => onStartPageDrag('database', e.clientX, e.clientY)}>
           <DatabaseIcon />
-        </SidebarBtn>
-        <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
-          <DebugIcon />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'ports'} label="Ports & Endpoints" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
           <PortsIcon />
@@ -389,9 +379,19 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
           <WorkflowsIcon />
         </SidebarBtn>
+
+        {/* Apps installed via the App Store that claim a sidebar slot */}
+        {installedPages.map(page => {
+          const Icon = page.icon
+          return (
+            <SidebarBtn key={page.id} active={activePage === page.id} label={page.label} onClick={() => onNavigate(page.id)} onMouseDown={e => onStartPageDrag(page.id, e.clientX, e.clientY)}>
+              <Icon />
+            </SidebarBtn>
+          )
+        })}
+
         <MoreMenu
-          active={activePage === 'notepad' || activePage === 'livepreview'}
-          onOpenNotepad={() => onNavigate('notepad')}
+          active={activePage === 'livepreview'}
           onOpenLivePreview={onOpenLivePreview}
           recentPaths={recentPaths}
           onSelectRecentPath={onSelectRecentPath}
@@ -404,11 +404,9 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
       {/* Utilities */}
       <div className="flex flex-col items-center gap-0.5">
         <div className="w-6 h-px bg-sep mb-1" />
-        {showPlugins && (
-          <SidebarBtn active={activePage === 'plugins'} label="Plugins" onClick={() => onNavigate('plugins')}>
-            <PluginsIcon />
-          </SidebarBtn>
-        )}
+        <SidebarBtn active={activePage === 'apps'} label="App Store" onClick={() => onNavigate('apps')}>
+          <AppsIcon />
+        </SidebarBtn>
         <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')}>
           <SettingsIcon />
         </SidebarBtn>
