@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { git, type GitStatus, type GitStash } from '../lib/git'
-import PageHeader from './shared/PageHeader'
+import type { AppManifest, AppTabProps } from '@binder/app-sdk'
+import { git, type GitStatus, type GitStash } from '../../app/frontend/src/lib/git'
+import PageHeader from '../../app/frontend/src/components/shared/PageHeader'
 
 interface Props {
   cwd: string
@@ -231,7 +232,7 @@ const CloseIcon = () => (
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function VersionControlPanel({ cwd, active }: Props) {
+function VersionControlPanel({ cwd, active }: Props) {
   const [status,      setStatus]      = useState<GitStatus | null>(null)
   const [stashes,     setStashes]     = useState<GitStash[]>([])
   const [branches,    setBranches]    = useState<string[]>([])
@@ -602,3 +603,32 @@ export default function VersionControlPanel({ cwd, active }: Props) {
     </div>
   )
 }
+
+const VersionControlIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="5" cy="6" r="3"/>
+    <path d="M12 6h5a2 2 0 0 1 2 2v7"/>
+    <path d="m15 9-3-3 3-3"/>
+    <circle cx="19" cy="18" r="3"/>
+    <path d="M12 18H7a2 2 0 0 1-2-2V9"/>
+    <path d="m9 15 3 3-3 3"/>
+  </svg>
+)
+
+function VersionControlAdapter({ active, context }: AppTabProps) {
+  return <VersionControlPanel cwd={context.cwd ?? ''} active={active} />
+}
+
+const versionControlApp: AppManifest = {
+  id: 'versioncontrol',
+  name: 'Version Control',
+  description: 'Stage, commit, branch, and review diffs without leaving the app.',
+  author: 'BinderTools',
+  version: '1.0.0',
+  tabType: 'versioncontrol',
+  tabTitle: 'Version Control',
+  TabComponent: VersionControlAdapter,
+  sidebar: { icon: VersionControlIcon, label: 'Version Control' },
+}
+
+export default versionControlApp

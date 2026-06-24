@@ -83,31 +83,6 @@ const DatabaseIcon = () => (
   </svg>
 )
 
-const PortsIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m10.852 19.772-.383.924"/>
-    <path d="m13.148 14.228.383-.923"/>
-    <path d="M13.148 19.772a3 3 0 1 0-2.296-5.544l-.383-.923"/>
-    <path d="m13.53 20.696-.382-.924a3 3 0 1 1-2.296-5.544"/>
-    <path d="m14.772 15.852.923-.383"/>
-    <path d="m14.772 18.148.923.383"/>
-    <path d="M4.2 15.1a7 7 0 1 1 9.93-9.858A7 7 0 0 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.2"/>
-    <path d="m9.228 15.852-.923-.383"/>
-    <path d="m9.228 18.148-.923.383"/>
-  </svg>
-)
-
-const VersionControlIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="5" cy="6" r="3"/>
-    <path d="M12 6h5a2 2 0 0 1 2 2v7"/>
-    <path d="m15 9-3-3 3-3"/>
-    <circle cx="19" cy="18" r="3"/>
-    <path d="M12 18H7a2 2 0 0 1-2-2V9"/>
-    <path d="m9 15 3 3-3 3"/>
-  </svg>
-)
-
 const WorkflowsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <rect width="8" height="8" x="3" y="3" rx="2"/>
@@ -367,14 +342,8 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
           <DebugIcon />
         </SidebarBtn>
-        <SidebarBtn active={activePage === 'versioncontrol'} label="Version Control" onClick={() => onNavigate('versioncontrol')} onMouseDown={e => onStartPageDrag('versioncontrol', e.clientX, e.clientY)}>
-          <VersionControlIcon />
-        </SidebarBtn>
         <SidebarBtn active={activePage === 'database'} label="Database" onClick={() => onNavigate('database')} onMouseDown={e => onStartPageDrag('database', e.clientX, e.clientY)}>
           <DatabaseIcon />
-        </SidebarBtn>
-        <SidebarBtn active={activePage === 'ports'} label="Ports & Endpoints" onClick={() => onNavigate('ports')} onMouseDown={e => onStartPageDrag('ports', e.clientX, e.clientY)}>
-          <PortsIcon />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
           <WorkflowsIcon />

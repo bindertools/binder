@@ -11,8 +11,6 @@ import SplitPaneView from './components/SplitPaneView'
 import PaneTabBar from './components/PaneTabBar'
 import Sidebar, { type PageId } from './components/Sidebar'
 import DatabasePage from './components/DatabasePage'
-import PortsTab from './components/PortsTab'
-import VersionControlPanel from './components/VersionControlPanel'
 import WorkflowsPanel from './components/WorkflowsPanel'
 import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
@@ -1216,12 +1214,6 @@ export default function App() {
             keybindings={customBindings} onSaveKeybindings={handleSaveKeybindings} />
         )}
         {pane.activePage === 'apps' && <AppStore />}
-        {pane.activePage === 'ports' && (
-          <PortsTab tabId={(paneTerminalId ?? 'ports') + '-' + pane.id} active={true} cwd={paneCwd} />
-        )}
-        {pane.activePage === 'versioncontrol' && (
-          <VersionControlPanel cwd={paneCwd} active={true} />
-        )}
         {/* 'workflows' page is rendered by the always-mounted WorkflowsPanel overlay
             below SplitPaneView, so its fetched list/content survive switching pages/tabs. */}
         {pane.activePage === 'livepreview' && (
@@ -1275,13 +1267,12 @@ export default function App() {
           onOpenFile={(path, line, col) => { void handleOpenFileAtLine(path, line, col) }} />
       )
     }
-    if (tab.type === 'ports') return <PortsTab tabId={tab.id} active={true} cwd={activeCwd} />
     if (tab.type === 'perf')  return <PerfTab  tabId={tab.id} active={true} />
     if (tab.type === 'apps')  return <AppStore />
     const app = appsByTabType[tab.type]
     if (app?.TabComponent) {
       const context: AppContext = {
-        terminalId: tab.parentId, cwd: tab.meta?.cwd,
+        terminalId: tab.parentId, cwd: tab.meta?.cwd ?? activeCwd,
         executeCommand: tab.parentId
           ? (cmd: string) => window.dispatchEvent(new CustomEvent('app:execute', { detail: { terminalId: tab.parentId, cmd } }))
           : undefined,

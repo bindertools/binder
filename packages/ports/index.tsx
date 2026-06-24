@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { Plus, Trash2, Info, Milestone } from 'lucide-react'
-import { PortInfo, PortForward } from '../types'
-import { invoke } from '../lib/ipc'
-import { Skeleton } from './Skeleton'
-import EndpointsTab from './EndpointsTab'
-import NewPortForwardModal from './NewPortForwardModal'
-import SubNavTabs from './shared/SubNavTabs'
-import SortableColumnHeader, { ColumnDef } from './shared/SortableColumnHeader'
-import './PortsTab.scss'
+import type { AppManifest, AppTabProps } from '@binder/app-sdk'
+import { PortInfo, PortForward } from '../../app/frontend/src/types'
+import { invoke } from '../../app/frontend/src/lib/ipc'
+import { Skeleton } from '../../app/frontend/src/components/Skeleton'
+import EndpointsTab from '../../app/frontend/src/components/EndpointsTab'
+import NewPortForwardModal from '../../app/frontend/src/components/NewPortForwardModal'
+import SubNavTabs from '../../app/frontend/src/components/shared/SubNavTabs'
+import SortableColumnHeader, { ColumnDef } from '../../app/frontend/src/components/shared/SortableColumnHeader'
+import './index.scss'
 
 interface Props {
   tabId: string
@@ -75,7 +76,7 @@ function PortsSkeleton() {
   )
 }
 
-export default function PortsTab({ active, cwd }: Props) {
+function PortsTab({ active, cwd }: Props) {
   const [mainTab, setMainTab] = useState<MainTab>('open-ports')
   const [ports, setPorts] = useState<PortInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -458,3 +459,35 @@ export default function PortsTab({ active, cwd }: Props) {
     </div>
   )
 }
+
+const PortsIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m10.852 19.772-.383.924"/>
+    <path d="m13.148 14.228.383-.923"/>
+    <path d="M13.148 19.772a3 3 0 1 0-2.296-5.544l-.383-.923"/>
+    <path d="m13.53 20.696-.382-.924a3 3 0 1 1-2.296-5.544"/>
+    <path d="m14.772 15.852.923-.383"/>
+    <path d="m14.772 18.148.923.383"/>
+    <path d="M4.2 15.1a7 7 0 1 1 9.93-9.858A7 7 0 0 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.2"/>
+    <path d="m9.228 15.852-.923-.383"/>
+    <path d="m9.228 18.148-.923.383"/>
+  </svg>
+)
+
+function PortsTabAdapter({ tabId, active, context }: AppTabProps) {
+  return <PortsTab tabId={tabId} active={active} cwd={context.cwd ?? ''} />
+}
+
+const portsApp: AppManifest = {
+  id: 'ports',
+  name: 'Ports & Endpoints',
+  description: 'Inspect open ports, manage port forwards, and track HTTP endpoints hit during dev.',
+  author: 'BinderTools',
+  version: '1.0.0',
+  tabType: 'ports',
+  tabTitle: 'Ports & Endpoints',
+  TabComponent: PortsTabAdapter,
+  sidebar: { icon: PortsIcon, label: 'Ports & Endpoints' },
+}
+
+export default portsApp
