@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { invoke } from '../lib/ipc'
-import Database from './Database'
-import { SearchResult } from '../types'
-import SidebarPanel from './shared/SidebarPanel'
-import { PageSidebarNavItem } from './shared/PageSidebarNav'
-import './DatabasePage.scss'
+import type { AppManifest, AppTabProps } from '@binder/app-sdk'
+import { invoke } from '../../app/frontend/src/lib/ipc'
+import Database from '../../app/frontend/src/components/Database'
+import { SearchResult } from '../../app/frontend/src/types'
+import SidebarPanel from '../../app/frontend/src/components/shared/SidebarPanel'
+import { PageSidebarNavItem } from '../../app/frontend/src/components/shared/PageSidebarNav'
+import './index.scss'
 
 interface Props {
   terminalId:     string | null
@@ -28,7 +29,7 @@ const ScanIcon = () => (
   </svg>
 )
 
-export default function DatabasePage({ terminalId, cwd, initialDbPath, privacyMode }: Props) {
+function DatabasePage({ terminalId, cwd, initialDbPath, privacyMode }: Props) {
   const [dbFiles,    setDbFiles]    = useState<string[]>([])
   const [loading,    setLoading]    = useState(false)
   const [selectedDb, setSelectedDb] = useState<string | null>(initialDbPath ?? null)
@@ -131,3 +132,45 @@ export default function DatabasePage({ terminalId, cwd, initialDbPath, privacyMo
     </div>
   )
 }
+
+const DatabaseIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+    <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+    <path d="M3 12A9 3 0 0 0 21 12"/>
+  </svg>
+)
+
+function DatabaseAdapter({ tabId, context }: AppTabProps) {
+  const [privacyMode, setPrivacyMode] = useState(false)
+
+  useEffect(() => {
+    invoke<{ database_privacy?: boolean }>('config.get')
+      .then(cfg => setPrivacyMode(!!cfg.database_privacy))
+      .catch(() => {})
+  }, [])
+
+  return (
+    <DatabasePage
+      key={tabId}
+      terminalId={context.terminalId ?? null}
+      cwd={context.cwd ?? ''}
+      initialDbPath={context.focusPath}
+      privacyMode={privacyMode}
+    />
+  )
+}
+
+const databaseApp: AppManifest = {
+  id: 'database',
+  name: 'Database',
+  description: 'Browse and query .db/.sqlite files found in the current project.',
+  author: 'BinderTools',
+  version: '1.0.0',
+  tabType: 'database',
+  tabTitle: 'Database',
+  TabComponent: DatabaseAdapter,
+  sidebar: { icon: DatabaseIcon, label: 'Database' },
+}
+
+export default databaseApp

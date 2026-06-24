@@ -75,14 +75,6 @@ const SettingsIcon = () => (
   </svg>
 )
 
-const DatabaseIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <ellipse cx="12" cy="5" rx="9" ry="3"/>
-    <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
-    <path d="M3 12A9 3 0 0 0 21 12"/>
-  </svg>
-)
-
 const WorkflowsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <rect width="8" height="8" x="3" y="3" rx="2"/>
@@ -341,9 +333,6 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         </SidebarBtn>
         <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
           <DebugIcon />
-        </SidebarBtn>
-        <SidebarBtn active={activePage === 'database'} label="Database" onClick={() => onNavigate('database')} onMouseDown={e => onStartPageDrag('database', e.clientX, e.clientY)}>
-          <DatabaseIcon />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
           <WorkflowsIcon />

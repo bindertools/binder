@@ -10,7 +10,6 @@ import SearchPalette from './components/SearchPalette'
 import SplitPaneView from './components/SplitPaneView'
 import PaneTabBar from './components/PaneTabBar'
 import Sidebar, { type PageId } from './components/Sidebar'
-import DatabasePage from './components/DatabasePage'
 import WorkflowsPanel from './components/WorkflowsPanel'
 import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
@@ -1185,10 +1184,6 @@ export default function App() {
       <div className="absolute inset-0 bg-[var(--app-bg)] flex flex-col overflow-hidden">
         {/* 'editor' page is rendered by the always-mounted FullscreenIDE overlay below SplitPaneView,
             so its state (open files, explorer, cursor position) survives switching pages/tabs. */}
-        {pane.activePage === 'database' && (
-          <DatabasePage key={paneTerminalId ?? 'no-terminal'} terminalId={paneTerminalId} cwd={paneCwd}
-            initialDbPath={forcedDbPath} privacyMode={appConfig.database_privacy} />
-        )}
         {pane.activePage === 'debug' && (
           <Problems
             tabId={(paneTerminalId ?? 'prb') + '-' + pane.id}
@@ -1235,6 +1230,7 @@ export default function App() {
             cwd: paneCwd,
             terminalId: paneTerminalId ?? undefined,
             openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
+            focusPath: sidebarApp.id === 'database' ? forcedDbPath : undefined,
           }
           return (
             <AppTabErrorBoundary appName={sidebarApp.manifest.name}>
