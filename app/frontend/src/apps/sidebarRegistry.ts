@@ -17,7 +17,7 @@ export function useInstalledApps(): AppManifest[] {
   const [apps, setApps] = useState<AppManifest[]>([])
 
   useEffect(() => {
-    const cancelled = false
+    let cancelled = false
 
     const reload = async () => {
       const ids = getInstalledIds()
@@ -27,7 +27,8 @@ export function useInstalledApps(): AppManifest[] {
     }
 
     void reload()
-    return onAppsChanged(() => { void reload() })
+    const unsubscribe = onAppsChanged(() => { void reload() })
+    return () => { cancelled = true; unsubscribe() }
   }, [])
 
   return apps
