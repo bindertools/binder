@@ -119,6 +119,67 @@ body {
 }
 .error-banner-dismiss:hover { color: #e08080; }
 
+/* ── SCREEN 0: persona ───────────────────────────────────────────────── */
+.screen-persona {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.persona-prompt {
+  font-size: 15px;
+  font-weight: 500;
+  color: #ddd;
+}
+
+.persona-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 6px;
+  color: #aaa;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.persona-card:hover {
+  border-color: rgba(77,158,255,0.3);
+  background: rgba(255,255,255,0.06);
+  color: #ccc;
+}
+.persona-card.active {
+  border-color: rgba(77,158,255,0.6);
+  background: rgba(77,158,255,0.1);
+  color: #6aadff;
+}
+
+.persona-card-label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.persona-card-blurb {
+  font-size: 10.5px;
+  color: #666;
+  line-height: 1.35;
+}
+.persona-card.active .persona-card-blurb { color: #5c8fc9; }
+
 /* ── SCREEN 1: ready ──────────────────────────────────────────────────── */
 .screen-ready {
   display: flex;
@@ -277,6 +338,20 @@ body {
   color: #e8a444;
   margin-left: 4px;
 }
+
+.vsel-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 2px 0;
+}
+
+.vsel-scroll {
+  max-height: 110px;
+  overflow-y: auto;
+}
+.vsel-scroll::-webkit-scrollbar { width: 3px; }
+.vsel-scroll::-webkit-scrollbar-track { background: transparent; }
+.vsel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 /* ── options (checkboxes) ─────────────────────────────────────────────── */
 .options {

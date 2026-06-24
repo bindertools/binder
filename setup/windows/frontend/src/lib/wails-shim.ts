@@ -7,8 +7,8 @@ import { invoke, on } from './ipc'
       GetReleases:    () => invoke('installer.getReleases'),
       GetChannel:     () => invoke<string>('installer.getChannel'),
       GetInstallDir:  () => invoke<string>('installer.getInstallDir'),
-      Install: (version: string, createDesktop: boolean) =>
-        invoke('installer.install', { version, createDesktop }),
+      Install: (version: string, createDesktop: boolean, seedApps: string[]) =>
+        invoke('installer.install', { version, createDesktop, seedApps }),
       LaunchAndClose: () => invoke('installer.launch'),
       CloseInstaller: () => invoke('installer.close'),
     },

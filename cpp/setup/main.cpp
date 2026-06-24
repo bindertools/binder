@@ -235,7 +235,7 @@ if (!window.runtime) {
     WindowSetTitle: function() {}, WindowReload: function() {}, WindowReloadApp: function() {},
     WindowSetAlwaysOnTop: function() {}, WindowCenter: function() {},
     WindowFullscreen: function() {}, WindowUnfullscreen: function() {},
-    WindowSetSize: function() {}, WindowGetSize: function() { return Promise.resolve({w:460,h:330}); },
+    WindowSetSize: function() {}, WindowGetSize: function() { return Promise.resolve({w:640,h:520}); },
     WindowSetMaxSize: function() {}, WindowSetMinSize: function() {}, WindowSetPosition: function() {},
     WindowGetPosition: function() { return Promise.resolve({x:0,y:0}); },
     WindowIsFullscreen: function() { return Promise.resolve(false); },
@@ -283,13 +283,13 @@ int main(int, char**) {
 
     webview::webview wv(false, nullptr);  // debug=false for release
     wv.set_title("Binder Setup");
-    wv.set_size(460, 330, WEBVIEW_HINT_FIXED);
+    wv.set_size(640, 520, WEBVIEW_HINT_FIXED);
 
 #ifdef _WIN32
     {
         auto hwnd_res = wv.window();
         if (hwnd_res.ok())
-            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 460, 330);
+            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 640, 520);
     }
 #endif
 
@@ -313,7 +313,8 @@ int main(int, char**) {
                     else if (type == "installer.getInstallDir") app->GetInstallDir(seq);
                     else if (type == "installer.install")
                         app->Install(seq, args.value("version", std::string{}),
-                                     args.value("createDesktop", false));
+                                     args.value("createDesktop", false),
+                                     args.value("seedApps", std::vector<std::string>{}));
                     else if (type == "installer.launch") app->LaunchAndClose(seq);
                     else if (type == "installer.close")  app->CloseInstaller(seq);
                     else {

@@ -64,6 +64,22 @@ static std::string to_utf8(const std::wstring& w) {
 }
 #endif
 
+// Where the main app's Config (cpp/src/config.cpp) looks for local data.
+// Must stay in sync with GetDataRoot() there.
+static std::string GetDataRootPath() {
+#ifdef _WIN32
+    wchar_t localapp[MAX_PATH] = {};
+    GetEnvironmentVariableW(L"LOCALAPPDATA", localapp, MAX_PATH);
+    return to_utf8(std::wstring(localapp) + L"\\Binder");
+#elif __APPLE__
+    const char* home = getenv("HOME");
+    return std::string(home ? home : "/tmp") + "/Library/Application Support/Binder";
+#else
+    const char* home = getenv("HOME");
+    return std::string(home ? home : "/tmp") + "/.local/share/binder";
+#endif
+}
+
 static std::string GetInstallDirPath() {
 #ifdef _WIN32
     wchar_t localapp[MAX_PATH] = {};
@@ -136,7 +152,6 @@ void InstallerApp::GetReleases(const std::string& seq) {
     releases_cache_.clear();
     for (auto& r : raw) {
         bool prerelease = r.value("prerelease", false);
-        if (prerelease && !kIncludePrerelease) continue;
 
         std::string tag = r.value("tag_name", std::string{});
         if (tag.empty()) continue;
@@ -174,7 +189,8 @@ void InstallerApp::GetReleases(const std::string& seq) {
 
 void InstallerApp::Install(const std::string& seq,
                            const std::string& version,
-                           bool create_desktop) {
+                           bool create_desktop,
+                           const std::vector<std::string>& seed_apps) {
     emit_progress(5, "Preparing...");
 
     std::string install_dir = GetInstallDirPath();
@@ -304,6 +320,21 @@ void InstallerApp::Install(const std::string& seq,
     make_shortcut("StartMenu");
     if (create_desktop) make_shortcut("Desktop");
 #endif
+
+    // Seed the persona-selected apps for the main app's first launch. We write
+    // a one-shot marker rather than the main app's config.json directly, so
+    // the installer doesn't need to duplicate Config's merge/defaults logic;
+    // Config::load() consumes and deletes this file on first run.
+    if (!seed_apps.empty()) {
+        std::error_code ec;
+        std::string data_root = GetDataRootPath();
+        fs::create_directories(data_root, ec);
+        if (!ec) {
+            json seed = {{"installed_apps", seed_apps}};
+            std::ofstream f(data_root + "/.first-run-apps.json", std::ios::trunc);
+            if (f) f << seed.dump(2);
+        }
+    }
 
     emit_progress(100, "Installation complete");
     wv_.resolve(seq, 0, json{{"ok", true}}.dump());

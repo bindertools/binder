@@ -92,7 +92,30 @@ ordered_json Config::make_defaults() {
     d["file_word_wrap"]     = false;
     d["scroll_speed"]       = 3;
     d["preferred_shell"]    = "";
+    d["installed_apps"]     = json::array();
     return d;
+}
+
+// The installer writes this one-shot marker with the persona-selected apps to
+// pre-install; consume it once on first launch and delete it so it never
+// re-applies (e.g. if the user later uninstalls those apps themselves).
+static void ApplyFirstRunAppsSeed(ordered_json& data) {
+    auto marker = GetDataRoot() / ".first-run-apps.json";
+    if (!fs::exists(marker)) return;
+
+    std::ifstream f(marker, std::ios::binary);
+    if (f) {
+        try {
+            auto seed = json::parse(std::string((std::istreambuf_iterator<char>(f)), {}));
+            if (seed.contains("installed_apps") && seed["installed_apps"].is_array()) {
+                data["installed_apps"] = seed["installed_apps"];
+            }
+        } catch (const json::parse_error& e) {
+            spdlog::warn("config: failed to parse first-run apps seed: {}", e.what());
+        }
+    }
+    std::error_code ec;
+    fs::remove(marker, ec);
 }
 
 bool Config::load() {
@@ -109,6 +132,7 @@ bool Config::load() {
             spdlog::warn("config: cannot create dir: {}", ec.message());
             return false;
         }
+        ApplyFirstRunAppsSeed(data_);
         return save_locked();
     }
 
