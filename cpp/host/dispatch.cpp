@@ -14,7 +14,6 @@
 #include "../src/workflows.hpp"
 #include "../src/workflow_runner.hpp"
 #include "../src/file_watcher.hpp"
-#include "../src/port_forward.hpp"
 #include "../src/base64.hpp"
 #include "../src/editor_buffer.hpp"
 
@@ -66,14 +65,12 @@ static std::wstring dispatch_to_wide(const std::string& s) {
 
 Dispatcher::Dispatcher(webview::webview& wv) : wv_(wv) {
     Config::instance().load();
-    port_forward::start_persisted();
     app_plugin_loader::init(this);
     app_plugin_loader::load_installed_apps();
 }
 
 Dispatcher::~Dispatcher() {
     app_plugin_loader::unload_all();
-    port_forward::stop_all();
     file_watcher::stop();
 
     // Stop all terminal sessions before shutdown
@@ -127,7 +124,6 @@ json Dispatcher::old_to_new(const std::string& type,
         updater_ops::dispatch(type, msg, req_id, resp)||
         workflows_ops::dispatch(type, msg, req_id, resp)||
         editor_ops::dispatch(type, msg, req_id, resp)||
-        port_forward::dispatch(type, msg, req_id, resp)||
         app_plugin_loader::dispatch(type, msg, req_id, resp);
 
     if (!handled) {

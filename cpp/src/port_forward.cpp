@@ -1,5 +1,5 @@
 #include "port_forward.hpp"
-#include "config.hpp"
+#include "app_plugin_abi.h"
 
 #include <spdlog/spdlog.h>
 
@@ -26,6 +26,27 @@
 using json = nlohmann::json;
 
 namespace port_forward {
+
+namespace {
+const BinderHostApi* g_host_api = nullptr;
+
+json config_get_json(const char* key) {
+    if (!g_host_api) return json(nullptr);
+    char* buf = g_host_api->config_get(key);
+    if (!buf) return json(nullptr);
+    json v;
+    try { v = json::parse(buf); } catch (...) { v = json(nullptr); }
+    g_host_api->host_free(buf);
+    return v;
+}
+
+void config_set_json(const char* key, const json& value) {
+    if (!g_host_api) return;
+    g_host_api->config_set(key, value.dump().c_str());
+}
+} // namespace
+
+void set_host_api(const BinderHostApi* api) { g_host_api = api; }
 
 #ifdef _WIN32
 namespace {
@@ -323,7 +344,7 @@ public:
         ensure_winsock();
         std::lock_guard<std::mutex> lk(mu_);
         rules_.clear();
-        auto stored = Config::instance().get().value("portForwards", json::array());
+        auto stored = config_get_json("portForwards");
         if (stored.is_array()) {
             for (auto& j : stored) rules_.push_back(rule_from_json(j));
         }
@@ -344,7 +365,7 @@ private:
     void persist_locked() {
         json arr = json::array();
         for (auto& r : rules_) arr.push_back(rule_to_json(r));
-        Config::instance().set("portForwards", arr);
+        config_set_json("portForwards", arr);
     }
 
     json rule_status_locked(const std::string& id) {
