@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseInstaller, Ready } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime/runtime'
-import { X, Check, Sparkles, GraduationCap, Code2, Database, Workflow, Network } from 'lucide-react'
+import { X, Check, GraduationCap, Code2, Database, Workflow, Network } from 'lucide-react'
 
 type Phase = 'persona' | 'configure' | 'installing' | 'done'
 
-type Persona = 'hobbyist' | 'student' | 'software' | 'data' | 'process' | 'network'
+type Persona = 'student' | 'software' | 'data' | 'process' | 'network'
 
 const PERSONAS: { id: Persona; label: string; blurb: string; icon: React.ElementType }[] = [
-  { id: 'hobbyist', label: 'Hobbyist',          blurb: 'Just the essentials to start.',       icon: Sparkles },
   { id: 'student',  label: 'Student',           blurb: 'Adds Notepad for coursework notes.',  icon: GraduationCap },
   { id: 'software', label: 'Software Engineer', blurb: 'Adds Version Control and Workflows.', icon: Code2 },
   { id: 'data',     label: 'Data Engineer',     blurb: 'Adds the Database app.',               icon: Database },
@@ -20,7 +19,6 @@ const PERSONAS: { id: Persona; label: string; blurb: string; icon: React.Element
 // Editor, and Debug always ship regardless of this choice. This selection is
 // never stored or transmitted anywhere beyond seeding the local install.
 const PERSONA_APPS: Record<Persona, string[]> = {
-  hobbyist: [],
   student:  ['notepad'],
   software: ['versioncontrol', 'workflows'],
   data:     ['database'],
@@ -65,6 +63,29 @@ function SelectRow({ active, icon, title, subtitle, meta, onClick }: {
       {meta}
       <span className="select-row-dot" aria-hidden="true" />
     </button>
+  )
+}
+
+// ── persona grid (block cards, blue-border selection) ─────────────────────────
+function PersonaGrid({ value, onChange }: {
+  value:    Persona | null
+  onChange: (p: Persona) => void
+}) {
+  return (
+    <div className="persona-grid">
+      {PERSONAS.map(p => (
+        <button
+          key={p.id}
+          type="button"
+          className={`persona-card${value === p.id ? ' is-active' : ''}`}
+          onClick={() => onChange(p.id)}
+        >
+          <span className="persona-card-icon"><p.icon size={18} /></span>
+          <span className="persona-card-label">{p.label}</span>
+          <span className="persona-card-blurb">{p.blurb}</span>
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -211,18 +232,7 @@ export default function App() {
             <p className="setup-section-hint">
               We'll pre-install a few extra apps that fit your workflow. You can change this later.
             </p>
-            <div className="select-list">
-              {PERSONAS.map(p => (
-                <SelectRow
-                  key={p.id}
-                  active={persona === p.id}
-                  icon={<p.icon size={16} />}
-                  title={p.label}
-                  subtitle={p.blurb}
-                  onClick={() => setPersona(p.id)}
-                />
-              ))}
-            </div>
+            <PersonaGrid value={persona} onChange={setPersona} />
           </section>
         )}
 
