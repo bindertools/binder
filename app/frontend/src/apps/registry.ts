@@ -38,6 +38,11 @@ export async function installApp(id: string): Promise<void> {
   writeCache(next)
   if (isWebViewHost()) {
     await invoke('config.set', { key: 'installed_apps', value: next }).catch(() => {})
+    // LoadLibrary's the app's native backend DLL (if it has one) into the
+    // running process immediately -- without this, toggling an app on only
+    // takes effect after restarting the app, since the host only scans
+    // installed_apps for backends to load once, at its own startup.
+    await invoke('app.loadBackend', { id }).catch(() => {})
   }
 }
 
@@ -47,6 +52,7 @@ export async function uninstallApp(id: string): Promise<void> {
   writeCache(next)
   if (isWebViewHost()) {
     await invoke('config.set', { key: 'installed_apps', value: next }).catch(() => {})
+    await invoke('app.unloadBackend', { id }).catch(() => {})
   }
 }
 
