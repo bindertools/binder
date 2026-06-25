@@ -195,6 +195,12 @@ add_binder_app(livepreview SOURCES
 )
 target_link_libraries(livepreview PRIVATE httplib::httplib cmark::cmark)
 
+add_binder_app(database SOURCES
+    src/database.cpp
+    apps/database/dllmain.cpp
+)
+target_link_libraries(database PRIVATE unofficial::sqlite3::sqlite3)
+
 # ── WebView host and setup ─────────────────────────────────────────────────────
 add_subdirectory(host)
 add_subdirectory(setup)
