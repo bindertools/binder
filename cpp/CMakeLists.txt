@@ -101,11 +101,6 @@ add_library(binder-backend-lib STATIC
     src/session.cpp
     src/pack.cpp
     src/updater.cpp
-    src/workflows.cpp
-    src/workflow_yaml.cpp
-    src/workflow_expr.cpp
-    src/workflow_runner.cpp
-    src/process_registry.cpp
     src/editor_buffer.cpp
     src/file_watcher.cpp
 )
@@ -186,6 +181,15 @@ add_binder_app(ports SOURCES
 if(WIN32)
     target_link_libraries(ports PRIVATE ws2_32)
 endif()
+
+add_binder_app(workflows SOURCES
+    src/workflows.cpp
+    src/workflow_yaml.cpp
+    src/workflow_expr.cpp
+    src/workflow_runner.cpp
+    src/process_registry.cpp
+    apps/workflows/dllmain.cpp
+)
 
 # ── WebView host and setup ─────────────────────────────────────────────────────
 add_subdirectory(host)

@@ -11,8 +11,6 @@
 #include "../src/session.hpp"
 #include "../src/pack.hpp"
 #include "../src/updater.hpp"
-#include "../src/workflows.hpp"
-#include "../src/workflow_runner.hpp"
 #include "../src/file_watcher.hpp"
 #include "../src/base64.hpp"
 #include "../src/editor_buffer.hpp"
@@ -122,7 +120,6 @@ json Dispatcher::old_to_new(const std::string& type,
         session_ops::dispatch(type, msg, req_id, resp)||
         pack_ops::dispatch(type, msg, req_id, resp)  ||
         updater_ops::dispatch(type, msg, req_id, resp)||
-        workflows_ops::dispatch(type, msg, req_id, resp)||
         editor_ops::dispatch(type, msg, req_id, resp)||
         app_plugin_loader::dispatch(type, msg, req_id, resp);
 
@@ -1013,24 +1010,6 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             std::lock_guard<std::mutex> lk(sessions_mu_);
             term_sessions_[id].alignment = alignment;  // create if not yet started
         }
-        resolve_ok(seq, true);
-        return;
-    }
-
-    // ── Workflows: run/stop a workflow locally via the native runner ─────────────
-    if (type == "workflows.run") {
-        std::string path  = args.value("path",  std::string{});
-        std::string file  = args.value("file",  std::string{});
-        std::string runId = args.value("runId", std::string{});
-        workflow_runner::run_workflow(path, file, runId,
-            [this](const std::string& event, const json& data) { emit(event, data); });
-        resolve_ok(seq, true);
-        return;
-    }
-
-    if (type == "workflows.stop") {
-        std::string runId = args.value("runId", std::string{});
-        workflow_runner::stop_workflow(runId);
         resolve_ok(seq, true);
         return;
     }
