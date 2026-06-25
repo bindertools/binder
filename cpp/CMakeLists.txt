@@ -97,7 +97,6 @@ add_library(binder-backend-lib STATIC
     src/config.cpp
     src/search.cpp
     src/sysinfo.cpp
-    src/preview.cpp
     src/session.cpp
     src/pack.cpp
     src/updater.cpp
@@ -113,7 +112,6 @@ target_link_libraries(binder-backend-lib PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib
-    cmark::cmark
     unofficial::sqlite3::sqlite3
     libzip::zip
     unofficial::tree-sitter::tree-sitter
@@ -190,6 +188,12 @@ add_binder_app(workflows SOURCES
     src/process_registry.cpp
     apps/workflows/dllmain.cpp
 )
+
+add_binder_app(livepreview SOURCES
+    src/preview.cpp
+    apps/livepreview/dllmain.cpp
+)
+target_link_libraries(livepreview PRIVATE httplib::httplib cmark::cmark)
 
 # ── WebView host and setup ─────────────────────────────────────────────────────
 add_subdirectory(host)

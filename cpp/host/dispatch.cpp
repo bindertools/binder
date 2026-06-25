@@ -7,7 +7,6 @@
 #include "../src/config.hpp"
 #include "../src/search.hpp"
 #include "../src/sysinfo.hpp"
-#include "../src/preview.hpp"
 #include "../src/session.hpp"
 #include "../src/pack.hpp"
 #include "../src/updater.hpp"
@@ -116,7 +115,6 @@ json Dispatcher::old_to_new(const std::string& type,
         config_dispatch(type, msg, req_id, resp)     ||
         search_ops::dispatch(type, msg, req_id, resp)||
         sysinfo_ops::dispatch(type, msg, req_id, resp)||
-        preview_ops::dispatch(type, msg, req_id, resp)||
         session_ops::dispatch(type, msg, req_id, resp)||
         pack_ops::dispatch(type, msg, req_id, resp)  ||
         updater_ops::dispatch(type, msg, req_id, resp)||
@@ -355,7 +353,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                             try { target = fs::weakly_canonical(fs::path(cwd) / target).string(); } catch (...) {}
 
                         json start_args, start_resp; std::string dummy3 = seq;
-                        preview_ops::dispatch("preview.start", start_args, dummy3, start_resp);
+                        app_plugin_loader::dispatch("preview.start", start_args, dummy3, start_resp);
                         std::string base_url = start_resp.value("url", std::string{});
                         if (!base_url.empty()) {
                             std::string url_path = target;
