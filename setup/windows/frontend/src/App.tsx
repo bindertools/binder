@@ -3,17 +3,17 @@ import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseI
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { X, Check, Sparkles, GraduationCap, Code2, Database, Workflow, Network } from 'lucide-react'
 
-type Phase = 'persona' | 'ready' | 'installing' | 'done'
+type Phase = 'persona' | 'configure' | 'installing' | 'done'
 
 type Persona = 'hobbyist' | 'student' | 'software' | 'data' | 'process' | 'network'
 
 const PERSONAS: { id: Persona; label: string; blurb: string; icon: React.ElementType }[] = [
-  { id: 'hobbyist', label: 'Hobbyist',          blurb: 'Just the essentials to start.',        icon: Sparkles },
-  { id: 'student',  label: 'Student',           blurb: 'Adds Notepad for coursework notes.',   icon: GraduationCap },
-  { id: 'software', label: 'Software Engineer', blurb: 'Adds Version Control and Workflows.',  icon: Code2 },
-  { id: 'data',     label: 'Data Engineer',     blurb: 'Adds the Database app.',                icon: Database },
-  { id: 'process',  label: 'Process Engineer',  blurb: 'Adds Workflows.',                       icon: Workflow },
-  { id: 'network',  label: 'Network Engineer',  blurb: 'Adds Ports & Endpoints.',                icon: Network },
+  { id: 'hobbyist', label: 'Hobbyist',          blurb: 'Just the essentials to start.',       icon: Sparkles },
+  { id: 'student',  label: 'Student',           blurb: 'Adds Notepad for coursework notes.',  icon: GraduationCap },
+  { id: 'software', label: 'Software Engineer', blurb: 'Adds Version Control and Workflows.', icon: Code2 },
+  { id: 'data',     label: 'Data Engineer',     blurb: 'Adds the Database app.',               icon: Database },
+  { id: 'process',  label: 'Process Engineer',  blurb: 'Adds Workflows.',                      icon: Workflow },
+  { id: 'network',  label: 'Network Engineer',  blurb: 'Adds Ports & Endpoints.',              icon: Network },
 ]
 
 // Which non-essential apps to pre-install for each persona. Terminal, Code
@@ -40,29 +40,35 @@ interface Release {
 const drag   = { '--wails-draggable': 'drag'    } as React.CSSProperties
 const noDrag = { '--wails-draggable': 'no-drag' } as React.CSSProperties
 
-// ── Version picker ────────────────────────────────────────────────────────────
-// A printed checklist, not a dropdown — every option is visible up front and
-// exactly one is selectable at a time.
-function VersionRow({ active, label, badge, date, onClick }: {
-  active: boolean
-  label:  string
-  badge?: string
-  date?:  string
-  onClick: () => void
+const STEPS: { key: Phase; label: string }[] = [
+  { key: 'persona',    label: 'Profile'   },
+  { key: 'configure',  label: 'Configure' },
+  { key: 'installing', label: 'Install'   },
+]
+
+// ── shared row used for both the persona list and the version list ───────────
+function SelectRow({ active, icon, title, subtitle, meta, onClick }: {
+  active:    boolean
+  icon?:     React.ReactNode
+  title:     React.ReactNode
+  subtitle?: string
+  meta?:     React.ReactNode
+  onClick:   () => void
 }) {
   return (
-    <div className={`version-item${active ? ' active' : ''}`} onClick={onClick}>
-      <span className="version-radio" />
-      <span className="version-item-label">
-        {label}
-        {badge && <span className="version-badge">{badge}</span>}
+    <button type="button" className={`select-row${active ? ' is-active' : ''}`} onClick={onClick}>
+      {icon && <span className="select-row-icon">{icon}</span>}
+      <span className="select-row-body">
+        <span className="select-row-title">{title}</span>
+        {subtitle && <span className="select-row-subtitle">{subtitle}</span>}
       </span>
-      {date && <span className="version-date">{date}</span>}
-    </div>
+      {meta}
+      <span className="select-row-dot" aria-hidden="true" />
+    </button>
   )
 }
 
-function VersionChecklist({ value, onChange, releases }: {
+function VersionList({ value, onChange, releases }: {
   value:    string
   onChange: (v: string) => void
   releases: Release[]
@@ -73,34 +79,51 @@ function VersionChecklist({ value, onChange, releases }: {
   const olderReleases    = releases.filter(r => r !== latestPrerelease)
 
   return (
-    <div className="version-list">
-      <VersionRow
+    <div className="select-list select-list--compact">
+      <SelectRow
         active={value === 'latest'}
-        label="Latest (stable)"
+        title="Latest (stable)"
         onClick={() => onChange('latest')}
       />
       {latestPrerelease && (
-        <VersionRow
+        <SelectRow
           active={value === latestPrerelease.version}
-          label="Latest (dev build)"
-          badge="Snapshot"
+          title="Latest (dev build)"
+          meta={<span className="tag">Snapshot</span>}
           onClick={() => onChange(latestPrerelease.version)}
         />
       )}
       {olderReleases.length > 0 && (
-        <div className="version-scroll">
+        <div className="select-list-scroll">
           {olderReleases.map(r => (
-            <VersionRow
+            <SelectRow
               key={r.version}
               active={value === r.version}
-              label={r.name || r.version}
-              badge={r.prerelease ? 'Snapshot' : undefined}
-              date={r.publishedAt}
+              title={r.name || r.version}
+              meta={<>
+                {r.prerelease && <span className="tag">Snapshot</span>}
+                {r.publishedAt && <span className="select-row-date">{r.publishedAt}</span>}
+              </>}
               onClick={() => onChange(r.version)}
             />
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function Stepper({ phase }: { phase: Phase }) {
+  if (phase === 'done') return null
+  const idx = STEPS.findIndex(s => s.key === phase)
+  return (
+    <div className="stepper" style={noDrag}>
+      {STEPS.map((s, i) => (
+        <div key={s.key} className={`stepper-item${i === idx ? ' is-current' : ''}${i < idx ? ' is-done' : ''}`}>
+          <span className="stepper-dot" />
+          <span className="stepper-label">{s.label}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -150,150 +173,141 @@ export default function App() {
       // Install() returned an error — backend already emits installer:error,
       // but fall back to showing it in the banner.
       setErrorBanner(String(e))
-      setPhase('ready')
+      setPhase('configure')
       setProgress(0)
     }
   }
 
   return (
-    <div className="installer" style={drag}>
+    <div className="setup-app" style={drag}>
 
-      {/* ── window chrome ── */}
-      <button className="btn-close" style={noDrag} onClick={CloseInstaller} title="Close">
-        <X size={14} />
-      </button>
-
-      {/* ── main content area ── */}
-      <div className="content">
-
-        {/* brand + channel badge */}
-        <div className="brand" style={noDrag}>
-          <img src="/lockup-dark.svg" alt="Binder" className="brand-lockup" draggable={false} />
-          {channel === 'dev' && <span className="channel-badge">Developer Channel</span>}
+      <header className="setup-titlebar">
+        <div className="setup-brand" style={noDrag}>
+          <img src="/logo-dark.svg" alt="" className="setup-brand-mark" draggable={false} />
+          <span className="setup-brand-name">Binder Setup</span>
+          {channel === 'dev' && <span className="setup-channel-badge">Dev</span>}
         </div>
+        <button className="setup-close" style={noDrag} onClick={CloseInstaller} title="Close">
+          <X size={14} />
+        </button>
+      </header>
 
-        {/* ── error banner (persists across phases until dismissed) ── */}
-        {errorBanner && (
-          <div className="error-banner" style={noDrag}>
-            <span>{errorBanner}</span>
-            <button className="error-banner-dismiss" onClick={() => setErrorBanner('')}>
-              <X size={12} />
-            </button>
-          </div>
-        )}
+      {errorBanner && (
+        <div className="setup-alert" style={noDrag}>
+          <span>{errorBanner}</span>
+          <button className="setup-alert-dismiss" onClick={() => setErrorBanner('')}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
-        {/* ── SCREEN 0: Persona picker ── */}
+      <Stepper phase={phase} />
+
+      <main className="setup-body">
+
         {phase === 'persona' && (
-          <div className="screen-persona" style={noDrag}>
-            <p className="persona-prompt">What are you?</p>
-            <div className="persona-grid">
-              {PERSONAS.map(p => {
-                const Icon = p.icon
-                return (
-                  <button
-                    key={p.id}
-                    className={`persona-card${persona === p.id ? ' active' : ''}`}
-                    onClick={() => setPersona(p.id)}
-                  >
-                    <span className="persona-card-icon"><Icon size={16} /></span>
-                    <span className="persona-card-text">
-                      <span className="persona-card-label">{p.label}</span>
-                      <span className="persona-card-blurb">{p.blurb}</span>
-                    </span>
-                  </button>
-                )
-              })}
+          <section className="setup-section" style={noDrag}>
+            <h1 className="setup-section-title">What best describes you?</h1>
+            <p className="setup-section-hint">
+              We'll pre-install a few extra apps that fit your workflow. You can change this later.
+            </p>
+            <div className="select-list">
+              {PERSONAS.map(p => (
+                <SelectRow
+                  key={p.id}
+                  active={persona === p.id}
+                  icon={<p.icon size={16} />}
+                  title={p.label}
+                  subtitle={p.blurb}
+                  onClick={() => setPersona(p.id)}
+                />
+              ))}
             </div>
-            <button
-              className="btn-install"
-              disabled={!persona}
-              onClick={() => setPhase('ready')}
-            >
-              Next
-            </button>
-          </div>
+          </section>
         )}
 
-        {/* ── SCREEN 1: Welcome / picker ── */}
-        {phase === 'ready' && (
-          <div className="screen-ready" style={noDrag}>
-            <div className="install-dir-row">
-              <span className="field-label">Installing to</span>
-              <span className="install-dir-path">{installDir}</span>
+        {phase === 'configure' && (
+          <section className="setup-section" style={noDrag}>
+            <div className="setup-field">
+              <span className="setup-field-label">Install location</span>
+              <span className="setup-field-value">{installDir}</span>
             </div>
 
             {releases.length > 0 && (
-              <div className="version-section">
-                <span className="field-label">Version</span>
-                <VersionChecklist
-                  value={version}
-                  onChange={setVersion}
-                  releases={releases}
-                />
+              <div className="setup-field">
+                <span className="setup-field-label">Version</span>
+                <VersionList value={version} onChange={setVersion} releases={releases} />
               </div>
             )}
 
-            <div className="options">
-              <label className="opt-row">
+            <label className="switch-row">
+              <span className="switch-row-text">
+                <span className="switch-row-title">Desktop shortcut</span>
+                <span className="switch-row-desc">Add a shortcut to your desktop</span>
+              </span>
+              <span className="switch">
                 <input
                   type="checkbox"
                   checked={createShortcut}
                   onChange={e => setCreateShortcut(e.target.checked)}
                 />
-                <span>Desktop shortcut</span>
-              </label>
-            </div>
-
-            <button className="btn-install" onClick={handleInstall}>Install</button>
-          </div>
+                <span className="switch-track"><span className="switch-thumb" /></span>
+              </span>
+            </label>
+          </section>
         )}
 
-        {/* ── SCREEN 2: Installing ── */}
         {phase === 'installing' && (
-          <div className="screen-installing" style={noDrag}>
-            <p className="installing-msg">{statusMsg || 'Working…'}</p>
-            <div className="progress-bar-large">
+          <section className="setup-section setup-section--center" style={noDrag}>
+            <p className="setup-status">{statusMsg || 'Working…'}</p>
+            <div className="progress-bar">
               <div
-                className="progress-bar-large-fill"
+                className="progress-bar-fill"
                 style={{
                   width: `${progress}%`,
                   transition: progress === 0 ? 'none' : 'width 0.25s ease',
                 }}
               />
             </div>
-            <p className="progress-pct">{progress}%</p>
-          </div>
+            <p className="setup-status-pct">{progress}%</p>
+          </section>
         )}
 
-        {/* ── SCREEN 3: Complete ── */}
         {phase === 'done' && (
-          <div className="screen-done" style={noDrag}>
-            <div className="done-checkmark"><Check size={20} /></div>
-            <p className="done-title">Installation complete</p>
-            <p className="done-sub">Binder was installed to your system.</p>
-            <div className="done-actions">
-              <button className="btn-action btn-launch" onClick={LaunchAndClose}>
-                Launch Binder
-              </button>
-              <button className="btn-action" onClick={CloseInstaller}>
-                Close
-              </button>
-            </div>
-          </div>
+          <section className="setup-section setup-section--center" style={noDrag}>
+            <div className="done-badge"><Check size={22} /></div>
+            <h1 className="setup-section-title">Installation complete</h1>
+            <p className="setup-section-hint">Binder was installed to your system.</p>
+          </section>
         )}
 
-      </div>
+      </main>
 
-      {/* ── bottom progress strip (always visible during install) ── */}
-      <div className="progress-track">
-        <div
-          className="progress-fill"
-          style={{
-            width: `${progress}%`,
-            transition: progress === 0 ? 'none' : 'width 0.25s ease',
-          }}
-        />
-      </div>
+      <footer className="setup-footer" style={noDrag}>
+        <div className="setup-footer-hint">
+          {phase === 'persona' && !persona && 'Choose one to continue'}
+          {phase === 'installing' && 'Please wait…'}
+        </div>
+        <div className="setup-footer-actions">
+          {phase === 'persona' && (
+            <button className="btn btn-primary" disabled={!persona} onClick={() => setPhase('configure')}>
+              Next
+            </button>
+          )}
+          {phase === 'configure' && (
+            <>
+              <button className="btn btn-ghost" onClick={() => setPhase('persona')}>Back</button>
+              <button className="btn btn-primary" onClick={handleInstall}>Install</button>
+            </>
+          )}
+          {phase === 'done' && (
+            <>
+              <button className="btn btn-ghost" onClick={CloseInstaller}>Close</button>
+              <button className="btn btn-primary" onClick={LaunchAndClose}>Launch Binder</button>
+            </>
+          )}
+        </div>
+      </footer>
 
     </div>
   )
