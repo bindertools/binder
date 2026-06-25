@@ -363,11 +363,18 @@ void InstallerApp::CloseInstaller(const std::string& seq) {
 // shows blank or with default OS chrome before this fires.
 void InstallerApp::Ready(const std::string& seq) {
 #ifdef _WIN32
+    // This handler runs on the detached IPC worker thread (see
+    // __binder_invoke in main.cpp), not the UI thread that owns the window.
+    // ShowWindow/SetForegroundWindow must be marshalled onto the UI thread
+    // via wv_.dispatch() (same as cpp/host/dispatch.cpp's app.ready handler) —
+    // calling them directly from the worker thread leaves the window hidden.
     auto hwnd_res = wv_.window();
     if (hwnd_res.ok()) {
         HWND hwnd = static_cast<HWND>(hwnd_res.value());
-        ShowWindow(hwnd, SW_SHOW);
-        SetForegroundWindow(hwnd);
+        wv_.dispatch([hwnd]() {
+            ShowWindow(hwnd, SW_SHOW);
+            SetForegroundWindow(hwnd);
+        });
     }
 #endif
     wv_.resolve(seq, 0, json{{"ok", true}}.dump());
