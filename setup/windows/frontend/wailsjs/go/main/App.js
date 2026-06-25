@@ -25,3 +25,7 @@ export function Install(arg1, arg2, arg3) {
 export function LaunchAndClose() {
   return window['go']['main']['App']['LaunchAndClose']();
 }
+
+export function Ready() {
+  return window['go']['main']['App']['Ready']();
+}

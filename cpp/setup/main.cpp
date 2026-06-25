@@ -157,29 +157,75 @@ static std::string BuildInlineHtml(const std::string& extractDir) {
 }
 
 // ── Window helpers ─────────────────────────────────────────────────────────────
-static void MakeFrameless(HWND hwnd, int w, int h) {
-    // Hide during transformation so the title-bar window never flashes
-    ShowWindow(hwnd, SW_HIDE);
-    SetWindowLongPtrW(hwnd, GWL_STYLE,
-                      WS_POPUP | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
-    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
-    SetWindowPos(hwnd, nullptr,
-                 (sw - w) / 2, (sh - h) / 2, w, h,
-                 SWP_NOZORDER | SWP_FRAMECHANGED);
-    HICON hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(100));
-    if (hIcon) {
-        SendMessageW(hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
-        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIcon));
+// The setup window is created hidden (no WS_VISIBLE) and handed to the
+// webview::webview constructor so it sets m_owns_window=false — that skips
+// webview's internal CreateWindow+ShowWindow, which otherwise briefly shows a
+// generic WS_OVERLAPPEDWINDOW (default icon, default position) before this
+// code ever gets to style or centre it. The window is only made visible once
+// the frontend signals it has painted (installer.ready), via
+// InstallerApp::Ready, which also calls SetForegroundWindow so it doesn't end
+// up parked on the taskbar without focus.
+static LRESULT CALLBACK SetupWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    case WM_ACTIVATE:
+        if (LOWORD(wp) != WA_INACTIVE) {
+            HWND child = GetWindow(hwnd, GW_CHILD);
+            if (child) SetFocus(child);
+        }
+        break;
+    case WM_SIZE: {
+        RECT r{};
+        GetClientRect(hwnd, &r);
+        HWND child = GetWindow(hwnd, GW_CHILD);
+        if (child) {
+            SetWindowPos(child, nullptr, 0, 0, r.right - r.left, r.bottom - r.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        break;
     }
-    // Show only after styling is complete — zero flash
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static HWND CreateSetupWindow(int w, int h) {
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSEXW wc{};
+        wc.cbSize        = sizeof(wc);
+        wc.lpfnWndProc   = SetupWndProc;
+        wc.hInstance     = hInst;
+        wc.lpszClassName = L"BinderSetup";
+        wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+        wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hIcon         = LoadIconW(hInst, MAKEINTRESOURCEW(100));
+        RegisterClassExW(&wc);
+        registered = true;
+    }
+
+    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    int x  = (sw - w) / 2, y = (sh - h) / 2;
+
+    // No WS_VISIBLE — stays hidden until InstallerApp::Ready shows it.
+    return CreateWindowExW(
+        WS_EX_APPWINDOW,
+        L"BinderSetup", L"Binder Setup",
+        WS_POPUP | WS_SYSMENU | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+        x, y, w, h,
+        nullptr, nullptr, hInst, nullptr);
 }
 
 #else
 static std::string ExtractInstallerAssets() { return ""; }
 static std::string BuildInlineHtml(const std::string&) { return "<html><body>Setup</body></html>"; }
-static void MakeFrameless(void*, int, int) {}
+static void* CreateSetupWindow(int, int) { return nullptr; }
 #endif
 
 static constexpr const char* kWailsProxy = R"js(
@@ -210,6 +256,7 @@ window.go = {
       Install:        function(v, d) { return __ipcInvoke('installer.install', {version: v, createDesktop: d}); },
       LaunchAndClose: function() { return __ipcInvoke('installer.launch', {}); },
       CloseInstaller: function() { return __ipcInvoke('installer.close', {}); },
+      Ready:          function() { return __ipcInvoke('installer.ready', {}); },
     }
   }
 };
@@ -281,16 +328,34 @@ int main(int, char**) {
         ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Setup Error: Could not extract assets</h2></body></html>"
         : BuildInlineHtml(root);
 
-    webview::webview wv(false, nullptr);  // debug=false for release
-    wv.set_title("Binder Setup");
-    wv.set_size(640, 520, WEBVIEW_HINT_FIXED);
+    constexpr int kW = 640, kH = 520;
 
 #ifdef _WIN32
+    HWND setup_hwnd = CreateSetupWindow(kW, kH);
+    if (!setup_hwnd) return 1;
+#endif
+
+    webview::webview wv(false,  // debug=false for release
+#ifdef _WIN32
+        setup_hwnd
+#else
+        nullptr
+#endif
+    );
+    wv.set_title("Binder Setup");
+
+#ifdef _WIN32
+    // webview never calls set_size when m_owns_window=false, so the
+    // webview_widget child exists but is sized 0x0 — resize it to our
+    // already-correctly-sized hidden window's client area.
     {
-        auto hwnd_res = wv.window();
-        if (hwnd_res.ok())
-            MakeFrameless(static_cast<HWND>(hwnd_res.value()), 640, 520);
+        RECT r{};
+        GetClientRect(setup_hwnd, &r);
+        HWND widget = GetWindow(setup_hwnd, GW_CHILD);
+        if (widget) MoveWindow(widget, 0, 0, r.right - r.left, r.bottom - r.top, FALSE);
     }
+#else
+    wv.set_size(kW, kH, WEBVIEW_HINT_FIXED);
 #endif
 
     InstallerApp app(wv);
@@ -317,6 +382,7 @@ int main(int, char**) {
                                      args.value("seedApps", std::vector<std::string>{}));
                     else if (type == "installer.launch") app->LaunchAndClose(seq);
                     else if (type == "installer.close")  app->CloseInstaller(seq);
+                    else if (type == "installer.ready")  app->Ready(seq);
                     else {
                         nlohmann::json r = {{"ok", false}, {"error", "not implemented: " + type}};
                         wv->resolve(seq, 0, r.dump());

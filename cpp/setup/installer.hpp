@@ -28,6 +28,7 @@ public:
                  const std::vector<std::string>& seed_apps);
     void LaunchAndClose(const std::string& seq);
     void CloseInstaller(const std::string& seq);
+    void Ready(const std::string& seq);
 
 private:
     void emit_progress(int pct, const std::string& msg);

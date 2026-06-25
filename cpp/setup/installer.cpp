@@ -357,3 +357,18 @@ void InstallerApp::CloseInstaller(const std::string& seq) {
     wv_.resolve(seq, 0, json{{"ok", true}}.dump());
     wv_.dispatch([this] { wv_.terminate(); });
 }
+
+// Called once the React app has mounted and painted its first frame. The
+// window is created hidden (see cpp/setup/main.cpp) precisely so it never
+// shows blank or with default OS chrome before this fires.
+void InstallerApp::Ready(const std::string& seq) {
+#ifdef _WIN32
+    auto hwnd_res = wv_.window();
+    if (hwnd_res.ok()) {
+        HWND hwnd = static_cast<HWND>(hwnd_res.value());
+        ShowWindow(hwnd, SW_SHOW);
+        SetForegroundWindow(hwnd);
+    }
+#endif
+    wv_.resolve(seq, 0, json{{"ok", true}}.dump());
+}

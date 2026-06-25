@@ -13,3 +13,5 @@ export function GetReleases():Promise<Array<main.Release>>;
 export function Install(arg1:string,arg2:boolean,arg3:string[]):Promise<void>;
 
 export function LaunchAndClose():Promise<void>;
+
+export function Ready():Promise<void>;
