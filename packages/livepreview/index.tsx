@@ -1,14 +1,13 @@
 import React from 'react'
 import { ArrowLeft, FileCode, Globe, MonitorPlay, X } from 'lucide-react'
-import PageHeader from './shared/PageHeader'
-import Preview from './Preview'
-
-export interface LivePreviewEntry {
-  key:   string   // file path (md/html) or remote URL — also the de-dup key
-  type:  'markdown' | 'html' | 'url'
-  src:   string    // content, local-server URL, or remote URL
-  title: string
-}
+import type { AppManifest, AppTabProps } from '@binder/app-sdk'
+import PageHeader from '../../app/frontend/src/components/shared/PageHeader'
+import Preview from '../../app/frontend/src/components/Preview'
+import { invoke } from '../../app/frontend/src/lib/ipc'
+import {
+  type LivePreviewEntry, useLivePreviews, useActiveLivePreviewKey,
+  openLivePreview, closeLivePreview, selectLivePreview,
+} from '../../app/frontend/src/lib/livePreviewStore'
 
 interface Props {
   previews: LivePreviewEntry[]
@@ -23,7 +22,7 @@ function entryIcon(type: LivePreviewEntry['type']) {
   return <FileCode size={15} strokeWidth={1.5} />
 }
 
-export default function LivePreviewPage({ previews, activeKey, onSelect, onClose, onBackToList }: Props) {
+function LivePreviewPage({ previews, activeKey, onSelect, onClose, onBackToList }: Props) {
   const active = activeKey ? previews.find(p => p.key === activeKey) : undefined
 
   if (active) {
@@ -85,3 +84,56 @@ export default function LivePreviewPage({ previews, activeKey, onSelect, onClose
     </div>
   )
 }
+
+const LivePreviewIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+)
+
+function LivePreviewAdapter(_props: AppTabProps) {
+  const previews  = useLivePreviews()
+  const activeKey = useActiveLivePreviewKey()
+  return (
+    <LivePreviewPage
+      previews={previews}
+      activeKey={activeKey}
+      onSelect={selectLivePreview}
+      onClose={closeLivePreview}
+      onBackToList={() => selectLivePreview(null)}
+    />
+  )
+}
+
+// Opens a local .md/.html file in the live preview, starting the host's
+// preview server first. Triggered from the file-explorer contribution below.
+async function openFilePreview(path: string): Promise<void> {
+  const result = await invoke<{ url: string; ok: boolean }>('preview.start').catch(() => null)
+  if (!result?.url) return
+  const urlPath = path.replace(/\\/g, '/')
+  const url = result.url + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
+  openLivePreview({ type: 'html', url, path })
+  window.dispatchEvent(new CustomEvent('apps:navigate', { detail: { pageId: 'livepreview' } }))
+}
+
+const livePreviewApp: AppManifest = {
+  id: 'livepreview',
+  name: 'Live Preview',
+  description: 'Preview .md/.html files and forwarded URLs/ports without leaving the app.',
+  author: 'BinderTools',
+  version: '1.0.0',
+  tabType: 'livepreview',
+  tabTitle: 'Live Preview',
+  TabComponent: LivePreviewAdapter,
+  sidebar: { icon: LivePreviewIcon, label: 'Live Preview' },
+  contributes: {
+    fileExplorerContextMenu: ({ path, ext, isDir }) => {
+      if (isDir) return null
+      if (ext !== 'md' && ext !== 'markdown' && ext !== 'html' && ext !== 'htm') return null
+      return [{ label: 'Open Live Preview', action: () => void openFilePreview(path) }]
+    },
+  },
+}
+
+export default livePreviewApp

@@ -6,6 +6,7 @@ import ContextMenu, { ContextMenuItem } from './ContextMenu'
 import DeleteConfirmDialog from './DeleteConfirmDialog'
 import NewItemDialog from './NewItemDialog'
 import FileIcon from './FileIcon'
+import { useInstalledApps } from '../apps/sidebarRegistry'
 
 export interface FileNode {
   name: string
@@ -71,6 +72,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
   const dragSrc = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const installedApps = useInstalledApps()
 
   // (Re)fetch a directory's children and store them in the cache.
   const loadDir = useCallback(async (path: string) => {
@@ -226,10 +228,6 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     invoke('shell.reveal', { path: node.path }).catch(() => {})
   }, [])
 
-  const handleOpenPreview = useCallback((node: FileNode) => {
-    window.dispatchEvent(new CustomEvent('ide:open-preview', { detail: { path: node.path } }))
-  }, [])
-
   const collapseAll = useCallback(() => {
     setExpanded(new Set())
   }, [])
@@ -243,15 +241,23 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
       { label: 'Rename',     action: () => startRename(node) },
       { label: 'Copy Path',  action: () => handleCopyPath(node) },
     ]
-    if (!node.isDir && (node.ext === 'md' || node.ext === 'markdown' || node.ext === 'html' || node.ext === 'htm')) {
-      items.push({ label: 'Open Live Preview', action: () => handleOpenPreview(node) })
+    // Apps contribute their own items here (e.g. Live Preview adds "Open Live
+    // Preview" for .md/.html files) instead of the host hardcoding knowledge
+    // of specific apps.
+    for (const app of installedApps) {
+      const contributed = app.contributes?.fileExplorerContextMenu?.({
+        path: node.path, name: node.name, ext: node.ext, isDir: node.isDir,
+      })
+      for (const item of contributed ?? []) {
+        items.push({ label: item.label, action: item.action })
+      }
     }
     if (onAddToGitIgnore) {
       items.push({ label: 'Add to .gitignore', action: () => onAddToGitIgnore(node) })
     }
     items.push({ divider: true }, { label: 'Delete', danger: true, action: () => handleDelete(node) })
     return items
-  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleOpenPreview, handleDelete, onAddToGitIgnore])
+  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete, onAddToGitIgnore, installedApps])
 
   // ── Empty-area context menu — acts on root dir ─────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [

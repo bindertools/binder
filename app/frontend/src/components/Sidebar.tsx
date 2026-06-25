@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
-import { MonitorPlay } from 'lucide-react'
 import type { PageId } from '../paneModel'
 import type { SidebarPageEntry } from '../apps/sidebarRegistry'
 
@@ -18,14 +17,12 @@ interface Props {
   onNavigate:         (page: PageId) => void
   onSearch:           () => void
   onStartPageDrag:    (page: PageId, startX: number, startY: number) => void
-  // Apps installed via the App Store that claim a sidebar slot (e.g. Notepad).
-  // Ports/Database/Version Control/Workflows are still core for now — see TODO
-  // in App.tsx renderSidebarPage; they'll move into this list as they're
-  // converted into their own app packages.
+  // Apps installed via the App Store that claim a sidebar slot (e.g. Notepad,
+  // Ports, Database, Version Control, Live Preview). Workflows is still core
+  // for now since it needs an always-mounted overlay slot, not a plain page.
   installedPages:     SidebarPageEntry[]
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
-  onOpenLivePreview:  () => void
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -185,12 +182,11 @@ const CLOSE_DELAY_MS = 220
 
 interface MoreMenuProps {
   active:             boolean
-  onOpenLivePreview:  () => void
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
 }
 
-function MoreMenu({ active, onOpenLivePreview, recentPaths, onSelectRecentPath }: MoreMenuProps) {
+function MoreMenu({ active, recentPaths, onSelectRecentPath }: MoreMenuProps) {
   const [open, setOpen] = useState(false)
   const pinnedRef  = useRef(false)
   const btnRef     = useRef<HTMLButtonElement>(null)
@@ -254,16 +250,6 @@ function MoreMenu({ active, onOpenLivePreview, recentPaths, onSelectRecentPath }
               onMouseEnter={() => clearTimers()}
               onMouseLeave={scheduleClose}
             >
-              <button
-                className="flex items-center gap-2.5 w-full px-3 py-1.5 bg-transparent border-0 cursor-pointer text-[12px] text-left text-[var(--tab-color)] hover:text-[var(--tab-color-hover)] hover:bg-surface-raised transition-colors"
-                onClick={() => { close(); onOpenLivePreview() }}
-              >
-                <MonitorPlay size={16} strokeWidth={1.5} />
-                Live Preview
-              </button>
-
-              <div className="mx-3 my-1.5 h-px bg-sep" />
-
               <div className="px-3 pb-1 text-[10px] uppercase tracking-wider opacity-50">Recent Paths</div>
               {recentPaths.length === 0 ? (
                 <div className="px-3 py-1.5 text-[11.5px] opacity-40">No recent paths yet</div>
@@ -314,7 +300,7 @@ function MoreMenu({ active, onOpenLivePreview, recentPaths, onSelectRecentPath }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, installedPages, recentPaths, onSelectRecentPath, onOpenLivePreview }: Props) {
+export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageDrag, installedPages, recentPaths, onSelectRecentPath }: Props) {
   return (
     <div
       className="flex flex-col items-center w-[48px] shrink-0 bg-[var(--app-bg)] border-r border-[var(--border-color)] pb-1.5 select-none"
@@ -349,8 +335,7 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         })}
 
         <MoreMenu
-          active={activePage === 'livepreview'}
-          onOpenLivePreview={onOpenLivePreview}
+          active={false}
           recentPaths={recentPaths}
           onSelectRecentPath={onSelectRecentPath}
         />

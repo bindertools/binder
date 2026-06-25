@@ -2,7 +2,6 @@ import React, { useReducer, useEffect, useLayoutEffect, useRef, useState, useCal
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
-import LivePreviewPage, { type LivePreviewEntry } from './components/LivePreviewPage'
 import Problems, { type CweItem } from './components/Problems'
 import ConfigEditor from './components/ConfigEditor'
 import ZoomIndicator from './components/ZoomIndicator'
@@ -15,9 +14,10 @@ import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
 import AppStore from './apps/AppStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
-import { hydrateInstalledApps, onAppsChanged } from './apps/registry'
+import { hydrateInstalledApps } from './apps/registry'
 import { useInstalledApps, useSidebarRegistry, buildInstalledAppCommandMap, type InstalledAppCommand } from './apps/sidebarRegistry'
 import type { AppContext } from './apps/types'
+import { openLivePreview as storeOpenLivePreview } from './lib/livePreviewStore'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
 import {
   createLeaf, splitPaneInTree, closePaneInTree, addTabToLeaf, removeTabFromTree,
@@ -505,8 +505,6 @@ export default function App() {
   const [terminalCwds,   setTerminalCwds]   = useState<Record<string, string>>({})
   const [forcedDbPath,   setForcedDbPath]   = useState<string | undefined>()
   const [recentPaths,    setRecentPaths]    = useState<string[]>(loadRecentPaths)
-  const [livePreviews,         setLivePreviews]         = useState<LivePreviewEntry[]>([])
-  const [activeLivePreviewKey, setActiveLivePreviewKey] = useState<string | null>(null)
 
   // ── Sidebar navigation ────────────────────────────────────────────────────────
 
@@ -515,30 +513,12 @@ export default function App() {
   }, [activeWorkspaceId, updateLayout])
 
   // ── Live preview ─────────────────────────────────────────────────────────────
-  // Previews live outside the tab system so opening one redirects to the Live
-  // Preview page instead of hiding the terminal/editor behind a new tab.
-  const openLivePreview = useCallback((payload: OpenPreviewPayload) => {
-    const key = payload.type === 'url' ? payload.url! : payload.path!
-    const src = payload.type === 'url' ? payload.url! : (payload.url ?? payload.content ?? '')
-    const title = key.replace(/\\/g, '/').split('/').pop() ?? key
-    setLivePreviews(prev => {
-      const idx = prev.findIndex(p => p.key === key)
-      const entry: LivePreviewEntry = { key, type: payload.type, src, title }
-      if (idx === -1) return [...prev, entry]
-      const next = [...prev]; next[idx] = entry; return next
-    })
-    setActiveLivePreviewKey(key)
-    handleSidebarNavigate('livepreview')
-  }, [handleSidebarNavigate])
-
-  const closeLivePreview = useCallback((key: string) => {
-    setLivePreviews(prev => prev.filter(p => p.key !== key))
-    setActiveLivePreviewKey(prev => prev === key ? null : prev)
-  }, [])
-
-  // Manually opening the page (vs. being redirected to it) always shows the list.
-  const handleOpenLivePreviewPage = useCallback(() => {
-    setActiveLivePreviewKey(null)
+  // Preview state itself lives in livePreviewStore (so the Live Preview app's
+  // page can mount/unmount freely); this just redirects to the page on open,
+  // since opening a preview should behave like switching pages, not hiding
+  // the terminal/editor behind a new tab.
+  const triggerLivePreview = useCallback((payload: OpenPreviewPayload) => {
+    storeOpenLivePreview(payload)
     handleSidebarNavigate('livepreview')
   }, [handleSidebarNavigate])
 
@@ -786,37 +766,33 @@ export default function App() {
     on('app:open-preview', (...args: any[]) => {
       const payload = args[0] as OpenPreviewPayload
       if (!payload?.type) return
-      openLivePreview(payload)
+      triggerLivePreview(payload)
     })
     return () => offAll('app:open-preview')
-  }, [openLivePreview])
+  }, [triggerLivePreview])
+
+  // Generic "switch the focused pane to this app's page" request, so apps can
+  // navigate to their own sidebar page after doing something elsewhere in the
+  // host (e.g. Live Preview's file-explorer contribution, after starting a
+  // preview, asks to be brought to the foreground).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { pageId } = (e as CustomEvent<{ pageId: string }>).detail ?? {}
+      if (pageId) handleSidebarNavigate(pageId)
+    }
+    window.addEventListener('apps:navigate', handler)
+    return () => window.removeEventListener('apps:navigate', handler)
+  }, [handleSidebarNavigate])
 
   useEffect(() => {
     const handler = (e: Event) => {
       const { url } = (e as CustomEvent<{ url: string }>).detail
       if (!url) return
-      openLivePreview({ type: 'url', url })
+      triggerLivePreview({ type: 'url', url })
     }
     window.addEventListener('ide:open-url', handler)
     return () => window.removeEventListener('ide:open-url', handler)
-  }, [openLivePreview])
-
-  // Live preview of a local .md/.html file, requested from the file explorer's context menu.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { path } = (e as CustomEvent<{ path: string }>).detail
-      if (!path) return
-      void (async () => {
-        const result = await invoke<{ url: string; ok: boolean }>('preview.start').catch(() => null)
-        if (!result?.url) return
-        const urlPath = path.replace(/\\/g, '/')
-        const url = result.url + (urlPath.startsWith('/') ? urlPath : '/' + urlPath)
-        openLivePreview({ type: 'html', url, path })
-      })()
-    }
-    window.addEventListener('ide:open-preview', handler)
-    return () => window.removeEventListener('ide:open-preview', handler)
-  }, [openLivePreview])
+  }, [triggerLivePreview])
 
   useEffect(() => {
     on('app:open-problems', () => {
@@ -1209,27 +1185,18 @@ export default function App() {
             keybindings={customBindings} onSaveKeybindings={handleSaveKeybindings} />
         )}
         {pane.activePage === 'apps' && <AppStore />}
-        {/* 'workflows' page is rendered by the always-mounted WorkflowsPanel overlay
-            below SplitPaneView, so its fetched list/content survive switching pages/tabs. */}
-        {pane.activePage === 'livepreview' && (
-          <LivePreviewPage
-            previews={livePreviews}
-            activeKey={activeLivePreviewKey}
-            onSelect={setActiveLivePreviewKey}
-            onClose={closeLivePreview}
-            onBackToList={() => setActiveLivePreviewKey(null)}
-          />
-        )}
-        {/* Any other page id is a sidebar slot claimed by an installed app package
-            (see src/apps/). Notepad is the first one converted this way. */}
+        {/* Sticky apps (e.g. Workflows) are rendered by an always-mounted overlay
+            below SplitPaneView instead, so their internal state survives
+            switching pages/tabs — skip them here. Any other page id is a
+            sidebar slot claimed by an installed app package (see src/apps/). */}
         {(() => {
           const sidebarApp = sidebarApps.find(s => s.id === pane.activePage)
-          if (!sidebarApp?.manifest.TabComponent) return null
+          if (!sidebarApp?.manifest.TabComponent || sidebarApp.manifest.sidebar?.sticky) return null
           const Comp = sidebarApp.manifest.TabComponent
           const context: AppContext = {
             cwd: paneCwd,
             terminalId: paneTerminalId ?? undefined,
-            openFile: (path: string) => handleOpenFileAtLine(path, 0, 0),
+            openFile: (path: string, line?: number) => handleEditFileInPane(activeWorkspaceId, pane.id, path, line),
             focusPath: sidebarApp.id === 'database' ? forcedDbPath : undefined,
           }
           return (
@@ -1328,7 +1295,7 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs, terminalCwds, appConfig, currentZoom, resolvedTheme, appCommands, appsByTabType, sidebarApps,
       forcedDbPath, probSources, probItems, probScanning, cweItems, cweScanning, handleNewTerminal,
-      livePreviews, activeLivePreviewKey])
+      activeWorkspaceId, handleEditFileInPane])
 
   // ── Determine if tree has only one pane ───────────────────────────────────────
   const isOnlyPane = useMemo(() => getAllLeaves(activeLayout.root).length <= 1, [activeLayout])
@@ -1405,7 +1372,6 @@ export default function App() {
           installedPages={sidebarApps}
           recentPaths={recentPaths}
           onSelectRecentPath={handleSelectRecentPath}
-          onOpenLivePreview={handleOpenLivePreviewPage}
         />
 
         {/* Pane column: global tab bar on top, split area below */}
