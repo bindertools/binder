@@ -8,6 +8,7 @@
 #ifdef _WIN32
 #include <algorithm>
 #include <windows.h>
+#include <objbase.h>  // CoInitializeEx
 #include <zip.h>
 #include <filesystem>
 #include <fstream>
@@ -331,6 +332,21 @@ int main(int, char**) {
     constexpr int kW = 640, kH = 520;
 
 #ifdef _WIN32
+    // Passing our own HWND below sets webview's m_owns_window=false, which
+    // skips webview's internal CoInitializeEx + DPI-awareness calls (they're
+    // gated behind `if (m_owns_window)` in win32_edge_engine's constructor).
+    // Without this, WebView2's COM-based environment/controller creation
+    // fails and the installer never opens. Must happen before window creation.
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (HMODULE u32 = GetModuleHandleW(L"user32.dll")) {
+        using FnCtx   = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        using FnAware = BOOL(WINAPI*)();
+        if (auto fn = reinterpret_cast<FnCtx>(GetProcAddress(u32, "SetProcessDpiAwarenessContext")))
+            fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        else if (auto fn2 = reinterpret_cast<FnAware>(GetProcAddress(u32, "SetProcessDPIAware")))
+            fn2();
+    }
+
     HWND setup_hwnd = CreateSetupWindow(kW, kH);
     if (!setup_hwnd) return 1;
 #endif
