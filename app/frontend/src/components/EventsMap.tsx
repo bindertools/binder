@@ -7,7 +7,7 @@ import {
 } from '../lib/workflowGraph'
 import type { WorkflowStepEvent } from '../lib/workflows'
 import { Skeleton } from './Skeleton'
-import './WorkflowsPanel.scss'
+import '../../../../packages/workflows/index.scss'
 
 interface Props {
   content:     string

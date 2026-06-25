@@ -17,9 +17,8 @@ interface Props {
   onNavigate:         (page: PageId) => void
   onSearch:           () => void
   onStartPageDrag:    (page: PageId, startX: number, startY: number) => void
-  // Apps installed via the App Store that claim a sidebar slot (e.g. Notepad,
-  // Ports, Database, Version Control, Live Preview). Workflows is still core
-  // for now since it needs an always-mounted overlay slot, not a plain page.
+  // Apps installed via the App Store that claim a sidebar slot. Terminal,
+  // Code Editor, and Debug are the only pages that stay core/always-on.
   installedPages:     SidebarPageEntry[]
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
@@ -69,14 +68,6 @@ const SettingsIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3"/>
     <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-  </svg>
-)
-
-const WorkflowsIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <rect width="8" height="8" x="3" y="3" rx="2"/>
-    <path d="M7 11v4a2 2 0 0 0 2 2h4"/>
-    <rect width="8" height="8" x="13" y="13" rx="2"/>
   </svg>
 )
 
@@ -320,10 +311,6 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
         <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
           <DebugIcon />
         </SidebarBtn>
-        <SidebarBtn active={activePage === 'workflows'} label="Workflows" onClick={() => onNavigate('workflows')} onMouseDown={e => onStartPageDrag('workflows', e.clientX, e.clientY)}>
-          <WorkflowsIcon />
-        </SidebarBtn>
-
         {/* Apps installed via the App Store that claim a sidebar slot */}
         {installedPages.map(page => {
           const Icon = page.icon

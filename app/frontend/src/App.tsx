@@ -9,7 +9,6 @@ import SearchPalette from './components/SearchPalette'
 import SplitPaneView from './components/SplitPaneView'
 import PaneTabBar from './components/PaneTabBar'
 import Sidebar, { type PageId } from './components/Sidebar'
-import WorkflowsPanel from './components/WorkflowsPanel'
 import TaskProgressIndicator from './components/TaskProgressIndicator'
 import PerfTab from './components/PerfTab'
 import AppStore from './apps/AppStore'
@@ -143,6 +142,35 @@ function useStickyLeafIds(allLeavesWithWs: { wsId: string; leaf: LeafPane }[], p
     }
     return [...idsRef.current]
   }, [allLeavesWithWs, pageId])
+}
+
+// Same idea as useStickyLeafIds, but for a dynamic set of page ids (sticky
+// app pages) whose membership can change as apps are installed/uninstalled —
+// one hook call instead of one per app, since the number of hook calls in a
+// component must stay stable across renders.
+function useStickyLeafIdsMap(allLeavesWithWs: { wsId: string; leaf: LeafPane }[], pageIds: string[]): Map<string, string[]> {
+  const idsRef = useRef<Map<string, Set<string>>>(new Map())
+  const pageIdsKey = pageIds.join('|')
+  return useMemo(() => {
+    const currentLeafIds = new Set(allLeavesWithWs.map(({ leaf }) => leaf.id))
+    for (const key of idsRef.current.keys()) {
+      if (!pageIds.includes(key)) idsRef.current.delete(key)
+    }
+    for (const pageId of pageIds) {
+      if (!idsRef.current.has(pageId)) idsRef.current.set(pageId, new Set())
+      const set = idsRef.current.get(pageId)!
+      for (const { leaf } of allLeavesWithWs) {
+        if (leaf.activePage === pageId) set.add(leaf.id)
+      }
+      for (const id of set) {
+        if (!currentLeafIds.has(id)) set.delete(id)
+      }
+    }
+    const result = new Map<string, string[]>()
+    for (const [k, v] of idsRef.current) result.set(k, [...v])
+    return result
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allLeavesWithWs, pageIdsKey])
 }
 
 // ── Tab reducer ───────────────────────────────────────────────────────────────
@@ -453,6 +481,18 @@ export default function App() {
     [layouts, activeWorkspaceId],
   )
 
+  // ── Installed apps ───────────────────────────────────────────────────────────
+  useEffect(() => { void hydrateInstalledApps() }, [])
+
+  const installedApps = useInstalledApps()
+  const sidebarApps    = useSidebarRegistry()
+  const appsByTabType  = useMemo(() => {
+    const map: Record<string, typeof installedApps[number]> = {}
+    for (const a of installedApps) { if (a.tabType) map[a.tabType] = a }
+    return map
+  }, [installedApps])
+  const appCommands = useMemo(() => buildInstalledAppCommandMap(installedApps), [installedApps])
+
   // ── Every leaf pane across every workspace, with its owning workspace id ─────
   const allLeavesWithWs = useMemo(
     () => Object.entries(layouts).flatMap(([wsId, l]) => getAllLeaves(l.root).map(leaf => ({ wsId, leaf }))),
@@ -465,11 +505,13 @@ export default function App() {
   // state survives switching pages or tabs and back.
   const editorLeafIds = useStickyLeafIds(allLeavesWithWs, 'editor')
 
-  // ── Leaves that have ever shown the Workflows page ───────────────────────────
-  // Sticky set: keeps WorkflowsPanel mounted (in an overlay, like terminals/editor)
-  // so the workflow list/content it already fetched survive switching pages or
-  // tabs and back, instead of refetching and re-skeletoning every time.
-  const workflowsLeafIds = useStickyLeafIds(allLeavesWithWs, 'workflows')
+  // ── Leaves that have ever shown a sticky app's page (e.g. Workflows) ─────────
+  // Same idea, generalized: any installed app can opt into staying mounted via
+  // its manifest's sidebar.sticky flag, so its internal state survives
+  // switching pages/tabs and back instead of refetching every time.
+  const stickyApps = useMemo(() => sidebarApps.filter(a => a.manifest.sidebar?.sticky), [sidebarApps])
+  const stickyAppIds = useMemo(() => stickyApps.map(a => a.id), [stickyApps])
+  const stickyLeafIdsByApp = useStickyLeafIdsMap(allLeavesWithWs, stickyAppIds)
 
   // Pending "open this file" requests for a pane's FullscreenIDE, keyed by leaf
   // id — set when e.g. the Workflows page's "Edit Workflow" button switches a
@@ -523,18 +565,6 @@ export default function App() {
   }, [handleSidebarNavigate])
 
   const pathDwellRef = useRef<Map<string, { path: string; enteredAt: number; relatedPageVisited: boolean }>>(new Map())
-
-  // ── Installed apps ───────────────────────────────────────────────────────────
-  useEffect(() => { void hydrateInstalledApps() }, [])
-
-  const installedApps = useInstalledApps()
-  const sidebarApps    = useSidebarRegistry()
-  const appsByTabType  = useMemo(() => {
-    const map: Record<string, typeof installedApps[number]> = {}
-    for (const a of installedApps) { if (a.tabType) map[a.tabType] = a }
-    return map
-  }, [installedApps])
-  const appCommands = useMemo(() => buildInstalledAppCommandMap(installedApps), [installedApps])
 
   // ── App config ───────────────────────────────────────────────────────────────
   const [appConfig,   setAppConfig]   = useState<AppConfig>(defaultConfig)
@@ -1508,33 +1538,42 @@ export default function App() {
             )
           })}
 
-          {/* Workflows overlay — one WorkflowsPanel per pane that has shown the
-              Workflows page, kept mounted (like terminals/editor) so its workflow
-              list/content survive switching pages/tabs; the panel itself does a
-              silent background re-check on re-entry and while active. */}
-          {contentAreaSize.w > 0 && workflowsLeafIds.map(leafId => {
-            const found = allLeavesWithWs.find(({ leaf }) => leaf.id === leafId)
-            if (!found) return null
-            const { wsId, leaf } = found
-            const paneTerminalId = getPaneTerminalId(leaf, tabs)
-            const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
-            const visible = wsId === activeWorkspaceId && leaf.activePage === 'workflows' && !!findLeaf(activeLayout.root, leafId)
-            const rect = visible ? getPaneContentRect(activeLayout.root, leafId, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
-            return (
-              <div
-                key={leafId}
-                style={{
-                  position: 'absolute',
-                  left: rect?.x ?? 0, top: rect?.y ?? 0,
-                  width: rect?.w ?? 0, height: rect?.h ?? 0,
-                  display: visible && rect ? 'block' : 'none',
-                }}
-              >
-                <WorkflowsPanel cwd={paneCwd} active={visible} gpuColors={gpuColors}
-                  fontSize={Math.round(13 * currentZoom)} indentGuides={appConfig.indent_guides}
-                  onEditWorkflow={(path, line) => handleEditFileInPane(wsId, leafId, path, line)} />
-              </div>
-            )
+          {/* Sticky app overlay — one instance per (app, pane) that has ever shown
+              that app's page, kept mounted (like terminals/editor) so the app's
+              internal state survives switching pages/tabs. */}
+          {contentAreaSize.w > 0 && stickyApps.flatMap(appEntry => {
+            const Comp = appEntry.manifest.TabComponent
+            if (!Comp) return []
+            const leafIds = stickyLeafIdsByApp.get(appEntry.id) ?? []
+            return leafIds.map(leafId => {
+              const found = allLeavesWithWs.find(({ leaf }) => leaf.id === leafId)
+              if (!found) return null
+              const { wsId, leaf } = found
+              const paneTerminalId = getPaneTerminalId(leaf, tabs)
+              const paneCwd = paneTerminalId ? (terminalCwds[paneTerminalId] ?? '') : ''
+              const visible = wsId === activeWorkspaceId && leaf.activePage === appEntry.id && !!findLeaf(activeLayout.root, leafId)
+              const rect = visible ? getPaneContentRect(activeLayout.root, leafId, 0, 0, contentAreaSize.w, contentAreaSize.h) : null
+              const context: AppContext = {
+                cwd: paneCwd,
+                terminalId: paneTerminalId ?? undefined,
+                openFile: (path: string, line?: number) => handleEditFileInPane(wsId, leafId, path, line),
+              }
+              return (
+                <div
+                  key={appEntry.id + '-' + leafId}
+                  style={{
+                    position: 'absolute',
+                    left: rect?.x ?? 0, top: rect?.y ?? 0,
+                    width: rect?.w ?? 0, height: rect?.h ?? 0,
+                    display: visible && rect ? 'block' : 'none',
+                  }}
+                >
+                  <AppTabErrorBoundary appName={appEntry.manifest.name}>
+                    <Comp tabId={leafId} active={visible} context={context} />
+                  </AppTabErrorBoundary>
+                </div>
+              )
+            })
           })}
           </div>{/* end split area */}
         </div>{/* end pane column */}

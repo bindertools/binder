@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Workflow, RefreshCw, Plus } from 'lucide-react'
-import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../lib/workflows'
+import type { AppManifest, AppTabProps } from '@binder/app-sdk'
+import { workflows, type WorkflowFile, type RunnerStatus, type WorkflowStepEvent } from '../../app/frontend/src/lib/workflows'
 import {
   useWorkflowRuns, startWorkflowRun, stopWorkflowRun, downloadWorkflowRunLog,
   type WorkflowRunRecord,
-} from '../lib/workflowRunsStore'
-import { insertJob } from '../lib/workflowGraph'
-import { Skeleton } from './Skeleton'
-import GpuEditor from './GpuEditor'
-import EventsMap from './EventsMap'
-import NewWorkflowModal from './NewWorkflowModal'
-import SubNavTabs from './shared/SubNavTabs'
-import SidebarPanel from './shared/SidebarPanel'
-import { type PageSidebarNavItem } from './shared/PageSidebarNav'
-import type { GpuEditorColors } from '../themes'
-import './WorkflowsPanel.scss'
+} from '../../app/frontend/src/lib/workflowRunsStore'
+import { insertJob } from '../../app/frontend/src/lib/workflowGraph'
+import { Skeleton } from '../../app/frontend/src/components/Skeleton'
+import GpuEditor from '../../app/frontend/src/components/GpuEditor'
+import EventsMap from '../../app/frontend/src/components/EventsMap'
+import NewWorkflowModal from '../../app/frontend/src/components/NewWorkflowModal'
+import SubNavTabs from '../../app/frontend/src/components/shared/SubNavTabs'
+import SidebarPanel from '../../app/frontend/src/components/shared/SidebarPanel'
+import { type PageSidebarNavItem } from '../../app/frontend/src/components/shared/PageSidebarNav'
+import { getTheme, customColorsToTheme, themeToGpuColors, type GpuEditorColors } from '../../app/frontend/src/themes'
+import { invoke } from '../../app/frontend/src/lib/ipc'
+import './index.scss'
 
 interface Props {
   cwd:        string
@@ -393,7 +395,7 @@ interface SelectionState {
 // from the global workflow-runs store rather than this panel's own state).
 const lastSelection = new Map<string, SelectionState>()
 
-export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, indentGuides, onEditWorkflow }: Props) {
+function WorkflowsPanel({ cwd, active, gpuColors, fontSize, indentGuides, onEditWorkflow }: Props) {
   const [list,     setList]     = useState<WorkflowFile[]>([])
   const [loading,  setLoading]  = useState(false)
   const [checking, setChecking] = useState(false)
@@ -760,3 +762,55 @@ export default function WorkflowsPanel({ cwd, active, gpuColors, fontSize, inden
     </div>
   )
 }
+
+const WorkflowsSidebarIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="8" height="8" x="3" y="3" rx="2"/>
+    <path d="M7 11v4a2 2 0 0 0 2 2h4"/>
+    <rect width="8" height="8" x="13" y="13" rx="2"/>
+  </svg>
+)
+
+function WorkflowsAdapter({ active, context }: AppTabProps) {
+  const [gpuColors, setGpuColors] = useState<GpuEditorColors | undefined>()
+  const [indentGuides, setIndentGuides] = useState(false)
+  const [zoom, setZoom] = useState(1)
+
+  useEffect(() => {
+    invoke<{ theme?: string; custom_theme?: Record<string, string>; indent_guides?: boolean; default_zoom?: number }>('config.get')
+      .then(cfg => {
+        const theme = cfg.theme === 'custom' && cfg.custom_theme && Object.keys(cfg.custom_theme).length > 0
+          ? customColorsToTheme(cfg.custom_theme)
+          : getTheme(cfg.theme ?? 'dark')
+        setGpuColors(themeToGpuColors(theme))
+        setIndentGuides(!!cfg.indent_guides)
+        setZoom(cfg.default_zoom && cfg.default_zoom > 0 ? cfg.default_zoom : 1)
+      })
+      .catch(() => {})
+  }, [])
+
+  return (
+    <WorkflowsPanel
+      cwd={context.cwd ?? ''}
+      active={active}
+      gpuColors={gpuColors}
+      fontSize={Math.round(13 * zoom)}
+      indentGuides={indentGuides}
+      onEditWorkflow={(path, line) => context.openFile?.(path, line)}
+    />
+  )
+}
+
+const workflowsApp: AppManifest = {
+  id: 'workflows',
+  name: 'Workflows',
+  description: 'Define, run, and monitor multi-step automation workflows for this project.',
+  author: 'BinderTools',
+  version: '1.0.0',
+  tabType: 'workflows',
+  tabTitle: 'Workflows',
+  TabComponent: WorkflowsAdapter,
+  sidebar: { icon: WorkflowsSidebarIcon, label: 'Workflows', sticky: true },
+}
+
+export default workflowsApp
