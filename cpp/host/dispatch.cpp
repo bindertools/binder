@@ -1,4 +1,5 @@
 #include "dispatch.hpp"
+#include "app_plugin_loader.hpp"
 #ifdef _WIN32
 #include "window_win.hpp"
 #endif
@@ -67,9 +68,12 @@ static std::wstring dispatch_to_wide(const std::string& s) {
 Dispatcher::Dispatcher(webview::webview& wv) : wv_(wv) {
     Config::instance().load();
     port_forward::start_persisted();
+    app_plugin_loader::init(this);
+    app_plugin_loader::load_installed_apps();
 }
 
 Dispatcher::~Dispatcher() {
+    app_plugin_loader::unload_all();
     port_forward::stop_all();
     file_watcher::stop();
 
@@ -125,7 +129,8 @@ json Dispatcher::old_to_new(const std::string& type,
         git_ops::dispatch(type, msg, req_id, resp)  ||
         workflows_ops::dispatch(type, msg, req_id, resp)||
         editor_ops::dispatch(type, msg, req_id, resp)||
-        port_forward::dispatch(type, msg, req_id, resp);
+        port_forward::dispatch(type, msg, req_id, resp)||
+        app_plugin_loader::dispatch(type, msg, req_id, resp);
 
     if (!handled) {
         return {{"ok", false}, {"error", "not yet implemented: " + type}};
@@ -181,6 +186,22 @@ void Dispatcher::dispatch(const std::string& seq,
     if (type == "shutdown") {
         resolve_ok(seq, true);
         wv_.dispatch([this] { wv_.terminate(); });
+        return;
+    }
+    if (type == "app.loadBackend" || type == "app.unloadBackend") {
+        try {
+            json args_json = args.empty() ? json::object() : json::parse(args);
+            std::string id = args_json.value("id", std::string{});
+            if (id.empty()) { resolve_err(seq, "missing app id"); return; }
+            if (type == "app.loadBackend") {
+                resolve_ok(seq, app_plugin_loader::load_app(id));
+            } else {
+                app_plugin_loader::unload_app(id);
+                resolve_ok(seq, true);
+            }
+        } catch (const std::exception& e) {
+            resolve_err(seq, std::string("dispatch error: ") + e.what());
+        }
         return;
     }
 

@@ -34,6 +34,7 @@ if(WIN32)
     add_executable(binder-host WIN32
         main.cpp dispatch.cpp window_win.cpp
         splash_windows.cpp jumplist_windows.cpp
+        app_plugin_loader.cpp
         resources.rc)
 
     # Ensure the zip is generated before the RC compiler embeds it, and that the
@@ -43,7 +44,7 @@ if(WIN32)
     set_source_files_properties(resources.rc PROPERTIES OBJECT_DEPENDS "${GENERATED_ZIP}")
 
 else()
-    add_executable(binder-host main.cpp dispatch.cpp)
+    add_executable(binder-host main.cpp dispatch.cpp app_plugin_loader.cpp)
 endif()
 
 set_target_properties(binder-host PROPERTIES
