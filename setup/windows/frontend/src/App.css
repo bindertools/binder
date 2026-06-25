@@ -136,25 +136,27 @@ body {
 
 .persona-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 64px;
+  gap: 10px;
   width: 100%;
-  max-width: 480px;
+  max-width: 420px;
 }
 
 .persona-card {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 10px;
+  height: 64px;
+  padding: 11px 12px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 6px;
+  border-radius: 8px;
   color: #aaa;
   cursor: pointer;
   text-align: left;
   font-family: inherit;
+  overflow: hidden;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 .persona-card:hover {
@@ -168,15 +170,44 @@ body {
   color: #6aadff;
 }
 
+.persona-card-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  color: #888;
+  transition: background 0.15s, color 0.15s;
+}
+.persona-card.active .persona-card-icon {
+  background: rgba(77,158,255,0.18);
+  color: #6aadff;
+}
+
+.persona-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .persona-card-label {
   font-size: 12.5px;
   font-weight: 500;
 }
 
 .persona-card-blurb {
-  font-size: 10.5px;
+  font-size: 10px;
   color: #666;
-  line-height: 1.35;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .persona-card.active .persona-card-blurb { color: #5c8fc9; }
 
@@ -216,101 +247,71 @@ body {
   white-space: nowrap;
 }
 
-/* ── version row ──────────────────────────────────────────────────────── */
-.version-row {
+/* ── version section ──────────────────────────────────────────────────── */
+.version-section {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
   margin-top: 2px;
 }
 
-/* ── custom version select ────────────────────────────────────────────── */
-.vsel {
-  position: relative;
+/* ── version checklist ────────────────────────────────────────────────── */
+.version-list {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 6px;
 }
 
-.vsel-btn {
+.version-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.09);
+  gap: 9px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 5px;
-  color: #aaa;
-  font-size: 12px;
-  font-family: inherit;
-  padding: 5px 10px 5px 12px;
-  cursor: pointer;
-  outline: none;
-  min-width: 160px;
-  justify-content: space-between;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-.vsel-btn:disabled { opacity: 0.5; cursor: default; }
-.vsel-btn:not(:disabled):hover,
-.vsel-btn[data-open="true"] {
-  border-color: rgba(77, 158, 255, 0.4);
-  background: rgba(255,255,255,0.06);
-  color: #ccc;
-}
-
-.vsel-btn-label {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vsel-chevron {
-  flex-shrink: 0;
-  color: #555;
-  transition: transform 0.18s ease, color 0.15s;
-}
-.vsel-btn[data-open="true"] .vsel-chevron {
-  transform: rotate(180deg);
-  color: #4d9eff;
-}
-
-.vsel-menu {
-  position: absolute;
-  top: calc(100% + 5px);
-  left: 0;
-  right: 0;
-  min-width: 220px;
-  background: #141416;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  z-index: 200;
-  max-height: 180px;
-  overflow-y: auto;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.55);
-}
-.vsel-menu::-webkit-scrollbar { width: 3px; }
-.vsel-menu::-webkit-scrollbar-track { background: transparent; }
-.vsel-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-
-.vsel-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 12px;
   font-size: 12px;
   color: #888;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition: background 0.12s, color 0.12s;
 }
-.vsel-item:hover {
-  background: rgba(77,158,255,0.08);
-  color: #ddd;
+.version-item:hover {
+  background: rgba(255,255,255,0.04);
+  color: #bbb;
 }
-.vsel-item.active { color: #4d9eff; }
-.vsel-item--pre   { color: #999; }
+.version-item.active { color: #cfe4ff; }
 
-.vsel-item-label {
+.version-radio {
+  flex-shrink: 0;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.22);
+  transition: border-color 0.15s;
+}
+.version-item.active .version-radio { border-color: #4d9eff; }
+.version-item.active .version-radio::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4d9eff;
+  transform: translate(-50%, -50%);
+}
+
+.version-item-label {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -319,13 +320,13 @@ body {
   white-space: nowrap;
 }
 
-.vsel-date {
+.version-date {
   flex-shrink: 0;
   font-size: 10px;
   color: #4a4a4a;
 }
 
-.vsel-badge {
+.version-badge {
   flex-shrink: 0;
   font-size: 10px;
   padding: 1px 5px;
@@ -333,25 +334,17 @@ body {
   background: rgba(255, 165, 0, 0.15);
   color: #e8a444;
 }
-.vsel-snapshot {
-  font-size: 10px;
-  color: #e8a444;
-  margin-left: 4px;
-}
 
-.vsel-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.08);
-  margin: 2px 0;
-}
-
-.vsel-scroll {
-  max-height: 110px;
+.version-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 100px;
   overflow-y: auto;
 }
-.vsel-scroll::-webkit-scrollbar { width: 3px; }
-.vsel-scroll::-webkit-scrollbar-track { background: transparent; }
-.vsel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.version-scroll::-webkit-scrollbar { width: 3px; }
+.version-scroll::-webkit-scrollbar-track { background: transparent; }
+.version-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 /* ── options (checkboxes) ─────────────────────────────────────────────── */
 .options {

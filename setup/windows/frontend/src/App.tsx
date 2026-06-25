@@ -1,18 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseInstaller } from '../wailsjs/go/main/App'
+import React, { useEffect, useState } from 'react'
+import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseInstaller, Ready } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime/runtime'
+import { X, Check, Sparkles, GraduationCap, Code2, Database, Workflow, Network } from 'lucide-react'
 
 type Phase = 'persona' | 'ready' | 'installing' | 'done'
 
 type Persona = 'hobbyist' | 'student' | 'software' | 'data' | 'process' | 'network'
 
-const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
-  { id: 'hobbyist', label: 'Hobbyist',          blurb: 'Just the essentials to start.' },
-  { id: 'student',  label: 'Student',           blurb: 'Adds Notepad for coursework notes.' },
-  { id: 'software', label: 'Software Engineer', blurb: 'Adds Version Control and Workflows.' },
-  { id: 'data',     label: 'Data Engineer',     blurb: 'Adds the Database app.' },
-  { id: 'process',  label: 'Process Engineer',  blurb: 'Adds Workflows.' },
-  { id: 'network',  label: 'Network Engineer',  blurb: 'Adds Ports & Endpoints.' },
+const PERSONAS: { id: Persona; label: string; blurb: string; icon: React.ElementType }[] = [
+  { id: 'hobbyist', label: 'Hobbyist',          blurb: 'Just the essentials to start.',        icon: Sparkles },
+  { id: 'student',  label: 'Student',           blurb: 'Adds Notepad for coursework notes.',   icon: GraduationCap },
+  { id: 'software', label: 'Software Engineer', blurb: 'Adds Version Control and Workflows.',  icon: Code2 },
+  { id: 'data',     label: 'Data Engineer',     blurb: 'Adds the Database app.',                icon: Database },
+  { id: 'process',  label: 'Process Engineer',  blurb: 'Adds Workflows.',                       icon: Workflow },
+  { id: 'network',  label: 'Network Engineer',  blurb: 'Adds Ports & Endpoints.',                icon: Network },
 ]
 
 // Which non-essential apps to pre-install for each persona. Terminal, Code
@@ -40,84 +41,64 @@ const drag   = { '--wails-draggable': 'drag'    } as React.CSSProperties
 const noDrag = { '--wails-draggable': 'no-drag' } as React.CSSProperties
 
 // ── Version picker ────────────────────────────────────────────────────────────
-function VersionSelect({ value, onChange, releases, disabled }: {
+// A printed checklist, not a dropdown — every option is visible up front and
+// exactly one is selectable at a time.
+function VersionRow({ active, label, badge, date, onClick }: {
+  active: boolean
+  label:  string
+  badge?: string
+  date?:  string
+  onClick: () => void
+}) {
+  return (
+    <div className={`version-item${active ? ' active' : ''}`} onClick={onClick}>
+      <span className="version-radio" />
+      <span className="version-item-label">
+        {label}
+        {badge && <span className="version-badge">{badge}</span>}
+      </span>
+      {date && <span className="version-date">{date}</span>}
+    </div>
+  )
+}
+
+function VersionChecklist({ value, onChange, releases }: {
   value:    string
   onChange: (v: string) => void
   releases: Release[]
-  disabled: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
-  const selected = releases.find(r => r.version === value)
-  const label    = selected ? (selected.name || selected.version) : 'Latest (stable)'
-
   // GitHub returns releases newest-first, so the first prerelease in the list
   // is the latest dev/pre-release build.
   const latestPrerelease = releases.find(r => r.prerelease)
-  const olderReleases     = releases.filter(r => r !== latestPrerelease)
+  const olderReleases    = releases.filter(r => r !== latestPrerelease)
 
   return (
-    <div className="vsel" ref={ref}>
-      <button
-        className="vsel-btn"
-        data-open={String(open)}
-        disabled={disabled}
-        onClick={() => !disabled && setOpen(o => !o)}
-      >
-        <span className="vsel-btn-label">
-          {label}
-          {selected?.prerelease && <span className="vsel-snapshot"> ⚠ Snapshot</span>}
-        </span>
-        <svg className="vsel-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none">
-          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-
-      {open && (
-        <div className="vsel-menu">
-          <div
-            className={`vsel-item${value === 'latest' ? ' active' : ''}`}
-            onClick={() => { onChange('latest'); setOpen(false) }}
-          >
-            <span>Latest (stable)</span>
-          </div>
-          {latestPrerelease && (
-            <div
-              className={`vsel-item${value === latestPrerelease.version ? ' active' : ''} vsel-item--pre`}
-              onClick={() => { onChange(latestPrerelease.version); setOpen(false) }}
-            >
-              <span className="vsel-item-label">
-                Latest (dev build)
-                <span className="vsel-badge">Snapshot</span>
-              </span>
-            </div>
-          )}
-          <div className="vsel-divider" />
-          <div className="vsel-scroll">
-            {olderReleases.map(r => (
-              <div
-                key={r.version}
-                className={`vsel-item${value === r.version ? ' active' : ''}${r.prerelease ? ' vsel-item--pre' : ''}`}
-                onClick={() => { onChange(r.version); setOpen(false) }}
-              >
-                <span className="vsel-item-label">
-                  {r.name || r.version}
-                  {r.prerelease && <span className="vsel-badge">Snapshot</span>}
-                </span>
-                {r.publishedAt && <span className="vsel-date">{r.publishedAt}</span>}
-              </div>
-            ))}
-          </div>
+    <div className="version-list">
+      <VersionRow
+        active={value === 'latest'}
+        label="Latest (stable)"
+        onClick={() => onChange('latest')}
+      />
+      {latestPrerelease && (
+        <VersionRow
+          active={value === latestPrerelease.version}
+          label="Latest (dev build)"
+          badge="Snapshot"
+          onClick={() => onChange(latestPrerelease.version)}
+        />
+      )}
+      {olderReleases.length > 0 && (
+        <div className="version-scroll">
+          {olderReleases.map(r => (
+            <VersionRow
+              key={r.version}
+              active={value === r.version}
+              label={r.name || r.version}
+              badge={r.prerelease ? 'Snapshot' : undefined}
+              date={r.publishedAt}
+              onClick={() => onChange(r.version)}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -138,6 +119,11 @@ export default function App() {
   const [releases,       setReleases]      = useState<Release[]>([])
 
   useEffect(() => {
+    // Signal the native host that the first frame has painted, so it can
+    // reveal the (still-hidden) window without ever flashing default OS
+    // chrome or losing focus to whatever launched it.
+    Ready()
+
     GetInstallDir().then(setInstallDir)
     GetChannel().then(setChannel)
     GetReleases().then(list => { if (list?.length) setReleases(list) })
@@ -173,7 +159,9 @@ export default function App() {
     <div className="installer" style={drag}>
 
       {/* ── window chrome ── */}
-      <button className="btn-close" style={noDrag} onClick={CloseInstaller} title="Close">✕</button>
+      <button className="btn-close" style={noDrag} onClick={CloseInstaller} title="Close">
+        <X size={14} />
+      </button>
 
       {/* ── main content area ── */}
       <div className="content">
@@ -188,7 +176,9 @@ export default function App() {
         {errorBanner && (
           <div className="error-banner" style={noDrag}>
             <span>{errorBanner}</span>
-            <button className="error-banner-dismiss" onClick={() => setErrorBanner('')}>✕</button>
+            <button className="error-banner-dismiss" onClick={() => setErrorBanner('')}>
+              <X size={12} />
+            </button>
           </div>
         )}
 
@@ -197,16 +187,22 @@ export default function App() {
           <div className="screen-persona" style={noDrag}>
             <p className="persona-prompt">What are you?</p>
             <div className="persona-grid">
-              {PERSONAS.map(p => (
-                <button
-                  key={p.id}
-                  className={`persona-card${persona === p.id ? ' active' : ''}`}
-                  onClick={() => setPersona(p.id)}
-                >
-                  <span className="persona-card-label">{p.label}</span>
-                  <span className="persona-card-blurb">{p.blurb}</span>
-                </button>
-              ))}
+              {PERSONAS.map(p => {
+                const Icon = p.icon
+                return (
+                  <button
+                    key={p.id}
+                    className={`persona-card${persona === p.id ? ' active' : ''}`}
+                    onClick={() => setPersona(p.id)}
+                  >
+                    <span className="persona-card-icon"><Icon size={16} /></span>
+                    <span className="persona-card-text">
+                      <span className="persona-card-label">{p.label}</span>
+                      <span className="persona-card-blurb">{p.blurb}</span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
             <button
               className="btn-install"
@@ -227,13 +223,12 @@ export default function App() {
             </div>
 
             {releases.length > 0 && (
-              <div className="version-row">
+              <div className="version-section">
                 <span className="field-label">Version</span>
-                <VersionSelect
+                <VersionChecklist
                   value={version}
                   onChange={setVersion}
                   releases={releases}
-                  disabled={false}
                 />
               </div>
             )}
@@ -273,7 +268,7 @@ export default function App() {
         {/* ── SCREEN 3: Complete ── */}
         {phase === 'done' && (
           <div className="screen-done" style={noDrag}>
-            <div className="done-checkmark">✓</div>
+            <div className="done-checkmark"><Check size={20} /></div>
             <p className="done-title">Installation complete</p>
             <p className="done-sub">Binder was installed to your system.</p>
             <div className="done-actions">
