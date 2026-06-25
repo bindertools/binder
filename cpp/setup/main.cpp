@@ -324,6 +324,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 #else
 int main(int, char**) {
 #endif
+  try {
     std::string root = ExtractInstallerAssets();
     std::string html = root.empty()
         ? "<html><body style='background:#111;color:white;font-family:sans-serif;padding:20px'><h2>Setup Error: Could not extract assets</h2></body></html>"
@@ -389,18 +390,30 @@ int main(int, char**) {
                 std::thread([ctx, seq, type, args]() {
                     auto* wv  = ctx->wv;
                     auto* app = ctx->app;
-                    if      (type == "installer.getReleases")   app->GetReleases(seq);
-                    else if (type == "installer.getChannel")    app->GetChannel(seq);
-                    else if (type == "installer.getInstallDir") app->GetInstallDir(seq);
-                    else if (type == "installer.install")
-                        app->Install(seq, args.value("version", std::string{}),
-                                     args.value("createDesktop", false),
-                                     args.value("seedApps", std::vector<std::string>{}));
-                    else if (type == "installer.launch") app->LaunchAndClose(seq);
-                    else if (type == "installer.close")  app->CloseInstaller(seq);
-                    else if (type == "installer.ready")  app->Ready(seq);
-                    else {
-                        nlohmann::json r = {{"ok", false}, {"error", "not implemented: " + type}};
+                    try {
+                        if      (type == "installer.getReleases")   app->GetReleases(seq);
+                        else if (type == "installer.getChannel")    app->GetChannel(seq);
+                        else if (type == "installer.getInstallDir") app->GetInstallDir(seq);
+                        else if (type == "installer.install")
+                            app->Install(seq, args.value("version", std::string{}),
+                                         args.value("createDesktop", false),
+                                         args.value("seedApps", std::vector<std::string>{}));
+                        else if (type == "installer.launch") app->LaunchAndClose(seq);
+                        else if (type == "installer.close")  app->CloseInstaller(seq);
+                        else if (type == "installer.ready")  app->Ready(seq);
+                        else {
+                            nlohmann::json r = {{"ok", false}, {"error", "not implemented: " + type}};
+                            wv->resolve(seq, 0, r.dump());
+                        }
+                    } catch (const std::exception& e) {
+                        // An exception escaping a detached thread's entry
+                        // function calls std::terminate() -> abort(), which
+                        // kills the whole process (observed as exception
+                        // 0xc0000409 / fail-fast). Must not let that happen.
+                        nlohmann::json r = {{"ok", false}, {"error", e.what()}};
+                        wv->resolve(seq, 0, r.dump());
+                    } catch (...) {
+                        nlohmann::json r = {{"ok", false}, {"error", "unknown error in " + type}};
                         wv->resolve(seq, 0, r.dump());
                     }
                 }).detach();
@@ -415,4 +428,19 @@ int main(int, char**) {
     wv.navigate("data:text/html;base64," + Base64Encode(html));
     wv.run();
     return 0;
+  } catch (const std::exception& e) {
+    // Without this, an exception here (e.g. WebView2 runtime missing) calls
+    // std::terminate() -> abort() and the installer vanishes with no trace
+    // other than an Application Error event log entry (exception 0xc0000409).
+#ifdef _WIN32
+    std::wstring wmsg(e.what(), e.what() + strlen(e.what()));
+    MessageBoxW(nullptr, wmsg.c_str(), L"Binder Setup - Error", MB_OK | MB_ICONERROR);
+#endif
+    return 1;
+  } catch (...) {
+#ifdef _WIN32
+    MessageBoxW(nullptr, L"Unknown error during startup", L"Binder Setup - Error", MB_OK | MB_ICONERROR);
+#endif
+    return 1;
+  }
 }
