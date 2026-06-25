@@ -26,8 +26,13 @@ static std::string ExtractInstallerAssets() {
     DWORD       size = SizeofResource(hMod, hRes);
     if (!data || size == 0) return "";
 
+    // Hash the WHOLE resource, not just the first 64 bytes — a couple of the
+    // embedded files (e.g. favicon.svg) are byte-identical across rebuilds,
+    // so a short prefix hash can collide between an old and a new zip and
+    // cause the cached-extraction check below to skip extracting fresh
+    // content forever, silently serving a stale frontend indefinitely.
     uint32_t hash = 0x811c9dc5u;
-    for (DWORD i = 0; i < std::min(size, (DWORD)64); ++i)
+    for (DWORD i = 0; i < size; ++i)
         hash = (hash ^ (unsigned char)data[i]) * 0x01000193u;
 
     char tmp[MAX_PATH];

@@ -12,7 +12,7 @@ if(WIN32)
     set(GENERATED_ZIP  "${GENERATED_DIR}/frontend.zip")
 
     if(EXISTS "${SETUP_DIST}")
-        file(GLOB_RECURSE SETUP_DIST_FILES "${SETUP_DIST}/*")
+        file(GLOB_RECURSE SETUP_DIST_FILES CONFIGURE_DEPENDS "${SETUP_DIST}/*")
     else()
         set(SETUP_DIST_FILES "")
         message(WARNING "Setup dist not found: ${SETUP_DIST}")
@@ -28,6 +28,13 @@ if(WIN32)
         COMMENT "Zipping setup dist → generated/frontend.zip"
     )
     add_custom_target(gen_setup_zip DEPENDS "${GENERATED_ZIP}")
+
+    # resources.rc embeds frontend.zip via RCDATA, but the RC compiler only
+    # checks resources.rc's own timestamp — it has no idea the *contents* of
+    # frontend.zip changed, so it happily re-embeds a stale zip into the exe
+    # forever after the first build. OBJECT_DEPENDS forces MSBuild to treat
+    # the zip as an input to the resource-compile step too.
+    set_source_files_properties(resources.rc PROPERTIES OBJECT_DEPENDS "${GENERATED_ZIP}")
 
     add_executable(binder-setup WIN32 main.cpp installer.cpp resources.rc)
     add_dependencies(binder-setup gen_setup_zip)
