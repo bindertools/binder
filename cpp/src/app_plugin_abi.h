@@ -35,16 +35,18 @@ typedef struct BinderHostApi {
 // Exported by every app backend DLL:
 //
 //   void  binder_app_init(const BinderHostApi* host_api);
-//   int   binder_app_dispatch(const char* type, const char* args_json_utf8, char** out_json);
+//   int   binder_app_dispatch(const char* type, const char* args_json_utf8, const char* req_id, char** out_json);
 //   char* binder_app_alloc(size_t n);
 //   void  binder_app_free(char* p);
 //   void  binder_app_shutdown(void);
 //
 // binder_app_dispatch returns 1 and writes a binder_app_alloc'd JSON string
 // to *out_json if `type` was handled, 0 otherwise (mirrors the existing
-// `bool dispatch(...)` convention every *_ops module already uses).
+// `bool dispatch(...)` convention every *_ops module already uses, including
+// passing the IPC request id through -- some handlers use it as a temp-file
+// uniqueness key, not just for response correlation).
 typedef void  (*BinderAppInitFn)(const BinderHostApi* host_api);
-typedef int   (*BinderAppDispatchFn)(const char* type, const char* args_json_utf8, char** out_json);
+typedef int   (*BinderAppDispatchFn)(const char* type, const char* args_json_utf8, const char* req_id, char** out_json);
 typedef char* (*BinderAppAllocFn)(size_t n);
 typedef void  (*BinderAppFreeFn)(char* p);
 typedef void  (*BinderAppShutdownFn)(void);

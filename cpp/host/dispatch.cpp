@@ -11,7 +11,6 @@
 #include "../src/session.hpp"
 #include "../src/pack.hpp"
 #include "../src/updater.hpp"
-#include "../src/git.hpp"
 #include "../src/workflows.hpp"
 #include "../src/workflow_runner.hpp"
 #include "../src/file_watcher.hpp"
@@ -126,7 +125,6 @@ json Dispatcher::old_to_new(const std::string& type,
         session_ops::dispatch(type, msg, req_id, resp)||
         pack_ops::dispatch(type, msg, req_id, resp)  ||
         updater_ops::dispatch(type, msg, req_id, resp)||
-        git_ops::dispatch(type, msg, req_id, resp)  ||
         workflows_ops::dispatch(type, msg, req_id, resp)||
         editor_ops::dispatch(type, msg, req_id, resp)||
         port_forward::dispatch(type, msg, req_id, resp)||

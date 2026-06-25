@@ -101,7 +101,6 @@ add_library(binder-backend-lib STATIC
     src/session.cpp
     src/pack.cpp
     src/updater.cpp
-    src/git.cpp
     src/workflows.cpp
     src/workflow_yaml.cpp
     src/workflow_expr.cpp
@@ -150,6 +149,37 @@ if(WIN32)
         UNICODE
     )
 endif()
+
+# ── App backend DLLs ────────────────────────────────────────────────────────────
+# Each installable app's native backend is its own DLL, LoadLibrary'd by the
+# host only when that app is installed (see cpp/host/app_plugin_loader.cpp) --
+# never linked into binder-backend-lib, so an uninstalled app contributes zero
+# compiled weight or running state to the host process.
+function(add_binder_app target_name)
+    cmake_parse_arguments(ARG "" "" "SOURCES;LINK_LIBS" ${ARGN})
+    add_library(${target_name} SHARED ${ARG_SOURCES})
+    set_target_properties(${target_name} PROPERTIES
+        CXX_STANDARD 17
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Release/apps/${target_name}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release/apps/${target_name}"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug/apps/${target_name}"
+        OUTPUT_NAME "${target_name}"
+    )
+    target_include_directories(${target_name} PRIVATE src)
+    target_link_libraries(${target_name} PRIVATE nlohmann_json::nlohmann_json spdlog::spdlog)
+    if(ARG_LINK_LIBS)
+        target_link_libraries(${target_name} PRIVATE ${ARG_LINK_LIBS})
+    endif()
+    if(WIN32)
+        target_compile_definitions(${target_name} PRIVATE
+            WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE UNICODE)
+    endif()
+endfunction()
+
+add_binder_app(versioncontrol SOURCES
+    src/git.cpp
+    apps/versioncontrol/dllmain.cpp
+)
 
 # ── WebView host and setup ─────────────────────────────────────────────────────
 add_subdirectory(host)

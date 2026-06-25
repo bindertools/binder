@@ -176,7 +176,7 @@ bool dispatch(const std::string& type, const json& msg,
     std::string args = msg.dump();
     for (auto& [appId, app] : g_loaded) {
         char* out = nullptr;
-        int handled = app.dispatch_fn(type.c_str(), args.c_str(), &out);
+        int handled = app.dispatch_fn(type.c_str(), args.c_str(), id.c_str(), &out);
         if (handled) {
             if (out) {
                 try { resp = json::parse(out); } catch (...) { resp = json::object(); }
@@ -184,7 +184,6 @@ bool dispatch(const std::string& type, const json& msg,
             } else {
                 resp = json::object();
             }
-            (void)id;
             return true;
         }
         if (out) app.free_fn(out);
