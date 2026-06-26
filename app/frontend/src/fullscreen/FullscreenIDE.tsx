@@ -221,7 +221,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   // FileExplorer itself (it owns dirCache).
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
-    const unsub = on('fs:changed', () => {
+    const unsub = on('fs:changed', (payload: unknown) => {
+      const dirs = (payload as { dirs?: string[] })?.dirs ?? []
+      // Git commands write to .git/ — skip those changes to avoid a feedback
+      // loop where running git status triggers another git status indefinitely.
+      if (dirs.length > 0 && dirs.every(d => /[/\\]\.git([/\\]|$)/.test(d))) return
       if (timer) clearTimeout(timer)
       timer = setTimeout(refreshGitStatus, 300)
     })

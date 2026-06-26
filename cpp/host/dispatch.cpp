@@ -1182,19 +1182,52 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             auto cmd  = args.value("cmd",  std::string{});
             auto dir  = args.value("dir",  std::string{});
             auto a    = args.value("args", std::vector<std::string>{});
-            // Build full command line
             std::string full = cmd;
             for (auto& arg : a) full += " " + arg;
-            // Run via cmd.exe and capture output
             std::string output;
-            std::string cd_cmd = dir.empty() ? "" : "cd /d \"" + dir + "\" && ";
-            std::string pipe_cmd = "cmd.exe /c " + cd_cmd + full + " 2>&1";
-            FILE* f = _popen(pipe_cmd.c_str(), "r");
-            if (f) {
-                char buf[1024];
-                while (fgets(buf, sizeof(buf), f)) output += buf;
-                _pclose(f);
+#ifdef _WIN32
+            {
+                std::string shell_cmd = "cmd.exe /c " + full + " 2>&1";
+                std::wstring wcmd = dispatch_to_wide(shell_cmd);
+                std::wstring wdir = dir.empty() ? L"" : dispatch_to_wide(dir);
+                SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
+                HANDLE rd = INVALID_HANDLE_VALUE, wr = INVALID_HANDLE_VALUE;
+                if (CreatePipe(&rd, &wr, &sa, 0)) {
+                    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+                    STARTUPINFOW si{};
+                    si.cb         = sizeof(si);
+                    si.dwFlags    = STARTF_USESTDHANDLES;
+                    si.hStdOutput = wr;
+                    si.hStdError  = wr;
+                    si.hStdInput  = INVALID_HANDLE_VALUE;
+                    PROCESS_INFORMATION pi{};
+                    if (CreateProcessW(nullptr, wcmd.data(), nullptr, nullptr, TRUE,
+                                       CREATE_NO_WINDOW, nullptr,
+                                       dir.empty() ? nullptr : wdir.c_str(), &si, &pi)) {
+                        CloseHandle(wr); CloseHandle(pi.hThread);
+                        char buf[4096]; DWORD n;
+                        while (ReadFile(rd, buf, sizeof(buf), &n, nullptr) && n > 0)
+                            output.append(buf, n);
+                        WaitForSingleObject(pi.hProcess, 30000);
+                        CloseHandle(pi.hProcess);
+                    } else {
+                        CloseHandle(wr);
+                    }
+                    CloseHandle(rd);
+                }
             }
+#else
+            {
+                std::string cd_cmd = dir.empty() ? "" : "cd \"" + dir + "\" && ";
+                std::string pipe_cmd = cd_cmd + full + " 2>&1";
+                FILE* f = popen(pipe_cmd.c_str(), "r");
+                if (f) {
+                    char buf[4096];
+                    while (fgets(buf, sizeof(buf), f)) output += buf;
+                    pclose(f);
+                }
+            }
+#endif
             resolve_ok(seq, output);
         } else if (type == "shell.ctrlclick") {
             auto tabId = args.value("tabId", std::string{});
