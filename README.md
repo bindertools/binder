@@ -5,7 +5,7 @@
   <img src=".github/assets/binder-wide-light.png" alt="Binder" width="100%">
 </picture>
 
-**A terminal-first desktop IDE for developers who live in the command line.**
+**Native desktop app combining terminal, code editor, and dev tools in one window.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build](https://github.com/BinderTools/binder/actions/workflows/code-quality.yml/badge.svg)](https://github.com/BinderTools/binder/actions/workflows/code-quality.yml)
@@ -17,25 +17,32 @@
 
 ---
 
-Binder is a native desktop app (C++ + WebView + React) that wraps your real shell in a multi-tab, session-restoring terminal, then layers on a code editor, live preview, database inspector, and more. All in one window.
+Binder is a native desktop app (C++ + WebView + React) built for developers who want their terminal, editor, and tooling all in one place without the weight of an Electron app.
 
-## Features
+## Core features
 
 - **Terminal**: multi-tab sessions (any shell), session restore, Ctrl+click paths and URLs
-- **Editor**: GPU-accelerated renderer with tree-sitter syntax highlighting, file explorer, split panes, find/replace, minimap
-- **Live Preview**: sandboxed renderer for HTML files and URLs
-- **Database**: inline SQLite inspector with privacy mode
-- **Version Control**: git status, staging, diff, and branch management
-- **Ports**: live view of listening ports with port forwarding
-- **Workflows**: YAML-based automation runner with a visual graph view
+- **Code editor**: GPU-accelerated, tree-sitter syntax highlighting, file explorer, split panes, find/replace, minimap
 - **Performance**: real-time CPU, memory, disk, GPU, and network graphs
 - **Problems**: code diagnostics scanner with CWE vulnerability detection
-- **Apps**: built-in app store for installing first-party and community apps
-- **Themes**: dark and light presets plus a full live custom theme editor
+- **Themes**: dark and light presets, full live custom theme editor and keybinding customization
+
+## Apps
+
+Binder has an in-app store for installing and uninstalling tools as needed. All current apps are built and maintained by BinderTools, with community-built apps also available.
+
+| App | Description |
+|---|---|
+| **Version Control** | Stage, commit, branch, and review diffs |
+| **Database** | Browse and query `.db`/`.sqlite` files in the current project |
+| **Live Preview** | Preview `.md`/`.html` files and forwarded URLs without leaving the app |
+| **Ports & Endpoints** | Inspect open ports, manage port forwards, and track HTTP endpoints |
+| **Workflows** | Define, run, and monitor multi-step automation workflows |
+| **Notepad** | Persistent in-app note-taking |
 
 ### Syntax highlighting
 
-Tree-sitter grammars are compiled directly into the binary for zero-latency highlighting with no runtime downloads. Supported languages: C, C++, C#, CSS, Dockerfile, Go, HTML, Java, JavaScript, JSON, Lua, Markdown, Python, Rust, SCSS, Bash, TOML, TypeScript, TSX, YAML, Zig.
+Tree-sitter grammars are compiled into the binary. Supported: Bash, C, C++, C#, CSS, Dockerfile, Go, HTML, Java, JavaScript, JSON, Lua, Markdown, Python, Rust, SCSS, TOML, TypeScript, TSX, YAML, Zig.
 
 ## Install
 
@@ -43,7 +50,7 @@ Download from the [Releases](https://github.com/BinderTools/binder/releases/late
 
 | Artifact | Platform |
 |---|---|
-| `Binder-setup-windows.exe` | Windows installer (stable channel) |
+| `Binder-setup-windows.exe` | Windows installer (stable) |
 | `Binder-setup-dev-windows.exe` | Windows installer (dev channel) |
 | `Binder-windows-amd64.exe` | Windows portable |
 
@@ -62,39 +69,19 @@ Set `VCPKG_ROOT` to your vcpkg installation, then:
 ./build.ps1
 ```
 
-Build flags:
+Flags:
 
 ```powershell
-./build.ps1 -AppOnly    # skip setup installers
-./build.ps1 -SetupOnly  # skip the main app
+./build.ps1 -AppOnly     # skip setup installers
+./build.ps1 -SetupOnly   # skip the main app
 ./build.ps1 -Version v1.2.3
 ```
 
-Output artifacts land in `cpp/build/Release/`.
-
-If you cloned without `--recurse-submodules`:
+Output goes to `cpp/build/Release/`. If you cloned without `--recurse-submodules`:
 
 ```bash
 git submodule update --init --recursive
 ```
-
-## Architecture
-
-The backend is a C++17 static library (`binder-backend-lib`) that handles terminal I/O, file operations, config, session persistence, tree-sitter parsing, auto-update, and more. The frontend is a React/TypeScript app built with Vite, embedded directly into the host executable as a zip resource on Windows (no `www/` sidecar needed).
-
-Each installable app ships its own C++ DLL loaded on demand by the host — an uninstalled app contributes zero compiled weight or running state. The frontend communicates with the C++ backend over a thin JSON IPC bridge exposed through the WebView.
-
-| Platform | WebView |
-|---|---|
-| Windows | WebView2 (Edge/Chromium) |
-| Linux | WebKit2GTK |
-| macOS | WKWebView |
-
-## Plugins
-
-Plugins are single-file ESM bundles installed at runtime from public GitHub repositories. They can add sidebar panels, new tab types, and terminal slash commands.
-
-See [`packages/plugin-sdk`](packages/plugin-sdk) for the SDK, type definitions, and build guide.
 
 ## License
 
