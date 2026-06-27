@@ -14,7 +14,8 @@ import PerfTab from './components/PerfTab'
 import AppStore from './apps/AppStore'
 import FullscreenIDE from './fullscreen/FullscreenIDE'
 import { hydrateInstalledApps } from './apps/registry'
-import { useInstalledApps, useSidebarRegistry, buildInstalledAppCommandMap, type InstalledAppCommand } from './apps/sidebarRegistry'
+import { hydrateSidebarOrder } from './apps/sidebarOrder'
+import { useInstalledApps, useSidebarRegistry, buildInstalledAppCommandMap } from './apps/sidebarRegistry'
 import type { AppContext } from './apps/types'
 import { openLivePreview as storeOpenLivePreview } from './lib/livePreviewStore'
 import { Tab, ProbItem, OpenFilePayload, OpenDatabasePayload, OpenPreviewPayload, OpenProblemsPayload, AppConfig } from './types'
@@ -482,7 +483,7 @@ export default function App() {
   )
 
   // ── Installed apps ───────────────────────────────────────────────────────────
-  useEffect(() => { void hydrateInstalledApps() }, [])
+  useEffect(() => { void hydrateInstalledApps(); void hydrateSidebarOrder() }, [])
 
   const installedApps = useInstalledApps()
   const sidebarApps    = useSidebarRegistry()
@@ -1399,7 +1400,6 @@ export default function App() {
           onNavigate={handleSidebarNavigate}
           onSearch={() => setSearchOpen(true)}
           onStartPageDrag={handleStartPageDrag}
-          installedPages={sidebarApps}
           recentPaths={recentPaths}
           onSelectRecentPath={handleSelectRecentPath}
         />

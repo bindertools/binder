@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
-import type React from 'react'
+import { type ComponentType, useEffect, useMemo, useState } from 'react'
 import type { AppCommand, AppManifest } from './types'
 import { getInstalledIds, onAppsChanged } from './registry'
 import { loadAppManifest } from './loader'
+import { reconcileSidebarOrder, useSidebarOrder } from './sidebarOrder'
 
 export interface SidebarPageEntry {
   id: string
   label: string
-  icon: React.ComponentType
+  icon: ComponentType
   order: number
   manifest: AppManifest
 }
@@ -34,11 +34,11 @@ export function useInstalledApps(): AppManifest[] {
   return apps
 }
 
-/** Of the installed apps, the subset that claim a sidebar nav slot, sorted for display. */
-export function useSidebarRegistry(): SidebarPageEntry[] {
+/** Of the installed apps, the subset that claim a sidebar nav slot. */
+function useSidebarCapableApps(): SidebarPageEntry[] {
   const apps = useInstalledApps()
 
-  return apps
+  return useMemo(() => apps
     .filter(a => a.sidebar)
     .map(a => ({
       id: a.id,
@@ -47,7 +47,34 @@ export function useSidebarRegistry(): SidebarPageEntry[] {
       order: a.sidebar!.order ?? 0,
       manifest: a,
     }))
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => a.order - b.order), [apps])
+}
+
+/**
+ * Sidebar-capable apps in the user's custom order (reconciled against
+ * install/uninstall), split into the row shown directly in the sidebar and
+ * the overflow ("more menu") list. See apps/sidebarOrder.ts.
+ */
+export function useOrderedSidebarApps(): { visible: SidebarPageEntry[]; overflow: SidebarPageEntry[] } {
+  const entries = useSidebarCapableApps()
+  const order = useSidebarOrder()
+
+  useEffect(() => {
+    reconcileSidebarOrder(entries.map(e => e.id), entries.map(e => e.id))
+  }, [entries])
+
+  const byId = useMemo(() => new Map(entries.map(e => [e.id, e])), [entries])
+
+  return useMemo(() => ({
+    visible:  order.visible.map(id => byId.get(id)).filter((e): e is SidebarPageEntry => e != null),
+    overflow: order.overflow.map(id => byId.get(id)).filter((e): e is SidebarPageEntry => e != null),
+  }), [order, byId])
+}
+
+/** Of the installed apps, the subset that claim a sidebar nav slot, in their
+ * manifest-declared default order (not the user's custom sidebar order). */
+export function useSidebarRegistry(): SidebarPageEntry[] {
+  return useSidebarCapableApps()
 }
 
 export interface InstalledAppCommand {
