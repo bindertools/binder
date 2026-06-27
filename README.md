@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/binder-repo.png">
-  <img src=".github/assets/binder-wide-light.png" alt="Binder" width="600">
+  <img src=".github/assets/binder-wide-light.png" alt="Binder" width="100%">
 </picture>
 
 **A terminal-first desktop IDE for developers who live in the command line.**
