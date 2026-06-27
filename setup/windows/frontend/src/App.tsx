@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseInstaller, Ready } from '../wailsjs/go/main/App'
-import { EventsOn } from '../wailsjs/runtime/runtime'
+import { Install, GetChannel, GetInstallDir, GetReleases, LaunchAndClose, CloseInstaller, Ready, EventsOn, type Release } from './lib/api'
 import { X, Check, GraduationCap, Code2, Database, Workflow, Network } from 'lucide-react'
 
 type Phase = 'persona' | 'configure' | 'installing' | 'done'
@@ -25,18 +24,6 @@ const PERSONA_APPS: Record<Persona, string[]> = {
   process:  ['workflows'],
   network:  ['ports'],
 }
-
-interface Release {
-  version:      string
-  name:         string
-  publishedAt:  string
-  prerelease:   boolean
-  downloadURL:  string
-  releaseNotes: string
-}
-
-const drag   = { '--wails-draggable': 'drag'    } as React.CSSProperties
-const noDrag = { '--wails-draggable': 'no-drag' } as React.CSSProperties
 
 const STEPS: { key: Phase; label: string }[] = [
   { key: 'persona',    label: 'Profile'   },
@@ -138,7 +125,7 @@ function Stepper({ phase }: { phase: Phase }) {
   if (phase === 'done') return null
   const idx = STEPS.findIndex(s => s.key === phase)
   return (
-    <div className="stepper" style={noDrag}>
+    <div className="stepper">
       {STEPS.map((s, i) => (
         <div key={s.key} className={`stepper-item${i === idx ? ' is-current' : ''}${i < idx ? ' is-done' : ''}`}>
           <span className="stepper-dot" />
@@ -200,21 +187,21 @@ export default function App() {
   }
 
   return (
-    <div className="setup-app" style={drag}>
+    <div className="setup-app">
 
       <header className="setup-titlebar">
-        <div className="setup-brand" style={noDrag}>
+        <div className="setup-brand">
           <img src="/logo-dark.svg" alt="" className="setup-brand-mark" draggable={false} />
           <span className="setup-brand-name">Binder Setup</span>
           {channel === 'dev' && <span className="setup-channel-badge">Dev</span>}
         </div>
-        <button className="setup-close" style={noDrag} onClick={CloseInstaller} title="Close">
+        <button className="setup-close" onClick={CloseInstaller} title="Close">
           <X size={14} />
         </button>
       </header>
 
       {errorBanner && (
-        <div className="setup-alert" style={noDrag}>
+        <div className="setup-alert">
           <span>{errorBanner}</span>
           <button className="setup-alert-dismiss" onClick={() => setErrorBanner('')}>
             <X size={12} />
@@ -227,7 +214,7 @@ export default function App() {
       <main className="setup-body">
 
         {phase === 'persona' && (
-          <section className="setup-section" style={noDrag}>
+          <section className="setup-section">
             <h1 className="setup-section-title">What best describes you?</h1>
             <p className="setup-section-hint">
               We'll pre-install a few extra apps that fit your workflow. You can change this later.
@@ -237,7 +224,7 @@ export default function App() {
         )}
 
         {phase === 'configure' && (
-          <section className="setup-section" style={noDrag}>
+          <section className="setup-section">
             <div className="setup-field">
               <span className="setup-field-label">Install location</span>
               <span className="setup-field-value">{installDir}</span>
@@ -268,7 +255,7 @@ export default function App() {
         )}
 
         {phase === 'installing' && (
-          <section className="setup-section setup-section--center" style={noDrag}>
+          <section className="setup-section setup-section--center">
             <p className="setup-status">{statusMsg || 'Working…'}</p>
             <div className="progress-bar">
               <div
@@ -284,7 +271,7 @@ export default function App() {
         )}
 
         {phase === 'done' && (
-          <section className="setup-section setup-section--center" style={noDrag}>
+          <section className="setup-section setup-section--center">
             <div className="done-badge"><Check size={22} /></div>
             <h1 className="setup-section-title">Installation complete</h1>
             <p className="setup-section-hint">Binder was installed to your system.</p>
@@ -293,7 +280,7 @@ export default function App() {
 
       </main>
 
-      <footer className="setup-footer" style={noDrag}>
+      <footer className="setup-footer">
         <div className="setup-footer-hint">
           {phase === 'persona' && !persona && 'Choose one to continue'}
           {phase === 'installing' && 'Please wait…'}
