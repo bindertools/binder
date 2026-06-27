@@ -93,6 +93,7 @@ ordered_json Config::make_defaults() {
     d["scroll_speed"]       = 3;
     d["preferred_shell"]    = "";
     d["installed_apps"]     = json::array();
+    d["sidebar_app_order"]  = ordered_json{{"visible", json::array()}, {"overflow", json::array()}};
     return d;
 }
 
