@@ -1,0 +1,354 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography */
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  --font-mono: 'Cascadia Code', 'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Accent — iOS/macOS system blue */
+  --color-accent:        #0A84FF;
+  --color-accent-hover:  #409CFF;
+  --color-accent-dim:    rgba(10,132,255,0.15);
+  --color-accent-border: rgba(10,132,255,0.35);
+
+  /* Semantic status colours */
+  --color-success: #30D158;
+  --color-warning: #FF9F0A;
+  --color-error:   #FF453A;
+  --color-info:    #5AC8FA;
+
+  /* Surfaces */
+  --color-surface-raised:   rgba(255,255,255,0.04);
+  --color-surface-overlay:  rgba(255,255,255,0.07);
+  --color-surface-selected: rgba(10,132,255,0.14);
+
+  /* Separators */
+  --color-sep:        rgba(255,255,255,0.08);
+  --color-sep-strong: rgba(255,255,255,0.13);
+
+  /* Shadows — disabled app-wide */
+  --shadow-sm:      none;
+  --shadow-md:      none;
+  --shadow-lg:      none;
+  --shadow-overlay: none;
+
+  /* Transitions */
+  --ease-fast: 100ms ease;
+  --ease-base: 180ms ease;
+}
+
+/* ── Global design tokens ────────────────────────────────────────────────────── */
+:root {
+  /* Theme-injected vars (overridden by JS) */
+  --app-bg:              #0d0d0d;
+  --border-color:        #1e1e1e;
+  --info-bar-bg:         #141414;
+  --info-bar-color:      #555555;
+  --info-bar-hover-bg:   #1a1a1a;
+  --info-bar-hover-color:#888888;
+  --tab-color:           #555555;
+  --tab-color-hover:     #999999;
+  --tab-add-border:      #222222;
+
+  /* Typography */
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  --font-mono: 'Cascadia Code', 'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace;
+
+  /* Radius */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  /* Accent — iOS/macOS system blue */
+  --accent:        #0A84FF;
+  --accent-hover:  #409CFF;
+  --accent-dim:    rgba(10,132,255,0.15);
+  --accent-border: rgba(10,132,255,0.35);
+
+  /* Semantic */
+  --color-success: #30D158;
+  --color-warning: #FF9F0A;
+  --color-error:   #FF453A;
+  --color-info:    #5AC8FA;
+  --dot-running:   #e6e6e6;
+
+  /* Semantic alpha backgrounds (status pills/badges) */
+  --color-success-bg: rgba(48,209,88,0.1);
+  --color-warning-bg: rgba(255,159,10,0.1);
+  --color-error-bg:   rgba(255,69,58,0.1);
+
+  /* Severity palette — shared by Debug/CWE and Endpoints security findings */
+  --color-severity-critical: var(--color-error);
+  --color-severity-high:     #FF6B35;
+  --color-severity-medium:   var(--color-warning);
+  --color-severity-low:      var(--color-success);
+  --color-severity-info:     #636366;
+
+  /* Misc accents */
+  --color-purple: #BF5AF2;
+
+  /* Git diff colors — Workflows run status, Version Control diff viewer */
+  --color-git-add:    #4ade80;
+  --color-git-remove: #f87171;
+
+  /* Surfaces */
+  --surface-raised:   rgba(255,255,255,0.04);
+  --surface-overlay:  rgba(255,255,255,0.07);
+  --surface-selected: rgba(10,132,255,0.14);
+  --sep:              rgba(255,255,255,0.08);
+  --sep-strong:       rgba(255,255,255,0.13);
+
+  /* Shadows — disabled app-wide */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-overlay: none;
+
+  /* Transitions */
+  --t-fast: 100ms ease;
+  --t-base: 180ms ease;
+}
+
+/* ── Light theme overrides ────────────────────────────────────────────────────
+   Surfaces/separators are alpha-over-background overlays tuned for a dark
+   background (lightening it). Light mode needs inverted values, or dark
+   mode's look leaks into light mode. */
+[data-theme="light"] {
+  --surface-raised:   rgba(0,0,0,0.04);
+  --surface-overlay:  rgba(0,0,0,0.06);
+  --sep:              rgba(0,0,0,0.08);
+  --sep-strong:       rgba(0,0,0,0.14);
+}
+
+/* ── Global element resets ───────────────────────────────────────────────────── */
+@layer base {
+  button {
+    appearance: none;
+    outline: none;
+  }
+}
+
+/* ── Utility: hide scrollbar cross-browser ──────────────────────────────────── */
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Utility: thin scrollbar for sidebar/list panels ──────────────────────────── */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar       { width: 5px; }
+.thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar::-webkit-scrollbar-thumb { background: var(--sep-strong); border-radius: 3px; }
+
+/* ── Focused pane overlay ───────────────────────────────────────────────────── */
+/* Pseudo-element inset ring; kept in CSS because Tailwind after: requires content in class string */
+.pane--focused::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(10,132,255,0.2);
+  z-index: 5;
+}
+
+/* ── Pane tab bar strip scrollbar ────────────────────────────────────────────── */
+.pane-tabbar__strip {
+  scrollbar-width: none;
+}
+.pane-tabbar__strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── xterm.js internals (target xterm's own DOM — cannot use Tailwind utilities) */
+.xterm { height: 100%; }
+.xterm-viewport {
+  background: var(--app-bg) !important;
+  scrollbar-width: none !important;
+  overflow-y: hidden !important;
+}
+.xterm-viewport::-webkit-scrollbar { display: none !important; }
+.xterm-scroll-area { visibility: hidden; }
+
+/* xterm container when no PTY is active — kept mounted so it can take over
+   instantly once an interactive program starts, but invisible until then. */
+.term-xterm-hidden {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ── Terminal command blocks ─────────────────────────────────────────────────── */
+.term-blocks {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: var(--term-font-size, 13px);
+  background: var(--app-bg);
+}
+
+.term-block {
+  padding: 6px 12px;
+}
+
+.term-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.term-dot {
+  flex-shrink: 0;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+}
+
+.term-dot--idle {
+  background: transparent;
+  border: 1px solid var(--info-bar-color);
+}
+
+.term-dot--running {
+  background: var(--dot-running);
+  animation: term-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.term-dot--success {
+  background: var(--dot-running);
+}
+
+.term-dot--background {
+  background: var(--color-success);
+}
+
+.term-dot--error {
+  background: var(--color-error);
+}
+
+@keyframes term-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.term-branch-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.6em;
+  padding: 0 0.4em;
+  border: 1px solid var(--color-sep-strong);
+  border-radius: 10px;
+  color: var(--info-bar-hover-color);
+  font-weight: 400;
+  font-size: 0.8em;
+  line-height: 1.6;
+}
+
+.term-branch-tag svg {
+  width: 0.85em;
+  height: 0.85em;
+  flex-shrink: 0;
+}
+
+@keyframes task-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+.task-progress-spinner {
+  border-radius: 50%;
+  animation: task-progress-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.term-cwd {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--info-bar-hover-color);
+  font-weight: 400;
+}
+
+.term-arrow {
+  flex-shrink: 0;
+  color: var(--info-bar-color);
+}
+
+.term-command {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--info-bar-hover-color);
+}
+
+.term-ts {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--info-bar-color);
+  font-size: 11px;
+}
+
+.term-output {
+  padding: 2px 0 6px;
+}
+
+.term-output-line {
+  display: flex;
+  gap: 0.4em;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.term-output-glyph {
+  flex-shrink: 0;
+  width: 1.4em;
+  text-align: center;
+  color: var(--info-bar-color);
+}
+
+.term-output-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.term-output-more {
+  cursor: pointer;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.term-output-more:hover {
+  opacity: 1;
+}
+
+/* ── Terminal input row ──────────────────────────────────────────────────────── */
+.term-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--term-font-size, 13px);
+}

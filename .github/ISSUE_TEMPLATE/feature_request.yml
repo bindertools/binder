@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting an improvement. Before submitting, search [existing issues](https://github.com/Command-IDE/terminal-IDE/issues) to avoid duplicates.
+        Thanks for suggesting an improvement. Before submitting, search [existing issues](https://github.com/BinderTools/binder/issues) to avoid duplicates.
 
-        **Themes:** propose new themes in the [themes repository](https://github.com/Command-IDE/cmdide-themes) instead.
+        **Themes:** propose new themes in the [themes repository](https://github.com/BinderTools/binder-themes) instead.
 
   - type: dropdown
     id: area

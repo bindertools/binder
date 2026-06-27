@@ -1,0 +1,1058 @@
+// ── Page layout ────────────────────────────────────────────────────────────
+.wf-page {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  background: var(--app-bg);
+  color: var(--tab-color-hover);
+}
+
+// Custom scrollbar — applied to every scrollable area in this page so nothing
+// falls back to the default browser scrollbar.
+%wf-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep-strong) transparent;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--sep-strong);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent);
+    background-clip: padding-box;
+  }
+}
+
+.wf-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  padding: 16px 20px;
+}
+
+// ── Trigger badge ──────────────────────────────────────────────────────────
+.wf-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--app-bg);
+  color: var(--tab-color);
+  border: 1px solid var(--sep);
+}
+
+// ── Detail header: name + path, flat — no card chrome ──────────────────────
+.wf-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.wf-detail-header__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// ── Detail bar: section tabs (left) + add process / edit / run (right) ─────
+.wf-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sep);
+}
+
+.wf-detail-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wf-detail-bar__action-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
+}
+
+.wf-run-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.wf-run-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1.4;
+  color: #fff;
+  cursor: pointer;
+  background: var(--accent);
+  transition: background .12s, opacity .12s;
+}
+
+.wf-run-btn:hover {
+  background: var(--accent-hover);
+}
+
+.wf-run-btn__label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// "Sky-fade" — the button's base color slowly pulses through lighter blue shades.
+.wf-run-btn--running {
+  background: linear-gradient(135deg, var(--accent), var(--color-info) 50%, var(--accent));
+  background-size: 220% 220%;
+  animation: wf-run-skyfade 3.2s ease-in-out infinite;
+}
+
+// Warping glare — a diagonal sheen sweeps across the button.
+.wf-run-btn--running::after {
+  content: '';
+  position: absolute;
+  inset: -50% -100%;
+  background: linear-gradient(
+    100deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 60%
+  );
+  background-size: 60% 100%;
+  background-repeat: no-repeat;
+  animation: wf-run-glare 1.8s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes wf-run-skyfade {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes wf-run-glare {
+  0%   { background-position: -120% 0; }
+  100% { background-position: 220% 0; }
+}
+
+// ── Detail body: horizontal sub-section nav + content ──────────────────────
+.wf-detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.wf-detail-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+// ── Buttons ────────────────────────────────────────────────────────────────
+.wf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s, opacity .12s;
+}
+
+.wf-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.wf-btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+.wf-btn--ghost {
+  background: transparent;
+  border-color: var(--sep);
+  color: var(--tab-color-hover);
+}
+
+.wf-btn--ghost:hover {
+  background: var(--app-bg);
+  border-color: var(--sep-strong);
+}
+
+.wf-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+// ── Status pill ────────────────────────────────────────────────────────────
+.wf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.wf-pill--running {
+  background: var(--app-bg);
+  color: var(--tab-color);
+  border: 1px solid var(--sep);
+}
+
+.wf-pill--success {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--color-git-add);
+}
+
+.wf-pill--failure {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--color-git-remove);
+}
+
+// ── Code card ──────────────────────────────────────────────────────────────
+.wf-code-events {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  overflow: hidden;
+}
+
+.wf-code-events__split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.wf-code-events__pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wf-code-events__divider {
+  flex-shrink: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: var(--sep);
+  transition: background 0.12s;
+
+  &:hover,
+  &:active {
+    background: rgba(10, 132, 255, 0.45);
+  }
+}
+
+// ── Run view ───────────────────────────────────────────────────────────────
+.wf-run {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.wf-run__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.wf-run__warning {
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(250, 204, 21, 0.06);
+  color: #facc15;
+  font-size: 12px;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+// ── Step timeline ──────────────────────────────────────────────────────────
+.wf-timeline-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.wf-timeline-job__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tab-color);
+  opacity: 0.5;
+  margin-bottom: 6px;
+}
+
+.wf-timeline__row {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.wf-timeline__rail {
+  width: 22px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wf-timeline__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wf-timeline__dot--running {
+  background: var(--app-bg);
+  border: 1px solid var(--sep-strong);
+}
+
+.wf-timeline__dot--success {
+  background: rgba(74, 222, 128, 0.18);
+  color: var(--color-git-add);
+}
+
+.wf-timeline__dot--failure {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--color-git-remove);
+}
+
+.wf-timeline__dot--skipped {
+  background: var(--app-bg);
+  color: var(--tab-color);
+  opacity: 0.5;
+  border: 1px solid var(--sep);
+}
+
+.wf-timeline__line {
+  width: 2px;
+  flex: 1;
+  min-height: 10px;
+  background: var(--sep-strong);
+  margin: 2px 0;
+}
+
+.wf-timeline__row:last-child .wf-timeline__line {
+  visibility: hidden;
+}
+
+// Aligned to the dot's vertical center (11px from the row's top — half of
+// the 22px dot) via padding-top + a fixed line-height, rather than flex
+// centering against the row's full stretched height. That stretched height
+// includes the bottom spacer that separates rows, so centering against it
+// drifts the text away from the dot whenever a step name wraps to 2+ lines.
+.wf-timeline__content {
+  padding-top: 3px;
+  padding-bottom: 16px;
+  font-size: 12.5px;
+  line-height: 16px;
+  color: var(--tab-color-hover);
+  min-width: 0;
+}
+
+.wf-timeline__content--failure {
+  color: var(--color-git-remove);
+}
+
+.wf-timeline__content--skipped {
+  opacity: 0.5;
+}
+
+.wf-timeline__row:last-child .wf-timeline__content {
+  padding-bottom: 0;
+}
+
+// ── Output card ────────────────────────────────────────────────────────────
+.wf-output-card {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--app-bg);
+  overflow: hidden;
+}
+
+.wf-output-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tab-color);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.wf-output-card__body {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--tab-color-hover);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wf-output-card__placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  font-size: 12.5px;
+  color: var(--tab-color);
+  opacity: 0.5;
+  line-height: 1.6;
+}
+
+// ── Console sub-section: live output (left) + step checklist (right) ───────
+.wf-console {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wf-console__split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+.wf-console__pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-console__pane--output {
+  flex: 1;
+}
+
+.wf-console__pane--steps {
+  @extend %wf-scroll;
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.wf-output-card--locked {
+  background: var(--surface-raised);
+}
+
+.wf-output-card__header--locked {
+  color: var(--tab-color);
+  opacity: 0.4;
+}
+
+.wf-output-card__placeholder--locked {
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0.35;
+}
+
+.wf-output-card__lock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// ── Empty / loading states ─────────────────────────────────────────────────
+.wf-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.wf-empty__icon {
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+// ── Events map: top-to-bottom rows of rectangular cards joined by vertical
+// wires. A terminal job carries its own pass/fail chips directly, so there's
+// no distant outcome row for a wire to reach past anything to get to.
+.ev-map {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-bg);
+}
+
+.ev-map__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+// ── Pannable viewport: drag anywhere on the empty canvas to reveal jobs
+// that scrolled out of view in a large workflow, like dragging a map. ──────
+.ev-map__viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  cursor: grab;
+  user-select: none;
+}
+
+.ev-map__viewport--panning {
+  cursor: grabbing;
+}
+
+// Floating linking-mode hint, overlaid on top of the canvas rather than a
+// full toolbar row, since "Add process" now lives in the shared bar above.
+.ev-map__link-hint-float {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+}
+
+.ev-map__link-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  font-size: 11.5px;
+  color: var(--tab-color);
+
+  strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+.ev-map__link-cancel {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--sep);
+  background: transparent;
+  color: var(--tab-color);
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.ev-map__link-cancel:hover {
+  background: var(--app-bg);
+  color: var(--tab-color-hover);
+}
+
+.ev-map__surface {
+  position: relative;
+  flex-shrink: 0;
+  padding: 32px;
+}
+
+// Clickable badge sitting at a wire's midpoint, showing the run condition
+// for that specific job→job edge. Positioned in surface-relative pixel
+// coordinates measured alongside the wires themselves.
+.ev-map__edge-condition {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--sep-strong);
+  background: var(--app-bg);
+  color: var(--tab-color);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+
+.ev-map__edge-condition:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ev-map__edge-condition--fail {
+  color: var(--color-git-remove);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.ev-map__edge-condition--other {
+  color: var(--color-warning);
+  border-color: rgba(250, 204, 21, 0.4);
+}
+
+.ev-map__far-condition {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-style: italic;
+  color: inherit;
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.ev-map__far-condition:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+// Connector dot at the top-center of a job card. Click one, then click
+// another card's dot, to add a `needs:` edge between them.
+.ev-map__port {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--app-bg);
+  background: var(--sep-strong);
+  cursor: pointer;
+  transition: background .12s, transform .12s;
+}
+
+.ev-map__port:hover {
+  background: var(--accent);
+  transform: translateX(-50%) scale(1.2);
+}
+
+.ev-map__port--selected {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.ev-map__wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ev-map__wire {
+  fill: none;
+  stroke: var(--sep-strong);
+  stroke-width: 1.6;
+}
+
+.ev-map__rows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 46px;
+}
+
+.ev-map__row {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.ev-map__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 200px;
+  padding: 11px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--sep);
+  border-top: 2px solid var(--sep-strong);
+  background: var(--surface-raised);
+}
+
+.ev-map__card--trigger {
+  border-top-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.ev-map__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ev-map__card-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.ev-map__card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-map__card--trigger .ev-map__card-name {
+  color: var(--accent);
+}
+
+.ev-map__icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tab-color);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity .1s, background .1s, color .1s;
+}
+
+.ev-map__card:hover .ev-map__icon-btn,
+.ev-map__card--trigger:hover .ev-map__icon-btn,
+.ev-map__step:hover .ev-map__icon-btn--step {
+  opacity: 0.7;
+}
+
+.ev-map__icon-btn:hover {
+  opacity: 1 !important;
+  background: var(--app-bg);
+  color: var(--tab-color-hover);
+}
+
+.ev-map__steps {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.ev-map__step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+}
+
+.ev-map__step-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sep-strong);
+}
+
+.ev-map__step-dot--success {
+  background: var(--color-git-add);
+}
+
+.ev-map__step-dot--failure {
+  background: var(--color-git-remove);
+}
+
+.ev-map__step-dot--running {
+  background: var(--color-warning);
+}
+
+.ev-map__step-dot--skipped {
+  background: var(--sep-strong);
+  opacity: 0.5;
+}
+
+.ev-map__step-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--tab-color-hover);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-map__add-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tab-color);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity .1s, color .1s;
+}
+
+.ev-map__add-step:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.ev-map__card-meta {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--tab-color);
+  opacity: 0.5;
+}
+
+.ev-map__card-far {
+  font-size: 10px;
+  color: var(--tab-color);
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.ev-map__card-result {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.ev-map__chip {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.ev-map__chip--pass {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--color-git-add);
+}
+
+.ev-map__chip--fail {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--color-git-remove);
+}
+
+.ev-map__chip--running {
+  background: var(--app-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--sep);
+}
+
+.ev-map__chip--idle {
+  background: transparent;
+  color: var(--tab-color);
+  opacity: 0.45;
+  border: 1px solid var(--sep);
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+.wf-history {
+  @extend %wf-scroll;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.wf-history__item {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--sep);
+  background: var(--surface-raised);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.wf-history__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s;
+}
+
+.wf-history__row:hover {
+  background: var(--app-bg);
+}
+
+.wf-history__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wf-history__status--success {
+  color: var(--color-git-add);
+}
+
+.wf-history__status--failure {
+  color: var(--color-git-remove);
+}
+
+.wf-history__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tab-color-hover);
+}
+
+.wf-history__time {
+  flex: 1;
+  font-size: 12px;
+  color: var(--tab-color);
+  opacity: 0.6;
+}
+
+.wf-history__chevron {
+  display: flex;
+  transition: transform .15s;
+}
+
+.wf-history__chevron--open {
+  transform: rotate(90deg);
+}
+
+.wf-history__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.wf-history__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

@@ -7,6 +7,34 @@ import {
 } from '../themes'
 import './ThemeEditor.scss'
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+const IconCheck = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconX = () => (
+  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+  </svg>
+)
+
+const IconChevron = ({ expanded }: { expanded: boolean }) => (
+  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden
+    style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform var(--t-fast)' }}>
+    <path d="M3 1.5L7 5L3 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+const IconPencil = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+    <path d="M9.5 1.5L12.5 4.5L4.5 12.5H1.5V9.5L9.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M8 3L11 6" stroke="currentColor" strokeWidth="1.3"/>
+  </svg>
+)
+
 interface Props {
   /** The active theme key stored in config ('dark', 'custom', etc.) */
   currentTheme: string
@@ -102,7 +130,7 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href     = url
-    a.download = 'terminal-ide-theme.json'
+    a.download = 'binder-theme.json'
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -129,15 +157,15 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
   const toggleSection = (id: string) =>
     setExpanded(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
 
   // ── save button label ────────────────────────────────────────────────────────
-  const saveLabel =
-    saving            ? 'Saving…'        :
-    saveMsg === 'saved' ? '✓ Saved'       :
-    saveMsg === 'error' ? '✕ Error'       :
+  const saveLabel: React.ReactNode =
+    saving              ? 'Saving…' :
+    saveMsg === 'saved' ? <><IconCheck /> Saved</> :
+    saveMsg === 'error' ? <><IconX /> Error</> :
     'Save Custom Theme'
 
   // ── render ───────────────────────────────────────────────────────────────────
@@ -172,7 +200,7 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
         {/* Preset cards */}
         <div className="te-section">
           <button className="te-section-head" onClick={() => toggleSection('presets')}>
-            <span className="te-chevron">{expanded.has('presets') ? '▾' : '▸'}</span>
+            <span className="te-chevron"><IconChevron expanded={expanded.has('presets')} /></span>
             <span className="te-section-label">Preset Themes</span>
           </button>
 
@@ -215,7 +243,7 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
               {/* Custom indicator — not clickable, just shows state */}
               <div className={`te-preset-card te-preset-card--custom${activePreset === 'custom' ? ' is-active' : ''}`}>
                 <div className="te-preset-thumb te-preset-thumb--custom">
-                  <span>✎</span>
+                  <IconPencil />
                 </div>
                 <span className="te-preset-name">custom</span>
               </div>
@@ -230,7 +258,7 @@ export default function ThemeEditor({ currentTheme, savedColors, onApply, onSave
               className="te-section-head"
               onClick={() => toggleSection(section.id)}
             >
-              <span className="te-chevron">{expanded.has(section.id) ? '▾' : '▸'}</span>
+              <span className="te-chevron"><IconChevron expanded={expanded.has(section.id)} /></span>
               <span className="te-section-label">{section.label}</span>
               <span className="te-section-count">{section.items.length} colors</span>
             </button>

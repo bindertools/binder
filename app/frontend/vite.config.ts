@@ -1,17 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
-  define: {
-    // Replaced at build time; Rollup tree-shakes dead branches.
-    // Set VITE_PLUGINS=true when building the plugins variant.
-    __PLUGINS__: process.env.VITE_PLUGINS === 'true',
-  },
+  plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
-      '@cmdide/plugin-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
+      '@binder/app-sdk': path.resolve(__dirname, '../../packages/plugin-sdk'),
+      // App packages live outside this project root (../../packages/<id>), so
+      // bare npm imports there can fail to resolve up through node_modules.
+      // Pin the shared deps they use to this project's copies explicitly.
+      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      'react': path.resolve(__dirname, 'node_modules/react'),
+      'lucide-react': path.resolve(__dirname, 'node_modules/lucide-react'),
     },
   },
   server: {
@@ -21,13 +23,6 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'monaco-editor': ['monaco-editor'],
-        },
-      },
-    },
     chunkSizeWarningLimit: 5000,
   },
 })

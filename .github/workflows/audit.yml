@@ -1,0 +1,356 @@
+name: Dependency & Secret Audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly full scan — Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write  # for uploading SARIF results
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── npm audit — app frontend ──────────────────────────────────────────────────
+  npm-audit-app:
+    name: npm audit — app/frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: Run npm audit
+        # Fail only on high or critical vulnerabilities
+        run: npm audit --audit-level=high
+        working-directory: app/frontend
+
+  # ── Auto-fix — npm audit (app frontend) ──────────────────────────────────────
+  # When npm audit fails on a PR, run `npm audit fix`, commit any resulting
+  # lockfile changes straight to the PR's branch, and leave a comment
+  # summarizing what changed.
+  npm-audit-app-autofix:
+    name: Auto-fix — npm audit (app/frontend)
+    needs: npm-audit-app
+    if: >-
+      always() &&
+      needs.npm-audit-app.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      - name: npm audit fix
+        run: npm audit fix --force
+        working-directory: app/frontend
+        continue-on-error: true
+
+      - name: Verify build
+        id: build
+        run: npm run build
+        working-directory: app/frontend
+        continue-on-error: true
+
+      - name: Commit fixes
+        id: commit
+        run: |
+          if git diff --quiet -- app/frontend/package-lock.json app/frontend/package.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "build_failed=true" >> "$GITHUB_OUTPUT"
+            git diff -- app/frontend/package-lock.json app/frontend/package.json > /tmp/audit-app-diff.patch
+            git checkout -- app/frontend/package-lock.json app/frontend/package.json
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git diff -- app/frontend/package-lock.json app/frontend/package.json > /tmp/audit-app-diff.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/frontend/package-lock.json app/frontend/package.json
+          git commit -m "fix(deps): npm audit fix for app/frontend"
+          for i in 1 2 3 4 5; do
+            git push origin HEAD:${{ github.event.pull_request.head.ref }} && break
+            echo "Push rejected, rebasing onto latest remote ref (attempt $i)..."
+            git fetch origin ${{ github.event.pull_request.head.ref }}
+            git rebase origin/${{ github.event.pull_request.head.ref }}
+            sleep $((i * 3))
+          done
+
+      - name: Comment on PR
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-app-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const body =
+              `## 📦 Auto-fixed npm audit issues — app/frontend\n\n` +
+              "The `npm audit — app/frontend` check failed, so `npm audit fix --force` was run " +
+              "(this may include major-version upgrades), the build was verified, and the " +
+              "result committed directly to this branch:\n\n" +
+              "```diff\n" + diff + "\n```\n\n" +
+              "Please double-check anything that depends on the upgraded package(s) still behaves as expected.";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+      - name: Comment on PR (build failed)
+        if: steps.commit.outputs.build_failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-app-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const body =
+              `## ⚠️ npm audit fix for app/frontend needs manual attention\n\n` +
+              "The `npm audit — app/frontend` check failed, so `npm audit fix --force` was run, " +
+              "but the resulting build failed, so no changes were committed. The fix likely " +
+              "requires manual code changes to work with the upgraded package(s):\n\n" +
+              "```diff\n" + diff + "\n```";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+  # ── npm audit — setup frontend ───────────────────────────────────────────────
+  npm-audit-setup:
+    name: npm audit — setup/frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: setup/windows/frontend
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        working-directory: setup/windows/frontend
+
+  # ── Auto-fix — npm audit (setup frontend) ────────────────────────────────────
+  npm-audit-setup-autofix:
+    name: Auto-fix — npm audit (setup/frontend)
+    needs: npm-audit-setup
+    if: >-
+      always() &&
+      needs.npm-audit-setup.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: setup/windows/frontend
+
+      - name: npm audit fix
+        run: npm audit fix --force
+        working-directory: setup/windows/frontend
+        continue-on-error: true
+
+      - name: Verify build
+        id: build
+        run: npm run build
+        working-directory: setup/windows/frontend
+        continue-on-error: true
+
+      - name: Commit fixes
+        id: commit
+        run: |
+          if git diff --quiet -- setup/windows/frontend/package-lock.json setup/windows/frontend/package.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ steps.build.outcome }}" != "success" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "build_failed=true" >> "$GITHUB_OUTPUT"
+            git diff -- setup/windows/frontend/package-lock.json setup/windows/frontend/package.json > /tmp/audit-setup-diff.patch
+            git checkout -- setup/windows/frontend/package-lock.json setup/windows/frontend/package.json
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          git diff -- setup/windows/frontend/package-lock.json setup/windows/frontend/package.json > /tmp/audit-setup-diff.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add setup/windows/frontend/package-lock.json setup/windows/frontend/package.json
+          git commit -m "fix(deps): npm audit fix for setup/frontend"
+          for i in 1 2 3 4 5; do
+            git push origin HEAD:${{ github.event.pull_request.head.ref }} && break
+            echo "Push rejected, rebasing onto latest remote ref (attempt $i)..."
+            git fetch origin ${{ github.event.pull_request.head.ref }}
+            git rebase origin/${{ github.event.pull_request.head.ref }}
+            sleep $((i * 3))
+          done
+
+      - name: Comment on PR
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-setup-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const body =
+              `## 📦 Auto-fixed npm audit issues — setup/frontend\n\n` +
+              "The `npm audit — setup/frontend` check failed, so `npm audit fix --force` was run " +
+              "(this may include major-version upgrades), the build was verified, and the " +
+              "result committed directly to this branch:\n\n" +
+              "```diff\n" + diff + "\n```\n\n" +
+              "Please double-check anything that depends on the upgraded package(s) still behaves as expected.";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+      - name: Comment on PR (build failed)
+        if: steps.commit.outputs.build_failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let diff = fs.readFileSync('/tmp/audit-setup-diff.patch', 'utf8');
+            const limit = 50000;
+            if (diff.length > limit) {
+              diff = diff.slice(0, limit) + '\n... (diff truncated)';
+            }
+
+            const body =
+              `## ⚠️ npm audit fix for setup/frontend needs manual attention\n\n` +
+              "The `npm audit — setup/frontend` check failed, so `npm audit fix --force` was run, " +
+              "but the resulting build failed, so no changes were committed. The fix likely " +
+              "requires manual code changes to work with the upgraded package(s):\n\n" +
+              "```diff\n" + diff + "\n```";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+  # ── Secret / credential scanning ─────────────────────────────────────────────
+  gitleaks:
+    name: Secret scan — Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can scan all commits in a PR
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.21.2"
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Scan full repository history
+        run: gitleaks detect --source . --exit-code 1 --redact
+
+      - name: Scan commits introduced by this run
+        if: github.event_name == 'pull_request'
+        run: |
+          gitleaks detect \
+            --source . \
+            --log-opts "origin/${{ github.base_ref }}..HEAD" \
+            --exit-code 1 \
+            --redact
+
+  # ── OSV vulnerability scan (cross-ecosystem) ──────────────────────────────────
+  # Uses the reusable workflow format required by osv-scanner-action v2+
+  osv-scan:
+    name: OSV — cross-ecosystem vulnerability scan
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
+    with:
+      scan-args: |-
+        --recursive
+        --skip-git
+    permissions:
+      security-events: write
+      contents: read
+      actions: read

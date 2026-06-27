@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { SearchResult } from '../types'
-import { SearchFiles } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import './SearchBar.scss'
 
 interface Props {
@@ -18,7 +18,7 @@ export default function SearchBar({ activeTerminalId, onOpenFile }: Props) {
 
   const search = useCallback((q: string) => {
     if (!q || !activeTerminalId) { setResults([]); return }
-    SearchFiles(activeTerminalId, q)
+    invoke<SearchResult[]>('search.files', { path: activeTerminalId, query: q })
       .then(r => { setResults(r ?? []); setSelectedIdx(0) })
       .catch(() => {})
   }, [activeTerminalId])

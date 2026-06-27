@@ -1,0 +1,105 @@
+version: "2"
+
+linters:
+  default: standard   # includes errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose       # HTTP response body must be closed
+    - contextcheck    # context passed correctly through call chains
+    - dupl            # duplicate code blocks
+    - exhaustive      # switch exhaustiveness for enumerated types
+    - goconst         # repeated string literals that could be constants
+    - gocritic        # opinionated style and correctness checks
+    - gocyclo         # cyclomatic complexity
+    - godot           # comment sentences end with a period
+    - gofmt           # standard formatting (belt-and-suspenders alongside CI gofmt check)
+    - gosec           # security-sensitive patterns
+    - misspell        # spelling errors in identifiers, comments, and string literals
+    - noctx           # HTTP requests without context
+    - nolintlint      # validates //nolint directives are specific and accurate
+    - prealloc        # slice pre-allocation opportunities
+    - revive          # modern, configurable golint successor
+    - unconvert       # unnecessary type conversions
+    - unparam         # function parameters that always receive the same value
+    - whitespace      # unnecessary leading/trailing blank lines in blocks
+
+linters-settings:
+  gocyclo:
+    min-complexity: 20   # generous threshold — flag only truly complex functions
+
+  dupl:
+    threshold: 150       # only flag large identical blocks
+
+  goconst:
+    min-len: 4
+    min-occurrences: 4
+
+  gosec:
+    excludes:
+      # G104: errors unhandled — tracked separately by errcheck; we use _ = explicitly
+      - G104
+      # G304: file inclusion via variable — intentional in our file-server code
+      - G304
+      # G306: file permissions — os.WriteFile(path, data, 0644) is correct for config
+      - G306
+
+  gocritic:
+    disabled-checks:
+      - commentFormatting     # not enforced in this codebase
+      - singleCaseSwitch      # pattern used intentionally in some build-tag files
+
+  godot:
+    # Only require periods on package-level doc comments; inline comments are fine
+    scope: toplevel
+    exclude:
+      - "^TODO"
+      - "^FIXME"
+      - "^nolint"
+
+  misspell:
+    locale: US
+
+  nolintlint:
+    require-explanation: false    # explanations encouraged but not mandatory
+    require-specific: true        # //nolint must name the specific linter(s)
+    allow-unused: false
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true            # doc comments on all exported symbols is too noisy
+      - name: var-naming
+        disabled: false
+      - name: unused-parameter
+        disabled: true            # covered by unparam
+
+  unparam:
+    check-exported: false         # exported API params intentionally kept for future use
+
+issues:
+  exclude-rules:
+    # Test files: relax security and error-handling rules
+    - path: "_test\\.go"
+      linters: [gosec, errcheck, dupl]
+
+    # Platform-specific stubs only implement interface shapes; bodies are intentionally empty
+    - path: "terminal_interrupt_(windows|other)\\.go"
+      linters: [revive]
+
+    # Wails-generated bindings are not hand-maintained
+    - path: "wailsjs/"
+      linters: [revive, godot, gocritic]
+
+    # Ignore SA1019 (deprecated) — handled separately when upgrading deps
+    - linters: [staticcheck]
+      text: "SA1019"
+
+    # Ignore duplicate code in platform-specific files (same logic, different OS calls)
+    - path: "_windows\\.go|_other\\.go"
+      linters: [dupl]
+
+  # Max issues to report per linter (0 = unlimited)
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Show all issues, not just new ones
+  new: false

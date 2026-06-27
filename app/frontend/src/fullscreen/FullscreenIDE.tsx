@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import MonacoEditor from '@monaco-editor/react'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { ExplorerOpen, ExplorerGetFile, ExplorerSaveFile, ExecSilent, ReadFile, WriteFile } from '../../wailsjs/go/main/App'
-import { isInstalled } from '../plugins'
+import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { invoke, on, offAll, b64ToText, textToB64 } from '../lib/ipc'
 import FileExplorer, { FileNode } from './FileExplorer'
+import StructureView from './StructureView'
 import IDETabBar, { OpenFile } from './IDETabBar'
 import MenuBar from './MenuBar'
-import type { AppTheme } from '../themes'
+import GpuEditor, { type GpuEditorHandle } from '../components/GpuEditor'
+import { themeToGpuColors, type AppTheme } from '../themes'
 import './fullscreen.scss'
 
 // All git logic lives here in the frontend — the app has no git-specific code.
@@ -14,12 +14,12 @@ import './fullscreen.scss'
 
 async function fetchGitStatusMap(cwd: string): Promise<Record<string, string>> {
   try {
-    const root = (await ExecSilent(cwd, 'git', ['-C', cwd, 'rev-parse', '--show-toplevel'])).trim().replace(/\\/g, '/')
+    const root = (await invoke<string>('shell.exec', { cmd: 'git', dir: cwd, args: ['-C', cwd, 'rev-parse', '--show-toplevel'] })).trim().replace(/\\/g, '/')
     if (!root) return {}
 
     const [porcelain, gitmodulesRaw] = await Promise.all([
-      ExecSilent(cwd, 'git', ['-C', cwd, 'status', '--porcelain=v1', '--ignored']),
-      ReadFile(root + '/.gitmodules').catch(() => ''),
+      invoke<string>('shell.exec', { cmd: 'git', dir: cwd, args: ['-C', cwd, 'status', '--porcelain=v1', '--ignored'] }),
+      invoke<{ content: string }>('fs.readfile', { path: root + '/.gitmodules' }).then(r => b64ToText(r.content)).catch(() => ''),
     ])
 
     // Parse submodule paths from .gitmodules
@@ -90,13 +90,24 @@ interface Props {
   minimap: boolean
   wordWrap: boolean
   defaultZoom: number
+  openFileRequest?: { path: string; token: number; line?: number }
 }
 
-export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordWrap, defaultZoom }: Props) {
+interface PaneStatus {
+  line: number
+  col: number
+  totalLines: number
+  eol: 'LF' | 'CRLF'
+}
+
+const INITIAL_PANE_STATUS: PaneStatus = { line: 1, col: 1, totalLines: 0, eol: 'LF' }
+
+export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defaultZoom, openFileRequest }: Props) {
   // ── file state ───────────────────────────────────────────────────────────────
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
   const [rightActive,setRightActive]= useState<string | null>(null)
+  const [pendingGotoLine, setPendingGotoLine] = useState<{ path: string; line: number; token: number } | null>(null)
 
   // ── panel / layout state ─────────────────────────────────────────────────────
   const [focusedPanel, setFocusedPanel] = useState<'left' | 'right'>('left')
@@ -104,11 +115,13 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const [splitRatio,   setSplitRatio]   = useState(0.5)
 
   // ── explorer state ────────────────────────────────────────────────────────────
-  const [tree,          setTree]          = useState<FileNode | null>(null)
   const [gitStatusMap,  setGitStatusMap]  = useState<Record<string, string>>({})
-  const [explorerW,   setExplorerW]   = useState(220)
+  const [explorerW,   setExplorerW]   = useState(285)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
   const [collapsed,   setCollapsed]   = useState(false)
+  const [explorerOpen,  setExplorerOpen]  = useState(true)
+  const [structureOpen, setStructureOpen] = useState(false)
+  const [structureH,    setStructureH]    = useState(200)
 
   // ── tab multi-select ─────────────────────────────────────────────────────────
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
@@ -116,98 +129,146 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── drag-and-drop ─────────────────────────────────────────────────────────────
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
 
-  // ── status bar ───────────────────────────────────────────────────────────────
-  const [statusLine, setStatusLine] = useState({ line: 1, col: 1 })
-  const [lineEnding, setLineEnding] = useState<'CRLF' | 'LF'>('LF')
-  const [tabSize,    setTabSize]    = useState(2)
-  const [totalLines, setTotalLines] = useState(0)
+  // ── status bar (per-panel — each GpuEditor reports its own state) ─────────────
+  const [leftStatus,  setLeftStatus]  = useState<PaneStatus>(INITIAL_PANE_STATUS)
+  const [rightStatus, setRightStatus] = useState<PaneStatus>(INITIAL_PANE_STATUS)
   const [fontSize,   setFontSize]   = useState(() => Math.round(13 * defaultZoom))
 
+  // Minimap visibility — initialised from the settings-driven `minimap` prop,
+  // but independently toggleable via View > Minimap.
+  const [minimapEnabled, setMinimapEnabled] = useState(minimap)
+  useEffect(() => { setMinimapEnabled(minimap) }, [minimap])
+
   // ── editor refs ───────────────────────────────────────────────────────────────
-  const leftEditorRef  = useRef<any>(null)
-  const leftMonacoRef  = useRef<any>(null)
-  const rightEditorRef = useRef<any>(null)
-  const rightMonacoRef = useRef<any>(null)
+  const leftEditorRef  = useRef<GpuEditorHandle>(null)
+  const rightEditorRef = useRef<GpuEditorHandle>(null)
 
   // ── stable refs (avoid stale closures in memoised callbacks) ─────────────────
   const leftActiveRef   = useRef<string | null>(null)
   const rightActiveRef  = useRef<string | null>(null)
   const focusedPanelRef = useRef<'left' | 'right'>('left')
   const splitModeRef    = useRef(false)
+  const openFilesRef    = useRef<OpenFile[]>([])
 
   useEffect(() => { leftActiveRef.current   = leftActive    }, [leftActive])
   useEffect(() => { rightActiveRef.current  = rightActive   }, [rightActive])
   useEffect(() => { focusedPanelRef.current = focusedPanel  }, [focusedPanel])
   useEffect(() => { splitModeRef.current    = splitMode     }, [splitMode])
+  useEffect(() => { openFilesRef.current    = openFiles     }, [openFiles])
 
   // ── divider drag ref ──────────────────────────────────────────────────────────
-  const draggingExplorer = useRef(false)
-  const draggingSplit    = useRef(false)
-  const containerRef     = useRef<HTMLDivElement>(null)
+  const draggingExplorer  = useRef(false)
+  const draggingSplit     = useRef(false)
+  const draggingStructure = useRef(false)
+  const containerRef      = useRef<HTMLDivElement>(null)
 
   // ── derived ───────────────────────────────────────────────────────────────────
   const activeFile    = focusedPanel === 'left' ? leftActive : rightActive
   const activeFileObj = openFiles.find(f => f.path === activeFile)
+  const activeStatus  = focusedPanel === 'left' ? leftStatus : rightStatus
+
+  // ── GPU editor colors derived from the active theme ──────────────────────────
+  const gpuColors = useMemo(() => themeToGpuColors(theme), [theme])
 
   // ── theme CSS vars ────────────────────────────────────────────────────────────
-  const themeVars = useMemo((): React.CSSProperties => {
-    const mc = theme.monacoThemeDef?.colors ?? {}
-    const editorBg  = mc['editor.background']       ?? theme.appBg
-    const accent    = mc['editorCursor.foreground']  ?? '#51afef'
-    const selection = (mc['editor.selectionBackground'] ?? '#2257a0').slice(0, 7)
-    return {
-      '--ide-bg':        theme.appBg,
-      '--ide-bg-alt':    theme.infoBarBg,
-      '--ide-bg-hi':     theme.infoBarHoverBg,
-      '--ide-border':    theme.borderColor,
-      '--ide-border-lo': theme.tabAddBorder,
-      '--ide-text-lo':   theme.infoBarColor,
-      '--ide-text-mid':  theme.tabColor,
-      '--ide-text-hi':   theme.tabColorHover,
-      '--ide-fg':        theme.infoBarHoverColor,
-      '--ide-accent':    accent,
-      '--ide-select':    selection,
-      '--ide-editor-bg': editorBg,
-    } as React.CSSProperties
-  }, [theme])
+  const themeVars = useMemo((): React.CSSProperties => ({
+    '--ide-bg':        theme.appBg,
+    '--ide-bg-alt':    theme.infoBarBg,
+    '--ide-bg-hi':     theme.infoBarHoverBg,
+    '--ide-border':    theme.borderColor,
+    '--ide-border-lo': theme.tabAddBorder,
+    '--ide-text-lo':   theme.infoBarColor,
+    '--ide-text-mid':  theme.tabColor,
+    '--ide-text-hi':   theme.tabColorHover,
+    '--ide-fg':        theme.infoBarHoverColor,
+    '--ide-accent':    gpuColors.cursor,
+    '--ide-select':    gpuColors.selection.slice(0, 7),
+    '--ide-editor-bg': gpuColors.bg,
+  } as React.CSSProperties), [theme, gpuColors])
 
-  // ── zoom / option sync ────────────────────────────────────────────────────────
+  // ── zoom sync ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const next = Math.round(13 * defaultZoom)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
+    setFontSize(Math.round(13 * defaultZoom))
   }, [defaultZoom])
 
-  useEffect(() => {
-    const opts = {
-      minimap: { enabled: minimap },
-      wordWrap: wordWrap ? 'on' : 'off',
-      guides: {
-        indentation: indentGuides,
-        bracketPairs: indentGuides,
-        bracketPairsHorizontal: indentGuides,
-        highlightActiveIndentation: indentGuides,
-      },
-    }
-    leftEditorRef.current?.updateOptions(opts)
-    rightEditorRef.current?.updateOptions(opts)
-  }, [minimap, wordWrap, indentGuides])
-
   // ── tree loading ──────────────────────────────────────────────────────────────
-  const loadTree = useCallback(async () => {
-    if (!cwd) return
-    // Render the tree immediately — never block on git status
-    setTree(await ExplorerOpen(cwd) as FileNode)
-    // Fetch git badges in the background; they paint in once ready
-    if (isInstalled('git')) fetchGitStatusMap(cwd).then(setGitStatusMap)
+  // The explorer loads its own directory contents lazily (see `loadDir` below);
+  // here we only need a root node (name + path) and the git status overlay.
+  const treeRoot = useMemo<FileNode | null>(() => {
+    if (!cwd) return null
+    const path = cwd.replace(/\\/g, '/').replace(/\/$/, '')
+    const parts = path.split('/').filter(Boolean)
+    return { name: parts[parts.length - 1] ?? path, path, isDir: true, ext: '' }
   }, [cwd])
 
-  useEffect(() => { loadTree() }, [loadTree])
+  const refreshGitStatus = useCallback(() => {
+    if (!cwd) return
+    void fetchGitStatusMap(cwd).then(setGitStatusMap)
+  }, [cwd])
 
+  useEffect(() => { refreshGitStatus() }, [refreshGitStatus])
+
+  // (Re)start the native recursive file watcher whenever cwd changes, and
+  // stop it on unmount. The watcher emits 'fs:changed' below.
   useEffect(() => {
-    EventsOn('fullscreen:tree', (node: FileNode) => setTree(node))
-    return () => EventsOff('fullscreen:tree')
+    if (!cwd) return
+    void invoke('fs.watch', { path: cwd })
+    return () => { void invoke('fs.unwatch') }
+  }, [cwd])
+
+  // External filesystem changes (from the native watcher) — debounce a git
+  // status refresh. Per-directory explorer cache invalidation is handled by
+  // FileExplorer itself (it owns dirCache).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsub = on('fs:changed', (payload: unknown) => {
+      const dirs = (payload as { dirs?: string[] })?.dirs ?? []
+      // Git commands write to .git/ — skip those changes to avoid a feedback
+      // loop where running git status triggers another git status indefinitely.
+      if (dirs.length > 0 && dirs.every(d => /[/\\]\.git([/\\]|$)/.test(d))) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(refreshGitStatus, 300)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsub()
+    }
+  }, [refreshGitStatus])
+
+  // Fetch and convert one directory's children for the lazy explorer.
+  const loadDir = useCallback(async (path: string): Promise<FileNode[]> => {
+    const { entries } = await invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path })
+    return entries.map(e => {
+      const dot = !e.isDir ? e.name.lastIndexOf('.') : -1
+      const ext = dot > 0 ? e.name.slice(dot + 1) : ''
+      return { name: e.name, path: `${path}/${e.name}`, isDir: e.isDir, ext }
+    })
+  }, [])
+
+  // Live-reload open file content when the file changes on disk externally.
+  // Dirty files (user has unsaved edits) are intentionally skipped so we
+  // never silently overwrite work in progress.
+  useEffect(() => {
+    on('fullscreen:file-changed', (raw: unknown) => {
+      const changedPath = raw as string
+      const file = openFilesRef.current.find(f => f.path === changedPath)
+      if (!file || file.dirty) return
+      invoke<{ content: string }>('fs.readfile', { path: changedPath })
+        .then(r => b64ToText(r.content))
+        .then(content => {
+          setOpenFiles(prev => prev.map(f =>
+            f.path === changedPath && !f.dirty ? { ...f, content } : f
+          ))
+        })
+        .catch(() => {})
+    })
+    return () => offAll('fullscreen:file-changed')
+  }, [])
+
+  // ── switch active file in a panel ──────────────────────────────────────────
+  const switchActiveFile = useCallback((panel: 'left' | 'right', path: string | null) => {
+    if (panel === 'left') setLeftActive(path)
+    else setRightActive(path)
   }, [])
 
   // ── open file (with preview-replacement logic) ────────────────────────────────
@@ -217,15 +278,14 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     // Already open: just activate it in its panel
     const already = openFiles.find(f => f.path === node.path)
     if (already) {
-      if (already.panel === 'left') setLeftActive(node.path)
-      else setRightActive(node.path)
+      switchActiveFile(already.panel, node.path)
       setFocusedPanel(already.panel)
       setSelectedPaths(new Set())
       return
     }
 
     try {
-      const content = await ExplorerGetFile(node.path)
+      const content = b64ToText((await invoke<{ content: string }>('fs.readfile', { path: node.path })).content)
       const panel = targetPanel ?? focusedPanelRef.current
       const panelActive = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
       const newFile: OpenFile = {
@@ -241,13 +301,25 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         return [...prev, newFile]
       })
 
-      if (panel === 'left') setLeftActive(node.path)
-      else setRightActive(node.path)
+      switchActiveFile(panel, node.path)
       setFocusedPanel(panel)
       setSelectedPaths(new Set())
     } catch { /* permission error */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openFiles])
+
+  }, [openFiles, switchActiveFile])
+
+  // ── open a file requested from outside (e.g. Workflows "Edit Workflow") ───────
+  const lastOpenRequestRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!openFileRequest || openFileRequest.token === lastOpenRequestRef.current) return
+    lastOpenRequestRef.current = openFileRequest.token
+    const path = openFileRequest.path.replace(/\\/g, '/')
+    const name = path.split('/').pop() ?? path
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot + 1) : ''
+    if (openFileRequest.line != null) setPendingGotoLine({ path, line: openFileRequest.line, token: openFileRequest.token })
+    void openFile({ name, path, isDir: false, ext })
+  }, [openFileRequest, openFile])
 
   // ── close files ───────────────────────────────────────────────────────────────
   const closeFiles = useCallback((paths: string[]) => {
@@ -277,17 +349,50 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     })
   }, [])
 
+  // Auto-close tabs for files removed from disk, detected via the native file
+  // watcher's 'fs:changed' dir-change events (re-list each affected directory
+  // and drop any open file no longer present).
+  useEffect(() => {
+    const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+    const unsub = on('fs:changed', (payload: unknown) => {
+      const dirs = (payload as { dirs?: string[] })?.dirs ?? []
+      if (dirs.length === 0) return
+      const dirSet = new Set(dirs.map(norm))
+      const byDir = new Map<string, OpenFile[]>()
+      for (const f of openFilesRef.current) {
+        const slash = f.path.lastIndexOf('/')
+        const dir = slash === -1 ? '' : f.path.slice(0, slash)
+        if (!dirSet.has(norm(dir))) continue
+        const list = byDir.get(dir) ?? []
+        list.push(f)
+        byDir.set(dir, list)
+      }
+      if (byDir.size === 0) return
+
+      void Promise.all([...byDir.entries()].map(async ([dir, files]) => {
+        try {
+          const { entries } = await invoke<{ entries: { name: string; isDir: boolean; size: number; mtime: number }[] }>('fs.readdir', { path: dir })
+          const names = new Set(entries.map(e => e.name.toLowerCase()))
+          return files.filter(f => !names.has(f.path.slice(f.path.lastIndexOf('/') + 1).toLowerCase()))
+        } catch { return [] }
+      })).then(groups => {
+        const toClose = groups.flat().map(f => f.path)
+        if (toClose.length) closeFiles(toClose)
+      })
+    })
+    return unsub
+  }, [closeFiles])
+
   // ── move to panel ─────────────────────────────────────────────────────────────
   const moveToPanel = useCallback((paths: string[], target: 'left' | 'right') => {
     setOpenFiles(prev => prev.map(f =>
       paths.includes(f.path) ? { ...f, panel: target, pinned: true } : f
     ))
     setSplitMode(true)
-    if (target === 'right') setRightActive(paths[0])
-    else setLeftActive(paths[0])
+    switchActiveFile(target, paths[0])
     setFocusedPanel(target)
     setSelectedPaths(new Set())
-  }, [])
+  }, [switchActiveFile])
 
   // ── tab multi-select ──────────────────────────────────────────────────────────
   const handleSelectTab = useCallback((path: string, e: React.MouseEvent) => {
@@ -306,22 +411,21 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     } else {
       setSelectedPaths(prev => {
         const next = new Set(prev)
-        next.has(path) ? next.delete(path) : next.add(path)
+        if (next.has(path)) { next.delete(path) } else { next.add(path) }
         return next
       })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [openFiles, selectedPaths])
 
   // ── activate tab ─────────────────────────────────────────────────────────────
   const activateFile = useCallback((path: string) => {
     const file = openFiles.find(f => f.path === path)
     if (!file) return
-    if (file.panel === 'left') setLeftActive(path)
-    else setRightActive(path)
+    switchActiveFile(file.panel, path)
     setFocusedPanel(file.panel)
     setSelectedPaths(new Set())
-  }, [openFiles])
+  }, [openFiles, switchActiveFile])
 
   // ── drag-and-drop between panels ─────────────────────────────────────────────
   const onTabDragStart = useCallback((e: React.DragEvent, path: string) => {
@@ -343,100 +447,17 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── save ─────────────────────────────────────────────────────────────────────
   const saveFile = useCallback(async () => {
     const panel = focusedPanelRef.current
-    const path  = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
-    if (!path) return
-    const editor = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
-    if (!editor) return
-    await ExplorerSaveFile(path, editor.getValue())
-    setOpenFiles(prev => prev.map(f => f.path === path ? { ...f, dirty: false } : f))
+    const ref = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
+    await ref?.save()
   }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void saveFile() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [saveFile])
-
-  // ── editor change ─────────────────────────────────────────────────────────────
-  const leftOnChange = useCallback((value: string | undefined) => {
-    if (value === undefined) return
-    const path = leftActiveRef.current
-    if (!path) return
-    setOpenFiles(prev => prev.map(f =>
-      f.path === path ? { ...f, content: value, dirty: true, pinned: true } : f
-    ))
-  }, [])
-
-  const rightOnChange = useCallback((value: string | undefined) => {
-    if (value === undefined) return
-    const path = rightActiveRef.current
-    if (!path) return
-    setOpenFiles(prev => prev.map(f =>
-      f.path === path ? { ...f, content: value, dirty: true, pinned: true } : f
-    ))
-  }, [])
-
-  // ── editor mount factory ──────────────────────────────────────────────────────
-  const setupEditor = (editor: any, monaco: any, panel: 'left' | 'right') => {
-    editor.onDidFocusEditorText(() => {
-      setFocusedPanel(panel)
-      focusedPanelRef.current = panel
-    })
-
-    editor.onDidChangeCursorPosition((e: any) => {
-      setStatusLine({ line: e.position.lineNumber, col: e.position.column })
-    })
-
-    const syncModel = () => {
-      const model = editor.getModel()
-      if (!model) return
-      setLineEnding(model.getEOL() === '\r\n' ? 'CRLF' : 'LF')
-      setTotalLines(model.getLineCount())
-      setTabSize(editor.getOption(monaco.editor.EditorOption.tabSize))
-    }
-    syncModel()
-    editor.onDidChangeModel(syncModel)
-    editor.onDidChangeModelContent(() => {
-      setTotalLines(editor.getModel()?.getLineCount() ?? 0)
-    })
-
-    // Ctrl+S — onKeyDown fires before Monaco's keybinding service so it cannot be swallowed
-    editor.onKeyDown((e: any) => {
-      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.KeyS) {
-        e.preventDefault()
-        e.stopPropagation()
-        saveFile()
-      }
-    })
-
-    const dom = editor.getDomNode()
-    if (dom) {
-      dom.addEventListener('wheel', (e: WheelEvent) => {
-        if (!e.ctrlKey) return
-        e.preventDefault()
-        const cur  = editor.getOption(monaco.editor.EditorOption.fontSize)
-        const next = e.deltaY < 0 ? Math.min(cur + 1, 36) : Math.max(cur - 1, 8)
-        setFontSize(next)
-        editor.updateOptions({ fontSize: next })
-      }, { passive: false })
-    }
-  }
-
-  const onLeftMount = useCallback((editor: any, monaco: any) => {
-    leftEditorRef.current  = editor
-    leftMonacoRef.current  = monaco
-    setupEditor(editor, monaco, 'left')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const onRightMount = useCallback((editor: any, monaco: any) => {
-    rightEditorRef.current  = editor
-    rightMonacoRef.current  = monaco
-    setupEditor(editor, monaco, 'right')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── explorer resize ───────────────────────────────────────────────────────────
   const onExplorerDividerDown = useCallback((e: React.MouseEvent) => {
@@ -481,44 +502,40 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     document.addEventListener('mouseup', onUp)
   }, [explorerW, explorerPos, collapsed])
 
-  // ── Monaco options object (shared across both editors) ────────────────────────
-  const monacoOptions = useMemo(() => ({
-    fontSize,
-    fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace",
-    fontLigatures: true,
-    minimap: { enabled: minimap },
-    scrollBeyondLastLine: false,
-    lineNumbers: 'on' as const,
-    renderLineHighlight: 'line' as const,
-    wordWrap: (wordWrap ? 'on' : 'off') as 'on' | 'off',
-    tabSize: 2,
-    padding: { top: 8 },
-    smoothScrolling: true,
-    folding: true,
-    bracketPairColorization: { enabled: true },
-    guides: {
-      indentation: indentGuides,
-      bracketPairs: indentGuides,
-      bracketPairsHorizontal: indentGuides,
-      highlightActiveIndentation: indentGuides,
-    },
-  }), [fontSize, minimap, wordWrap, indentGuides])
-
-  const beforeMount = useCallback((monaco: any) => {
-    if (theme.monacoThemeDef) {
-      monaco.editor.defineTheme(theme.monacoThemeId, theme.monacoThemeDef as any)
+  // ── structure section resize ──────────────────────────────────────────────────
+  const onStructureDividerDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    draggingStructure.current = true
+    const startY = e.clientY
+    const startH = structureH
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingStructure.current) return
+      // Moving mouse up (negative ev.clientY delta) expands structure
+      setStructureH(Math.max(60, Math.min(500, startH + startY - ev.clientY)))
     }
-  }, [theme])
+    const onUp = () => {
+      draggingStructure.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [structureH])
+
+  // Navigate the focused panel's editor to a symbol line
+  const handleStructureGotoLine = useCallback((line: number) => {
+    const ref = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    ref?.goToLine(line)
+  }, [])
 
   // ── render helpers ────────────────────────────────────────────────────────────
   const leftFileObj  = openFiles.find(f => f.path === leftActive)
   const rightFileObj = openFiles.find(f => f.path === rightActive)
 
-  const renderMonaco = (
+  const renderEditor = (
     fileObj: OpenFile | undefined,
-    onChange: (v: string | undefined) => void,
-    onMount: (editor: any, monaco: any) => void,
-    isFocused: boolean,
+    editorRef: React.RefObject<GpuEditorHandle>,
+    viewKey: 'left' | 'right',
   ) => {
     if (!fileObj) {
       return (
@@ -533,17 +550,27 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         </div>
       )
     }
+    const setStatus = viewKey === 'left' ? setLeftStatus : setRightStatus
+    const pending = pendingGotoLine?.path === fileObj.path ? pendingGotoLine : null
     return (
-      <MonacoEditor
+      <GpuEditor
         key={fileObj.path}
-        value={fileObj.content}
-        language={fileObj.language}
-        theme={theme.monacoThemeId}
-        beforeMount={beforeMount}
-        loading={<div style={{ width: '100%', height: '100%', background: 'var(--ide-editor-bg)' }} />}
-        onChange={onChange}
-        onMount={onMount}
-        options={monacoOptions}
+        ref={editorRef}
+        filePath={fileObj.path}
+        fontSize={fontSize}
+        colors={gpuColors}
+        minimap={minimapEnabled}
+        indentGuides={indentGuides}
+        viewKey={viewKey}
+        showHeader={false}
+        gotoLine={pending?.line}
+        gotoToken={pending?.token}
+        onCursorChange={(line, col) => { setStatus(s => ({ ...s, line: line + 1, col: col + 1 })) }}
+        onLineCountChange={n => setStatus(s => ({ ...s, totalLines: n }))}
+        onEolChange={eol => setStatus(s => ({ ...s, eol }))}
+        onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>
+          f.path === fileObj.path ? { ...f, dirty, pinned: dirty ? true : f.pinned } : f
+        ))}
       />
     )
   }
@@ -556,11 +583,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       : node.path
     const gitignorePath = cwdSlash + '/.gitignore'
 
-    const existing = await ReadFile(gitignorePath).catch(() => '')
+    const existing = await invoke<{ content: string }>('fs.readfile', { path: gitignorePath }).then(r => b64ToText(r.content)).catch(() => '')
     // Skip if already present
     if (existing.split('\n').some(l => l.trim() === relPath)) return
     const newContent = (existing && !existing.endsWith('\n') ? existing + '\n' : existing) + relPath + '\n'
-    await WriteFile(gitignorePath, newContent)
+    await invoke('fs.writefile', { path: gitignorePath, content: textToB64(newContent) })
 
     // Refresh git status so the ignored indicator appears immediately
     setGitStatusMap(await fetchGitStatusMap(cwd))
@@ -574,35 +601,84 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     >
       {collapsed ? (
         <button className="ide-explorer__expand-btn" onClick={() => setCollapsed(false)} title="Expand">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M6 2l6 6-6 6V2z"/>
-          </svg>
+          <PanelLeftOpen size={14} strokeWidth={1.8} />
         </button>
       ) : (
         <>
-          <div className="ide-explorer__toolbar">
-            <span className="ide-explorer__title">Explorer</span>
-            <div className="ide-explorer__actions">
-              <button title="Move explorer" onClick={() => setExplorerPos(p => p === 'left' ? 'right' : 'left')}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm7 1H3v10h7V3zm1 0v10h2V3h-2z"/>
-                </svg>
+          {/* ── Explorer section ── */}
+          <div className="ide-sec-head" onClick={() => setExplorerOpen(o => !o)}>
+            <ChevronRight
+              className="ide-sec-chevron"
+              style={{ transform: explorerOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+              size={12}
+              strokeWidth={2}
+            />
+            <span className="ide-sec-name">Explorer</span>
+            <div className="ide-sec-actions">
+              <button
+                className="ide-sec-action-btn"
+                title="Move explorer"
+                onClick={e => { e.stopPropagation(); setExplorerPos(p => p === 'left' ? 'right' : 'left') }}
+              >
+                <PanelLeft size={12} strokeWidth={1.8} />
               </button>
-              <button title="Collapse" onClick={() => setCollapsed(true)}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M10 2L4 8l6 6V2z"/>
-                </svg>
+              <button
+                className="ide-sec-action-btn"
+                title="Collapse sidebar"
+                onClick={e => { e.stopPropagation(); setCollapsed(true) }}
+              >
+                <PanelLeftClose size={12} strokeWidth={1.8} />
               </button>
             </div>
           </div>
-          <FileExplorer
-            root={tree}
-            selectedPath={activeFile ?? ''}
-            onSelect={node => openFile(node)}
-            onRefresh={loadTree}
-            gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
-            onAddToGitIgnore={isInstalled('git') ? handleAddToGitIgnore : undefined}
-          />
+          <div
+            className="ide-sec-body"
+            style={explorerOpen
+              ? { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+              : { display: 'none' }
+            }
+          >
+            <FileExplorer
+              root={treeRoot}
+              selectedPath={activeFile ?? ''}
+              onSelect={node => openFile(node)}
+              onRefresh={refreshGitStatus}
+              onLoadDir={loadDir}
+              gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
+              onAddToGitIgnore={handleAddToGitIgnore}
+            />
+          </div>
+
+          {/* ── Resize handle between sections (only when both open) ── */}
+          {explorerOpen && structureOpen && (
+            <div className="ide-sec-resize" onMouseDown={onStructureDividerDown} />
+          )}
+
+          {/* ── Structure section ── */}
+          <div className="ide-sec-head" onClick={() => setStructureOpen(o => !o)}>
+            <ChevronRight
+              className="ide-sec-chevron"
+              style={{ transform: structureOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+              size={12}
+              strokeWidth={2}
+            />
+            <span className="ide-sec-name">Structure</span>
+          </div>
+          <div
+            className="ide-sec-body"
+            style={!structureOpen
+              ? { display: 'none' }
+              : explorerOpen
+                ? { height: structureH, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+                : { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+            }
+          >
+            <StructureView
+              content={activeFileObj?.content ?? ''}
+              language={activeFileObj?.language ?? 'plaintext'}
+              onGotoLine={handleStructureGotoLine}
+            />
+          </div>
         </>
       )}
     </div>
@@ -632,7 +708,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
             onDrop={onPanelDrop}
           />
           <div className="ide-editor">
-            {renderMonaco(leftFileObj, leftOnChange, onLeftMount, focusedPanel === 'left')}
+            {renderEditor(leftFileObj, leftEditorRef, 'left')}
           </div>
         </div>
 
@@ -658,7 +734,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
                 onDrop={onPanelDrop}
               />
               <div className="ide-editor">
-                {renderMonaco(rightFileObj, rightOnChange, onRightMount, focusedPanel === 'right')}
+                {renderEditor(rightFileObj, rightEditorRef, 'right')}
               </div>
             </div>
           </>
@@ -678,11 +754,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         {activeFileObj && (
           <>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">UTF-8</span>
-            <span className="ide-statusbar__segment ide-statusbar__segment--right">{lineEnding}</span>
-            <span className="ide-statusbar__segment ide-statusbar__segment--right">Spaces: {tabSize}</span>
+            <span className="ide-statusbar__segment ide-statusbar__segment--right">{activeStatus.eol}</span>
+            <span className="ide-statusbar__segment ide-statusbar__segment--right">Spaces: 2</span>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">{activeFileObj.language}</span>
             <span className="ide-statusbar__segment ide-statusbar__segment--right">
-              Ln {statusLine.line}/{totalLines}  Col {statusLine.col}
+              Ln {activeStatus.line}/{activeStatus.totalLines}  Col {activeStatus.col}
             </span>
           </>
         )}
@@ -694,31 +770,31 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   const explorerDivider = <div className="ide-divider" onMouseDown={onExplorerDividerDown} />
 
   // Stable getter so MenuBar always reads the currently-focused editor
-  const getEditor = useCallback(() =>
-    focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
-  , [])
+  const getEditor = useCallback(() => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return null
+    return {
+      focus: handle.focus,
+      // Maps MenuBar's Monaco-style command IDs onto GpuEditor operations.
+      // Cut/copy/paste work via the browser's native clipboard shortcuts on
+      // the editor's hidden textarea. Comment/format/smart-select/go-to-
+      // symbol/definition/references and history navigation have no
+      // equivalent in the in-house editor and remain no-ops.
+      trigger: (_source: string, cmd: string) => {
+        if (cmd === 'undo') handle.undo()
+        else if (cmd === 'redo') handle.redo()
+        else if (cmd === 'editor.action.selectAll') handle.selectAll()
+        else if (cmd === 'actions.find') handle.openFind('find')
+        else if (cmd === 'editor.action.startFindReplaceAction') handle.openFind('replace')
+        else if (cmd === 'editor.action.toggleMinimap') setMinimapEnabled(v => !v)
+      },
+    }
+  }, [])
 
   // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
-  const zoomIn    = useCallback(() => {
-    const next = Math.min(fontSize + 1, 36)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [fontSize])
-
-  const zoomOut   = useCallback(() => {
-    const next = Math.max(fontSize - 1, 8)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [fontSize])
-
-  const resetZoom = useCallback(() => {
-    const next = Math.round(13 * defaultZoom)
-    setFontSize(next)
-    leftEditorRef.current?.updateOptions({ fontSize: next })
-    rightEditorRef.current?.updateOptions({ fontSize: next })
-  }, [defaultZoom])
+  const zoomIn    = useCallback(() => setFontSize(f => Math.min(f + 1, 36)), [])
+  const zoomOut   = useCallback(() => setFontSize(f => Math.max(f - 1, 8)), [])
+  const resetZoom = useCallback(() => setFontSize(Math.round(13 * defaultZoom)), [defaultZoom])
 
   // Close the active file in the focused panel
   const closeActive = useCallback(() => {
