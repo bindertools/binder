@@ -2,7 +2,6 @@
   background: var(--info-bar-bg);
   border: 1px solid var(--sep-strong);
   border-radius: var(--r-md);
-  box-shadow: var(--shadow-overlay);
   padding: 4px;
   min-width: 180px;
   z-index: 9999;
@@ -26,7 +25,7 @@
   font-size: inherit;
   transition: background var(--t-fast);
 }
-.ctxmenu__item:hover { background: var(--surface-overlay); color: #fff; }
+.ctxmenu__item:hover { background: var(--surface-overlay); }
 .ctxmenu__item--danger { color: var(--color-error); }
 .ctxmenu__item--danger:hover { background: rgba(255,69,58,0.1); color: var(--color-error); }
 .ctxmenu__item--disabled { color: var(--info-bar-color); cursor: default; pointer-events: none; opacity: 0.4; }

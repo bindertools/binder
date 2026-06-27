@@ -1,0 +1,116 @@
+name: Build Matrix
+
+# Compile the C++ backend on every platform on each PR.
+# Catches Windows-only vs Unix-only compilation errors before merge.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: build-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  compile:
+    name: Compile — ${{ matrix.os }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            shell: pwsh
+            npm: npm.cmd
+            vcpkg_triplet: x64-windows-static
+          - os: ubuntu-latest
+            shell: bash
+            npm: npm
+          - os: macos-latest
+            shell: bash
+            npm: npm
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            ninja-build libssl-dev
+          # Install cmake 4.x from Kitware (vcpkg 2025+ requires cmake >= 4.x)
+          wget -qO- https://apt.kitware.com/keys/kitware-archive-latest.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] \
+            https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/kitware.list
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake
+
+      - name: Bootstrap vcpkg (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          git clone --depth=1 https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
+
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth=1 https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+
+      # The package-lock.json is committed from Windows and only contains
+      # Windows-specific Rollup native binaries. Delete it on non-Windows so
+      # npm install re-resolves the correct platform binary (Vite 7 / Rollup v4).
+      - name: Remove Windows-specific package-lock (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: rm -f package-lock.json
+        working-directory: app/frontend
+
+      - name: Build app frontend
+        run: ${{ matrix.npm }} install && ${{ matrix.npm }} run build
+        working-directory: app/frontend
+
+      - name: CMake configure
+        shell: bash
+        run: |
+          cmake -B cpp/build -S cpp \
+            "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports" \
+            ${{ matrix.vcpkg_triplet && format('-DVCPKG_TARGET_TRIPLET={0}', matrix.vcpkg_triplet) || '' }}
+
+      - name: CMake build (compile check)
+        shell: bash
+        run: cmake --build cpp/build --config Release --target binder-host
+
+      - name: TypeScript type check
+        run: ${{ matrix.npm }} run typecheck
+        working-directory: app/frontend

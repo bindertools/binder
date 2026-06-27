@@ -20,8 +20,6 @@ jobs:
   validate:
     runs-on: windows-latest
     timeout-minutes: 45
-    env:
-      GOCACHE: ${{ github.workspace }}\.cache\go-build
 
     defaults:
       run:
@@ -32,10 +30,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          # GH_PAT must be a PAT (classic or fine-grained) with read access to
-          # all private submodule repos in the Command-IDE org. The default
-          # GITHUB_TOKEN is scoped to this repo only and cannot clone private
-          # submodules owned by the same organisation.
           token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Set up Node.js
@@ -43,74 +37,54 @@ jobs:
         with:
           node-version: 20
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: app/go.mod
-          cache-dependency-path: app/go.sum
-
       - name: Install app frontend dependencies
         run: npm.cmd ci
         working-directory: app/frontend
 
-      - name: Install installer frontend dependencies
+      - name: Install setup frontend dependencies
         run: npm.cmd ci
-        working-directory: installer/frontend
+        working-directory: setup/windows/frontend
 
       - name: Build app frontend
         run: npm.cmd run build
         working-directory: app/frontend
 
-      - name: Build installer frontend
+      - name: Build setup frontend
         run: npm.cmd run build
-        working-directory: installer/frontend
+        working-directory: setup/windows/frontend
 
-      - name: Check Go formatting
+      - name: TypeScript type check (app)
+        run: npm.cmd run typecheck
+        working-directory: app/frontend
+
+      - name: Bootstrap vcpkg
         run: |
-          $goFiles = git ls-files '*.go'
-          if (-not $goFiles) {
-            exit 0
+          $vcpkgRoot = 'C:\vcpkg'
+          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
+            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
           }
+          echo "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
 
-          $unformatted = @(
-            $goFiles |
-              ForEach-Object { gofmt -l $_ } |
-              Where-Object { $_ }
-          )
-
-          if ($unformatted.Count -gt 0) {
-            Write-Host 'These Go files need gofmt:'
-            $unformatted | ForEach-Object { Write-Host $_ }
-            exit 1
-          }
-
-      - name: Test app Go module
-        run: go test ./...
-        working-directory: app
-
-      - name: Vet app Go module
-        run: go vet ./...
-        working-directory: app
-
-      - name: Install Wails CLI
+      - name: CMake configure
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
-          $goBin = Join-Path (go env GOPATH) 'bin'
-          $goBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          cmake -B cpp/build -S cpp `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports" `
+            "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
 
-      - name: Run full Windows package build
-        run: ./build.ps1
+      - name: CMake build (all targets)
+        run: cmake --build cpp/build --config Release
 
       - name: Verify build outputs
         run: |
           $expected = @(
-            'app\build\bin\cmdIDE-windows-amd64.exe',
-            'app\build\bin\cmdIDE-plugins-windows-amd64.exe',
-            'app\build\bin\cmdIDE-installer-windows.exe'
+            'cpp\build\Release\binder-host.exe',
+            'cpp\build\Release\binder-setup.exe'
           )
-
           foreach ($path in $expected) {
             if (-not (Test-Path $path)) {
               throw "Missing expected build output: $path"
             }
+            Write-Host "  found: $path" -ForegroundColor Green
           }

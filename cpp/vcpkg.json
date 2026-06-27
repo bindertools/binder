@@ -1,0 +1,15 @@
+{
+  "name": "binder-backend",
+  "version": "0.1.0",
+  "dependencies": [
+    "nlohmann-json",
+    "spdlog",
+    { "name": "cpp-httplib", "features": ["openssl"] },
+    "cmark",
+    "sqlite3",
+    "libzip",
+    "tree-sitter",
+    "zserge-webview",
+    { "name": "webview2", "platform": "windows" }
+  ]
+}

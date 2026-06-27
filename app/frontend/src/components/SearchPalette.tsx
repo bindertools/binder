@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { Tab, SearchResult } from '../types'
-import { SearchFiles } from '../../wailsjs/go/main/App'
+import { invoke } from '../lib/ipc'
 import './SearchPalette.scss'
 
 interface Props {
@@ -30,7 +30,7 @@ export default function SearchPalette({ tabs, activeTerminalId, onSelectTab, onO
     if (debounce.current) clearTimeout(debounce.current)
     if (!query.trim() || !activeTerminalId) { setFileResults([]); return }
     debounce.current = setTimeout(() => {
-      SearchFiles(activeTerminalId, query)
+      invoke<SearchResult[]>('search.files', { path: activeTerminalId, query })
         .then(r => { setFileResults(r ?? []); setSelectedIdx(0) })
         .catch(() => {})
     }, 200)

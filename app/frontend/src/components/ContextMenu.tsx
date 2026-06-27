@@ -48,7 +48,16 @@ export default function ContextMenu({ x, y, entries, onClose }: Props) {
             <button
               key={i}
               className={`ctxmenu__item${e.danger ? ' ctxmenu__item--danger' : ''}${e.disabled ? ' ctxmenu__item--disabled' : ''}`}
-              onMouseDown={ev => { ev.stopPropagation(); if (!e.disabled) { e.onClick(); onClose() } }}
+              onMouseDown={ev => {
+                ev.stopPropagation()
+                if (e.disabled) return
+                onClose()
+                // Defer the action past this click's mouseup/click, which would
+                // otherwise land on whatever element is now under the cursor
+                // once this menu unmounts mid-gesture (e.g. blurring a newly
+                // focused input the action just opened).
+                setTimeout(() => e.onClick(), 0)
+              }}
             >
               {e.label}
             </button>

@@ -33,6 +33,9 @@
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 .te-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: none;
   border-radius: var(--r-sm);
   font-size: 12px;
@@ -59,7 +62,7 @@
 .te-btn--primary:hover:not(:disabled) {
   background: rgba(10,132,255,0.25);
   border-color: rgba(10,132,255,0.5);
-  color: #fff;
+  color: var(--info-bar-hover-color);
 }
 .te-btn--primary:disabled { opacity: 0.4; cursor: default; }
 .te-btn--primary.is-saved { background: rgba(48,209,88,0.12); border-color: rgba(48,209,88,0.3); color: var(--color-success); }
@@ -105,7 +108,7 @@
 }
 .te-section-head:hover { background: var(--surface-raised); }
 
-.te-chevron       { color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
+.te-chevron       { display: flex; align-items: center; color: var(--info-bar-color); font-size: 10px; flex-shrink: 0; }
 .te-section-label { flex: 1; }
 .te-section-count { font-size: 10px; color: var(--info-bar-color); font-weight: 400; text-transform: none; letter-spacing: 0; }
 

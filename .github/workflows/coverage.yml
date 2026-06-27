@@ -1,0 +1,18 @@
+name: Test Coverage
+
+# Go test coverage was removed with the Go/Wails retirement (Phase N).
+# TypeScript/frontend coverage can be added here in a future iteration.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Coverage tracking to be added for C++ and TypeScript"

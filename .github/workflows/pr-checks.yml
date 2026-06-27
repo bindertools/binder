@@ -1,0 +1,164 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+
+  # ── Conventional commit PR title ──────────────────────────────────────────────
+  pr-title:
+    name: PR title — conventional commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          # Allowed types — mirrors the commit types used in this repo
+          types: |
+            feat
+            fix
+            chore
+            docs
+            refactor
+            perf
+            test
+            ci
+            build
+            style
+            revert
+          # Allowed scopes — keep in sync with the codebase structure
+          scopes: |
+            terminal
+            fs
+            frontend
+            config
+            lang-map
+            uptime
+            plugins
+            build
+            release
+            ci
+            wailsjs
+            cppbridge
+            fullscreen
+            themes
+          requireScope: false
+          subjectPattern: ^.{1,100}$
+          subjectPatternError: >
+            The PR subject must be 1–100 characters.
+            Please shorten or expand the description.
+
+  # ── PR size warning ───────────────────────────────────────────────────────────
+  pr-size:
+    name: PR size check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Count changed lines
+        id: diff
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          ADDED=$(git diff --stat "$BASE" "$HEAD" | tail -1 | grep -oP '\d+ insertion' | grep -oP '\d+' || echo 0)
+          DELETED=$(git diff --stat "$BASE" "$HEAD" | tail -1 | grep -oP '\d+ deletion' | grep -oP '\d+' || echo 0)
+          TOTAL=$((ADDED + DELETED))
+          echo "added=$ADDED"    >> "$GITHUB_OUTPUT"
+          echo "deleted=$DELETED" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL"    >> "$GITHUB_OUTPUT"
+
+      - name: Warn on large PR
+        if: ${{ fromJson(steps.diff.outputs.total) > 800 }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const total   = '${{ steps.diff.outputs.total }}';
+            const added   = '${{ steps.diff.outputs.added }}';
+            const deleted = '${{ steps.diff.outputs.deleted }}';
+            const body =
+              `## ⚠️ Large PR Warning\n\n` +
+              `This PR changes **${total} lines** (+${added} / -${deleted}).\n\n` +
+              `Large PRs are harder to review and more likely to introduce bugs. ` +
+              `Consider splitting it into smaller, focused changes if possible.`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.startsWith('## ⚠️ Large PR Warning')
+            );
+
+            if (!existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
+  # ── No binary files accidentally committed ────────────────────────────────────
+  no-binaries:
+    name: No unexpected binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for large binary files in diff
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+
+          # Allowed binary paths (build artifacts, resources)
+          ALLOWED_PATTERNS=(
+            "setup/windows/build/"
+            "setup/windows/frontend/dist/"
+            "app/frontend/dist/"
+            ".png" ".ico" ".icns"
+          )
+
+          FOUND=0
+          while IFS= read -r file; do
+            # Skip if file matches an allowed pattern
+            skip=0
+            for pat in "${ALLOWED_PATTERNS[@]}"; do
+              if [[ "$file" == *"$pat"* ]]; then
+                skip=1; break
+              fi
+            done
+            [[ $skip -eq 1 ]] && continue
+
+            # Flag files that look binary and are > 500 KB
+            if git show "$HEAD:$file" 2>/dev/null | file - | grep -qiE 'binary|executable|archive'; then
+              SIZE=$(git cat-file -s "$HEAD:$file" 2>/dev/null || echo 0)
+              if (( SIZE > 512000 )); then
+                echo "::warning file=$file::Large binary file detected (${SIZE} bytes). Is this intentional?"
+                FOUND=1
+              fi
+            fi
+          done < <(git diff --name-only --diff-filter=A "$BASE" "$HEAD")
+
+          # Don't fail — warn only. Reviewers decide.
+          exit 0

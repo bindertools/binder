@@ -31,11 +31,12 @@
   position: relative;
   transition: background 0.15s;
 
-  /* Wider invisible hit-zone so it's easy to grab */
+  /* Wider invisible hit-zone so it's easy to grab. Skewed away from the explorer's
+     edge so it doesn't sit on top of the file tree's scrollbar thumb. */
   &::after {
     content: '';
     position: absolute;
-    inset: 0 -4px;
+    inset: 0 -7px 0 -1px;
     cursor: col-resize;
   }
 }
@@ -104,6 +105,160 @@
   color: var(--ide-fg);
 }
 
+/* ── Sidebar section headers (Explorer / Structure) ──────────────────────────── */
+.ide-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px 0 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--ide-border);
+
+  &:hover { background: color-mix(in srgb, var(--ide-fg) 5%, transparent); }
+}
+
+.ide-sec-chevron {
+  flex-shrink: 0;
+  color: var(--ide-text-lo);
+  transition: transform 0.15s ease;
+  display: block;
+}
+
+.ide-sec-name {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ide-text-hi);
+  flex: 1;
+}
+
+.ide-sec-actions {
+  display: flex;
+  gap: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.ide-sec-head:hover .ide-sec-actions { opacity: 1; }
+
+.ide-sec-action-btn {
+  background: none;
+  border: none;
+  color: var(--ide-text-lo);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+
+  &:hover { background: var(--ide-border-lo); color: var(--ide-fg); }
+}
+
+/* Horizontal resize handle between Explorer and Structure sections */
+.ide-sec-resize {
+  height: 4px;
+  flex-shrink: 0;
+  background: var(--ide-border);
+  cursor: row-resize;
+  transition: background 0.12s;
+
+  &:hover { background: var(--ide-accent); }
+}
+
+/* ── Structure view ───────────────────────────────────────────────────────────── */
+.sv-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 0 8px;
+
+  &::-webkit-scrollbar { width: 8px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb:hover { background: var(--ide-text-lo); }
+}
+
+.sv-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--ide-text-lo);
+}
+
+.sv-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px 0 4px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ide-text-hi);
+  white-space: nowrap;
+  overflow: hidden;
+
+  &:hover { background: color-mix(in srgb, var(--ide-fg) 7%, transparent); }
+}
+
+/* Thin vertical guide line, absolutely positioned within a row */
+.sv-tree-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--ide-fg) 12%, transparent);
+  pointer-events: none;
+}
+
+/* Expand/collapse chevron — fixed width so icon/name stay aligned */
+.sv-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ide-text-lo);
+  border-radius: 3px;
+
+  &:hover { color: var(--ide-fg); background: color-mix(in srgb, var(--ide-fg) 10%, transparent); }
+}
+
+.sv-kind {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sv-kind--class   { color: #c678dd; }
+.sv-kind--fn      { color: #61afef; }
+.sv-kind--method  { color: #61afef; }
+.sv-kind--ctor    { color: #e06c75; }
+.sv-kind--iface   { color: #56b6c2; }
+.sv-kind--enum    { color: #e5c07b; }
+.sv-kind--struct  { color: #c678dd; }
+.sv-kind--type    { color: #56b6c2; }
+
+.sv-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+}
+
+.sv-line {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--ide-text-lo);
+  opacity: 0.6;
+  font-family: 'Consolas', 'Cascadia Code', monospace;
+  padding-left: 4px;
+}
+
 /* ── File tree ────────────────────────────────────────────────────────────────── */
 .fe-root {
   display: flex;
@@ -112,31 +267,13 @@
   overflow: hidden;
 }
 
-.fe-header {
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 14px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ide-text-lo);
-  border-bottom: 1px solid var(--ide-border);
-  flex-shrink: 0;
-  height: 28px;
-  cursor: default;
-  overflow: hidden;
-  user-select: none;
-}
-.fe-header__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .fe-tree {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 2px 0 8px;
 }
-.fe-tree::-webkit-scrollbar { width: 4px; }
+.fe-tree::-webkit-scrollbar { width: 8px; }
 .fe-tree::-webkit-scrollbar-track { background: transparent; }
 .fe-tree::-webkit-scrollbar-thumb { background: var(--ide-border-lo); border-radius: 2px; }
 .fe-tree::-webkit-scrollbar-thumb:hover { background: var(--ide-text-lo); }
@@ -151,8 +288,10 @@
 .fe-node {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   height: 22px;
+  margin: 0 6px;
+  border-radius: 5px;
   font-size: 13px;
   font-weight: 400;
   color: var(--ide-text-hi);
@@ -161,12 +300,13 @@
   white-space: nowrap;
   overflow: hidden;
   position: relative;
+  transition: background 0.08s ease;
 }
 .fe-node:hover {
   background: color-mix(in srgb, var(--ide-fg) 7%, transparent);
 }
 .fe-node--selected {
-  background: color-mix(in srgb, var(--ide-select) 35%, transparent) !important;
+  background: color-mix(in srgb, var(--ide-fg) 12%, transparent) !important;
   color: var(--ide-fg);
 }
 .fe-node--dragover {
@@ -181,17 +321,19 @@
   align-items: center;
   justify-content: center;
   color: var(--ide-text-lo);
-  opacity: 0.5;
+  opacity: 0.65;
 }
 .fe-node:hover .fe-node__chevron,
-.fe-node--selected .fe-node__chevron { opacity: 0.9; }
+.fe-node--selected .fe-node__chevron { opacity: 1; }
 
 .fe-node__icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  /* Color data lives in FileIcon.tsx — all palettes preserved for future themes */
+  color: var(--ide-text-lo);
 }
+.fe-node:hover .fe-node__icon,
+.fe-node--selected .fe-node__icon { color: var(--ide-text-hi); }
 
 .fe-node__name {
   overflow: hidden;
@@ -251,7 +393,6 @@
   background: var(--ide-bg-alt);
   border: 1px solid var(--ide-border-lo);
   border-radius: 4px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
   min-width: 190px;
   padding: 4px;
   display: flex;
@@ -294,7 +435,6 @@
   background: var(--ide-bg-alt);
   border: 1px solid var(--ide-border-lo);
   border-radius: 6px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.3);
   padding: 20px 22px 16px;
   width: 340px;
   max-width: calc(100vw - 40px);
@@ -394,12 +534,9 @@
   background: var(--ide-bg-alt);
   border-bottom: 1px solid var(--ide-border);
   flex-shrink: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
   height: 35px;
   position: relative;
 }
-.ide-tabs::-webkit-scrollbar { height: 0; }
 
 /* Drop target highlight when dragging a tab over the tab bar */
 .ide-tabs--drop-target {
@@ -407,6 +544,36 @@
   outline: 1px dashed var(--ide-accent);
   outline-offset: -1px;
 }
+
+/* Left/right scroll arrows */
+.ide-tabs__nav {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--ide-border);
+}
+.ide-tabs__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ide-text-mid);
+  cursor: pointer;
+}
+.ide-tabs__arrow:hover:not(:disabled) { color: var(--ide-fg); background: var(--ide-bg-hi); }
+.ide-tabs__arrow:disabled { color: var(--ide-text-lo); opacity: 0.35; cursor: default; }
+
+.ide-tabs__scroll {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+}
+.ide-tabs__scroll::-webkit-scrollbar { height: 0; }
 
 .ide-tabs__empty {
   padding: 0 14px;
@@ -421,23 +588,42 @@
 .ide-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 10px 0 12px;
+  gap: 6px;
+  padding: 0 10px;
   font-size: 12.5px;
   color: var(--ide-text-mid);
   cursor: pointer;
-  border-right: 1px solid var(--ide-border);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
   user-select: none;
 }
+
+/* Thin separator between adjacent tabs, hidden around the active tab
+   since its highlighted background already provides a visual boundary */
+.ide-tab:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: var(--ide-border);
+}
+.ide-tab--active::after,
+.ide-tab--active + .ide-tab::after { display: none; }
+
 .ide-tab:hover { color: var(--ide-fg); background: var(--ide-bg-hi); }
 
 .ide-tab--active {
   color: var(--ide-fg);
   background: var(--ide-editor-bg);
   border-bottom: 2px solid var(--ide-accent);
+}
+
+/* Unsaved changes: blue bottom border in place of the active accent */
+.ide-tab--dirty {
+  border-bottom: 2px solid #0a84ff;
 }
 
 /* Preview tab: italic + slightly dimmed — has not been edited yet */
@@ -451,39 +637,39 @@
   background: color-mix(in srgb, var(--ide-accent) 18%, var(--ide-editor-bg));
 }
 
-.ide-tab__name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.ide-tab__dot  {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: #da8548;
+.ide-tab__icon {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  color: var(--ide-text-lo);
 }
+.ide-tab--active .ide-tab__icon,
+.ide-tab:hover .ide-tab__icon { color: var(--ide-text-mid); }
+
+.ide-tab__name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .ide-tab__close {
   background: none;
   border: none;
   color: transparent;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  padding: 0 2px;
+  padding: 2px;
   border-radius: 3px;
   display: flex;
   align-items: center;
-  margin-left: 2px;
-  font-family: inherit;
+  flex-shrink: 0;
 }
 .ide-tab:hover .ide-tab__close,
 .ide-tab--active .ide-tab__close { color: var(--ide-text-mid); }
 .ide-tab__close:hover { background: var(--ide-border-lo); color: var(--ide-fg) !important; }
 
-/* ── Monaco wrapper ───────────────────────────────────────────────────────────── */
+/* ── Editor pane ──────────────────────────────────────────────────────────────── */
 .ide-editor {
   flex: 1;
   overflow: hidden;
   position: relative;
   background: var(--ide-editor-bg);
+  margin-top: 10px;
 }
-.ide-editor .monaco-editor { padding-top: 4px; }
 
 .ide-editor__empty {
   width: 100%;
@@ -570,7 +756,6 @@
   background: var(--ide-bg-alt);
   border: 1px solid var(--ide-border-lo);
   border-radius: 6px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.3);
   padding: 20px 22px 18px;
   width: 360px;
   max-width: calc(100vw - 40px);
@@ -630,6 +815,9 @@
 }
 
 .ni-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 6px;
   font-size: 11.5px;
   color: var(--ide-text-lo);
@@ -637,6 +825,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ni-preview svg {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .ni-chips {

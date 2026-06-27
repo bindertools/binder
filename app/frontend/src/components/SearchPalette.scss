@@ -19,7 +19,6 @@
   background: var(--info-bar-bg);
   border: 1px solid var(--sep-strong);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-overlay);
   overflow: hidden;
   font-family: var(--font-ui);
   animation: palette-in 0.14s ease;
@@ -121,7 +120,7 @@
   flex-shrink: 0;
 }
 
-.palette__item.is-selected .palette__item-name { color: #fff; }
+.palette__item.is-selected .palette__item-name { color: var(--info-bar-hover-color); }
 
 .palette__item-path {
   font-size: 11px;

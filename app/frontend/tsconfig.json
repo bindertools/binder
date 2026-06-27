@@ -19,13 +19,13 @@
     "paths": {
       "react":              ["node_modules/@types/react/index.d.ts"],
       "react/jsx-runtime":  ["node_modules/@types/react/jsx-runtime.d.ts"],
-      "@cmdide/plugin-sdk":   ["../../packages/plugin-sdk/index.ts"],
-      "@cmdide/plugin-sdk/*": ["../../packages/plugin-sdk/*"]
+      "lucide-react":       ["node_modules/lucide-react/dist/lucide-react.d.ts"],
+      "@binder/app-sdk":   ["../../packages/plugin-sdk/index.ts"],
+      "@binder/app-sdk/*": ["../../packages/plugin-sdk/*"]
     }
   },
   "include": [
     "src",
-    "wailsjs",
     "../../packages"
   ],
   "exclude": [

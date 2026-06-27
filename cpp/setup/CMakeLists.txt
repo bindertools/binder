@@ -1,0 +1,88 @@
+find_path(ZSERGE_WEBVIEW_INCLUDE_DIRS "webview.h" REQUIRED)
+
+option(BINDER_SETUP_DEV "Include pre-release versions" OFF)
+
+if(WIN32)
+    find_package(unofficial-webview2 CONFIG REQUIRED)
+
+    # Embed the setup frontend as a zip RC resource
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(SETUP_DIST "${CMAKE_SOURCE_DIR}/../setup/windows/frontend/dist")
+    set(GENERATED_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/generated")
+    set(GENERATED_ZIP  "${GENERATED_DIR}/frontend.zip")
+
+    if(EXISTS "${SETUP_DIST}")
+        file(GLOB_RECURSE SETUP_DIST_FILES CONFIGURE_DEPENDS "${SETUP_DIST}/*")
+    else()
+        set(SETUP_DIST_FILES "")
+        message(WARNING "Setup dist not found: ${SETUP_DIST}")
+    endif()
+
+    add_custom_command(
+        OUTPUT "${GENERATED_ZIP}"
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/gen_assets.py"
+            "${SETUP_DIST}"
+            "${GENERATED_ZIP}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gen_assets.py" ${SETUP_DIST_FILES}
+        COMMENT "Zipping setup dist → generated/frontend.zip"
+    )
+    add_custom_target(gen_setup_zip DEPENDS "${GENERATED_ZIP}")
+
+    # resources.rc embeds frontend.zip via RCDATA, but the RC compiler only
+    # checks resources.rc's own timestamp — it has no idea the *contents* of
+    # frontend.zip changed, so it happily re-embeds a stale zip into the exe
+    # forever after the first build. OBJECT_DEPENDS forces MSBuild to treat
+    # the zip as an input to the resource-compile step too.
+    set_source_files_properties(resources.rc PROPERTIES OBJECT_DEPENDS "${GENERATED_ZIP}")
+
+    add_executable(binder-setup WIN32 main.cpp installer.cpp resources.rc)
+    add_dependencies(binder-setup gen_setup_zip)
+else()
+    add_executable(binder-setup main.cpp installer.cpp)
+endif()
+
+if(BINDER_SETUP_DEV)
+    target_compile_definitions(binder-setup PRIVATE BINDER_SETUP_DEV=1)
+endif()
+
+set_target_properties(binder-setup PROPERTIES
+    CXX_STANDARD 17
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Release"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug"
+)
+
+target_include_directories(binder-setup PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    ${ZSERGE_WEBVIEW_INCLUDE_DIRS}
+)
+
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(httplib CONFIG REQUIRED)
+find_package(libzip CONFIG REQUIRED)
+
+target_link_libraries(binder-setup PRIVATE
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    httplib::httplib
+    libzip::zip
+)
+
+if(WIN32)
+    target_compile_definitions(binder-setup PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _UNICODE UNICODE)
+    target_link_libraries(binder-setup PRIVATE
+        unofficial::webview2::webview2
+        ole32 oleaut32 shlwapi dwmapi shell32
+    )
+    if(NOT VCPKG_TARGET_TRIPLET MATCHES "static")
+        add_custom_command(TARGET binder-setup POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_RUNTIME_DLLS:binder-setup>
+                "${CMAKE_BINARY_DIR}/$<CONFIG>"
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLLs"
+        )
+    endif()
+endif()
