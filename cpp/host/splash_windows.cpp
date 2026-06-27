@@ -23,7 +23,7 @@ static constexpr int kW       = 340;
 static constexpr int kH       = 145;
 static constexpr int kBannerW = 300;
 static constexpr int kBannerH = 100;
-static constexpr int kBannerY = 12;
+static constexpr int kBannerY = (kH - kBannerH) / 2;
 
 static Gdiplus::GdiplusStartupInput g_gdipInput{};
 static ULONG_PTR                    g_gdipToken = 0;

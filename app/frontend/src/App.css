@@ -2,7 +2,7 @@
 
 @theme {
   /* Typography */
-  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   --font-mono: 'Cascadia Code', 'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace;
 
   /* Radius */
@@ -58,7 +58,7 @@
   --tab-add-border:      #222222;
 
   /* Typography */
-  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   --font-mono: 'Cascadia Code', 'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace;
 
   /* Radius */
