@@ -23,6 +23,7 @@ interface Props {
   onRefresh: () => void
   onLoadDir: (path: string) => Promise<FileNode[]>
   gitStatus?: Record<string, string>
+  diagnosticErrors?: Set<string>
   onAddToGitIgnore?: (node: FileNode) => void
 }
 
@@ -47,20 +48,11 @@ function parentDir(path: string): string {
   return idx === -1 ? path : path.substring(0, idx)
 }
 
-function gitBadge(code: string | undefined): React.ReactNode {
-  if (!code || code === '!') return null
-  if (code === 'dirty') return <span className="fe-git-badge fe-git-badge--dirty" />
-  const [label, mod] =
-    code === 'M' || code === 'T' || code === 'C' || code === 'R' ? ['M', 'modified'] :
-    code === 'A'   ? ['A', 'added']     :
-    code === '?'   ? ['U', 'untracked'] :
-    code === 'D'   ? ['D', 'deleted']   :
-    code === 'submodule' ? ['S', 'submodule'] :
-    [code, 'modified']
-  return <span className={`fe-git-badge fe-git-badge--${mod}`}>{label}</span>
+function hasGitChange(code: string | undefined): boolean {
+  return !!code && code !== '!' && code !== 'submodule'
 }
 
-export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, onLoadDir, gitStatus, onAddToGitIgnore }: Props) {
+export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, onLoadDir, gitStatus, diagnosticErrors, onAddToGitIgnore }: Props) {
   // ── lazy directory cache ─────────────────────────────────────────────────────
   const [dirCache,     setDirCache]     = useState<Map<string, FileNode[]>>(new Map())
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
@@ -299,21 +291,25 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
 
   // ── Flat tree row ──────────────────────────────────────────────────────────
   function renderNode(node: FileNode, depth: number, style: React.CSSProperties): React.ReactNode {
-    const isOpen        = node.isDir && expanded.has(node.path)
-    const isSelected    = node.path === selectedPath
-    const isDragTarget  = dragOver === node.path
+    const isOpen         = node.isDir && expanded.has(node.path)
+    const isSelected     = node.path === selectedPath
+    const isDragTarget   = dragOver === node.path
     const isRenamingThis = renaming === node.path
-    const gitCode       = gitStatus?.[node.path]
-    const isIgnored     = gitCode === '!'
+    const gitCode        = gitStatus?.[node.path]
+    const isIgnored      = gitCode === '!'
+    const isGitChanged   = hasGitChange(gitCode)
+    const isError        = !!(diagnosticErrors?.has(node.path))
 
     return (
       <div
         key={node.path}
         className={[
           'fe-node',
-          isSelected   ? 'fe-node--selected' : '',
-          isDragTarget ? 'fe-node--dragover'  : '',
+          isSelected   ? 'fe-node--selected'   : '',
+          isDragTarget ? 'fe-node--dragover'    : '',
           isIgnored    ? 'fe-node--git-ignored' : '',
+          isError && !isSelected      ? 'fe-node--has-error'   : '',
+          isGitChanged && !isSelected && !isError ? 'fe-node--git-changed' : '',
         ].join(' ')}
         style={{ ...style, paddingLeft: `${depth * 14 + 8}px` }}
         onClick={() => {
@@ -354,7 +350,6 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
         ) : (
           <span className="fe-node__name">{node.name}</span>
         )}
-        {gitBadge(gitCode)}
       </div>
     )
   }

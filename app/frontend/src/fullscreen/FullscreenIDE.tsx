@@ -116,6 +116,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
 
   // ── explorer state ────────────────────────────────────────────────────────────
   const [gitStatusMap,  setGitStatusMap]  = useState<Record<string, string>>({})
+  const [errorFiles,    setErrorFiles]    = useState<Set<string>>(new Set())
   const [explorerW,   setExplorerW]   = useState(285)
   const [explorerPos, setExplorerPos] = useState<'left' | 'right'>('left')
   const [collapsed,   setCollapsed]   = useState(false)
@@ -206,7 +207,19 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
     void fetchGitStatusMap(cwd).then(setGitStatusMap)
   }, [cwd])
 
+  const refreshErrors = useCallback(() => {
+    if (!cwd) return
+    void invoke<{ items?: { file: string; sev: number }[] }>('problems.scan', { path: cwd })
+      .then(result => {
+        const items = result?.items ?? []
+        const paths = new Set(items.filter(i => i.sev === 0).map(i => i.file.replace(/\\/g, '/')))
+        setErrorFiles(paths)
+      })
+      .catch(() => {})
+  }, [cwd])
+
   useEffect(() => { refreshGitStatus() }, [refreshGitStatus])
+  useEffect(() => { refreshErrors() }, [refreshErrors])
 
   // (Re)start the native recursive file watcher whenever cwd changes, and
   // stop it on unmount. The watcher emits 'fs:changed' below.
@@ -217,23 +230,27 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
   }, [cwd])
 
   // External filesystem changes (from the native watcher) — debounce a git
-  // status refresh. Per-directory explorer cache invalidation is handled by
-  // FileExplorer itself (it owns dirCache).
+  // status refresh and error re-scan. Per-directory explorer cache
+  // invalidation is handled by FileExplorer itself (it owns dirCache).
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let gitTimer: ReturnType<typeof setTimeout> | null = null
+    let errTimer: ReturnType<typeof setTimeout> | null = null
     const unsub = on('fs:changed', (payload: unknown) => {
       const dirs = (payload as { dirs?: string[] })?.dirs ?? []
       // Git commands write to .git/ — skip those changes to avoid a feedback
       // loop where running git status triggers another git status indefinitely.
       if (dirs.length > 0 && dirs.every(d => /[/\\]\.git([/\\]|$)/.test(d))) return
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(refreshGitStatus, 300)
+      if (gitTimer) clearTimeout(gitTimer)
+      gitTimer = setTimeout(refreshGitStatus, 300)
+      if (errTimer) clearTimeout(errTimer)
+      errTimer = setTimeout(refreshErrors, 2000)
     })
     return () => {
-      if (timer) clearTimeout(timer)
+      if (gitTimer) clearTimeout(gitTimer)
+      if (errTimer) clearTimeout(errTimer)
       unsub()
     }
-  }, [refreshGitStatus])
+  }, [refreshGitStatus, refreshErrors])
 
   // Fetch and convert one directory's children for the lazy explorer.
   const loadDir = useCallback(async (path: string): Promise<FileNode[]> => {
@@ -645,6 +662,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
               onRefresh={refreshGitStatus}
               onLoadDir={loadDir}
               gitStatus={Object.keys(gitStatusMap).length > 0 ? gitStatusMap : undefined}
+              diagnosticErrors={errorFiles.size > 0 ? errorFiles : undefined}
               onAddToGitIgnore={handleAddToGitIgnore}
             />
           </div>
