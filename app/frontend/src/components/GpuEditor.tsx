@@ -425,6 +425,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const pinnedLinesRef = useRef<Set<number>>(new Set())
   const minimapGeomRef = useRef<MinimapGeometry>({ firstLine: 0, lastLine: -1, rowHeight: 2 })
   const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
+  // Forward ref to runSearch (declared later) so edit paths above it can
+  // re-run the active find query without reordering the file.
+  const runSearchRef = useRef<() => Promise<void>>(async () => {})
   const minimapFetchingRef = useRef(false)
   const fontSizeRef = useRef<number>(fontSize)
   const lastGotoLineRef = useRef<number | undefined>(undefined)
@@ -983,6 +986,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
+    if (findOpenRef.current) void runSearchRef.current()
   }, [draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
 
   // Replace the identifier prefix immediately left of the cursor with the
@@ -1050,6 +1054,20 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   // ── Find / replace ──────────────────────────────────────────────────────────
 
+  // Move the caret/selection onto a search match and scroll it into view.
+  const jumpToMatch = useCallback((idx: number) => {
+    const m = matchesRef.current[idx]
+    if (!m) return
+    currentMatchRef.current = idx
+    setCurrentMatch(idx)
+    cursorsRef.current = [{ line: m.endLine, col: m.endCol, anchorLine: m.startLine, anchorCol: m.startCol }]
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor])
+
   // Re-run editor.search with the current query/options and pick the match
   // nearest the primary cursor as "current". Fire-and-forget.
   const runSearch = useCallback(async () => {
@@ -1076,9 +1094,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       let idx = resp.matches.findIndex(m =>
         m.startLine > primary.line || (m.startLine === primary.line && m.startCol >= primary.col))
       if (idx === -1) idx = resp.matches.length > 0 ? 0 : -1
-      currentMatchRef.current = idx
-      setCurrentMatch(idx)
-      draw()
+      if (idx === -1) {
+        currentMatchRef.current = -1
+        setCurrentMatch(-1)
+        draw()
+      } else {
+        jumpToMatch(idx)
+      }
     } catch {
       matchesRef.current = []
       currentMatchRef.current = -1
@@ -1086,7 +1108,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       setCurrentMatch(-1)
       draw()
     }
-  }, [draw])
+  }, [draw, jumpToMatch])
+  runSearchRef.current = runSearch
 
   // Apply a batch of edits (already in document coordinates, any order) —
   // used by replace/replace-all, which build their edits from a search-match
@@ -1115,21 +1138,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   // Enter/Shift+Enter — select the next/previous match, wrapping around.
   const gotoMatch = useCallback((delta: number) => {
-    const matches = matchesRef.current
-    const n = matches.length
+    const n = matchesRef.current.length
     if (n === 0) return
     closeCompletions()
-    const idx = ((currentMatchRef.current + delta) % n + n) % n
-    currentMatchRef.current = idx
-    setCurrentMatch(idx)
-    const m = matches[idx]
-    cursorsRef.current = [{ line: m.endLine, col: m.endCol, anchorLine: m.startLine, anchorCol: m.startCol }]
-    cursorVisibleRef.current = true
-    notifyCursor()
-    ensureCursorVisible()
-    fetchVisible()
-    draw()
-  }, [closeCompletions, draw, ensureCursorVisible, fetchVisible, notifyCursor])
+    jumpToMatch(((currentMatchRef.current + delta) % n + n) % n)
+  }, [closeCompletions, jumpToMatch])
 
   const replaceCurrent = useCallback(async () => {
     const m = matchesRef.current[currentMatchRef.current]
@@ -1189,6 +1202,27 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     }
     await applyMultiEdit(ops)
   }, [applyMultiEdit, closeCompletions, ensureLine])
+
+  // Reads the text under each cursor's selection straight from the backend
+  // (the hidden textarea's value is kept empty, so native Ctrl+C has nothing
+  // to copy) and joins them the way VS Code does for multi-cursor copies.
+  const copySelection = useCallback(async () => {
+    const ranges = cursorsRef.current.map(rangeOf).filter((r): r is [number, number, number, number] => r !== null)
+    if (ranges.length === 0) return
+    const texts = await Promise.all(ranges.map(async ([sl, sc, el, ec]) => {
+      if (sl === el) {
+        const data = await ensureLine(sl)
+        return (data?.text ?? '').slice(sc, ec)
+      }
+      const parts: string[] = []
+      for (let ln = sl; ln <= el; ln++) {
+        const text = (await ensureLine(ln))?.text ?? ''
+        parts.push(ln === sl ? text.slice(sc) : ln === el ? text.slice(0, ec) : text)
+      }
+      return parts.join('\n')
+    }))
+    await navigator.clipboard.writeText(texts.join('\n'))
+  }, [ensureLine])
 
   const deleteForward = useCallback(async () => {
     closeCompletions()
@@ -1710,6 +1744,18 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       case 'h':
         if (e.ctrlKey || e.metaKey) { e.preventDefault(); openFind('replace') }
         return
+      case 'c':
+        if ((e.ctrlKey || e.metaKey) && rangeOf(cursorsRef.current[0])) {
+          e.preventDefault()
+          void copySelection()
+        }
+        return
+      case 'x':
+        if ((e.ctrlKey || e.metaKey) && !readOnlyRef.current && rangeOf(cursorsRef.current[0])) {
+          e.preventDefault()
+          void copySelection().then(() => deleteForward())
+        }
+        return
       default:
         if (!e.ctrlKey && !e.metaKey && !e.altKey && (AUTO_CLOSE_PAIRS[e.key] !== undefined || AUTO_CLOSE_CLOSERS.has(e.key))) {
           e.preventDefault()
@@ -1717,7 +1763,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
+  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
