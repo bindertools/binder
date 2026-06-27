@@ -17,21 +17,21 @@
 
 ---
 
-Binder is a native desktop app (C++ + WebView + React) that wraps your real shell in a multi-tab, session-restoring terminal, then layers on a code editor, live preview, database inspector, and more — all in one window.
+Binder is a native desktop app (C++ + WebView + React) that wraps your real shell in a multi-tab, session-restoring terminal, then layers on a code editor, live preview, database inspector, and more. All in one window.
 
 ## Features
 
-- **Terminal** — multi-tab sessions (any shell), session restore, Ctrl+click paths and URLs
-- **Editor** — GPU-accelerated renderer with tree-sitter syntax highlighting, file explorer, split panes, find/replace, minimap
-- **Live Preview** — sandboxed renderer for HTML files and URLs
-- **Database** — inline SQLite inspector with privacy mode
-- **Version Control** — git status, staging, diff, and branch management
-- **Ports** — live view of listening ports with port forwarding
-- **Workflows** — YAML-based automation runner with a visual graph view
-- **Performance** — real-time CPU, memory, disk, GPU, and network graphs
-- **Problems** — code diagnostics scanner with CWE vulnerability detection
-- **Apps** — built-in app store for installing first-party and community apps
-- **Themes** — dark and light presets plus a full live custom theme editor
+- **Terminal**: multi-tab sessions (any shell), session restore, Ctrl+click paths and URLs
+- **Editor**: GPU-accelerated renderer with tree-sitter syntax highlighting, file explorer, split panes, find/replace, minimap
+- **Live Preview**: sandboxed renderer for HTML files and URLs
+- **Database**: inline SQLite inspector with privacy mode
+- **Version Control**: git status, staging, diff, and branch management
+- **Ports**: live view of listening ports with port forwarding
+- **Workflows**: YAML-based automation runner with a visual graph view
+- **Performance**: real-time CPU, memory, disk, GPU, and network graphs
+- **Problems**: code diagnostics scanner with CWE vulnerability detection
+- **Apps**: built-in app store for installing first-party and community apps
+- **Themes**: dark and light presets plus a full live custom theme editor
 
 ### Syntax highlighting
 
