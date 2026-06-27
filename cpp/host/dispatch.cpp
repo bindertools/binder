@@ -40,6 +40,9 @@
 #include <shlobj.h>
 #else
 #include <sys/wait.h>
+#include <spawn.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 using json = nlohmann::json;
@@ -765,7 +768,12 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             ShellExecuteW(nullptr, L"open", dispatch_to_wide(target).c_str(),
                           nullptr, nullptr, SW_SHOWNORMAL);
 #else
-            system(("xdg-open \"" + target + "\" &").c_str());
+            {
+                pid_t pid;
+                const char* argv[] = { "xdg-open", target.c_str(), nullptr };
+                posix_spawn(&pid, "/usr/bin/xdg-open", nullptr, nullptr,
+                            const_cast<char**>(argv), environ);
+            }
 #endif
             emit("terminal:output:" + id, json(std::string("\r\n")));
             emit_prompt(id, cwd, 0);
