@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import type { PageId } from '../paneModel'
-import type { SidebarPageEntry } from '../apps/sidebarRegistry'
-import { useOrderedSidebarApps } from '../apps/sidebarRegistry'
+import { type SidebarPageEntry, useOrderedSidebarApps } from '../apps/sidebarRegistry'
 import { reorderSidebarApp, moveSidebarAppToList } from '../apps/sidebarOrder'
 
 export type { PageId }
