@@ -93,8 +93,8 @@ void Dispatcher::resolve_err(const std::string& seq, const std::string& error) {
 }
 
 void Dispatcher::emit(const std::string& event, const json& data) {
-    std::string js = "if(window.__binder_emit){window.__binder_emit('" +
-                     event + "'," + data.dump() + ")}";
+    std::string js = "if(window.__binder_emit){window.__binder_emit(" +
+                     json(event).dump() + "," + data.dump() + ")}";
     wv_.dispatch([this, js] { wv_.eval(js); });
 }
 
