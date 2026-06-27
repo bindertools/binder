@@ -70,7 +70,8 @@ jobs:
         run: |
           cmake -B cpp/build -S cpp `
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            "-DVCPKG_OVERLAY_PORTS=cpp/ports"
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports" `
+            "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
 
       - name: CMake build (all targets)
         run: cmake --build cpp/build --config Release

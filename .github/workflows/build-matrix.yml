@@ -31,6 +31,7 @@ jobs:
           - os: windows-latest
             shell: pwsh
             npm: npm.cmd
+            vcpkg_triplet: x64-windows-static
           - os: ubuntu-latest
             shell: bash
             npm: npm
@@ -103,7 +104,8 @@ jobs:
         run: |
           cmake -B cpp/build -S cpp \
             "-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            "-DVCPKG_OVERLAY_PORTS=cpp/ports"
+            "-DVCPKG_OVERLAY_PORTS=cpp/ports" \
+            ${{ matrix.vcpkg_triplet && format('-DVCPKG_TARGET_TRIPLET={0}', matrix.vcpkg_triplet) || '' }}
 
       - name: CMake build (compile check)
         shell: bash
