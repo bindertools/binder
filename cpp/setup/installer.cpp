@@ -37,6 +37,10 @@ static void RunHidden(const std::string& cmd) {
         CloseHandle(pi.hThread);
     }
 }
+#else
+#include <spawn.h>
+#include <unistd.h>
+extern char** environ;
 #endif
 
 using json = nlohmann::json;
@@ -347,7 +351,9 @@ void InstallerApp::LaunchAndClose(const std::string& seq) {
     std::wstring wexe = to_wide(exe);
     ShellExecuteW(nullptr, L"open", wexe.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #else
-    system(("\"" + exe + "\" &").c_str());
+    pid_t pid;
+    const char* argv[] = { exe.c_str(), nullptr };
+    posix_spawn(&pid, exe.c_str(), nullptr, nullptr, const_cast<char**>(argv), environ);
 #endif
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     wv_.dispatch([this] { wv_.terminate(); });
