@@ -20,6 +20,7 @@ interface Props {
   defaultZoom?: number
   commandAlignment?: 'default' | 'top' | 'bottom'
   appCommands?: Record<string, InstalledAppCommand>
+  maxHistory?: number
   onCwdChange?: (cwd: string) => void
 }
 
@@ -89,6 +90,7 @@ export default function Terminal({
   defaultZoom = 1,
   commandAlignment = 'default',
   appCommands = {},
+  maxHistory = 1000,
   onCwdChange,
 }: Props) {
   const containerRef           = useRef<HTMLDivElement>(null)
@@ -185,10 +187,24 @@ export default function Terminal({
   // Refs so JSX handlers can call functions defined inside the main useEffect
   const applyMatchRef = useRef<((match: string) => void) | null>(null)
 
-  // Command history (persists for the lifetime of this terminal tab)
+  // Command history (shared across tabs via DB; persists across restarts)
   const historyRef    = useRef<string[]>([])
   const historyIdxRef = useRef(-1)   // -1 = not navigating history
   const savedInputRef = useRef('')   // current input saved when entering history
+  const maxHistoryRef = useRef(maxHistory)
+  useEffect(() => { maxHistoryRef.current = maxHistory }, [maxHistory])
+
+  // History search popup (Ctrl+R)
+  const [histSearch, setHistSearch] = useState<{
+    query: string
+    entries: string[]   // newest-first snapshot of history
+    selectedIdx: number
+    top: number
+    left: number
+  } | null>(null)
+  const histSearchRef = useRef(histSearch)
+  useEffect(() => { histSearchRef.current = histSearch }, [histSearch])
+  const histSearchInputRef = useRef<HTMLInputElement>(null)
 
   // Undo stack for the input bar (Ctrl+Z) — one entry per edit, holding the
   // value *before* that edit.
@@ -196,6 +212,14 @@ export default function Terminal({
 
   useEffect(() => {
     invoke<string>('terminal.cwd', { id: tabId }).then(p => { if (p) { cwdRef.current = p; setCwd(p); onCwdChange?.(p) } }).catch(() => {})
+  }, [tabId])
+
+  useEffect(() => {
+    invoke<{ history: Array<{ id: number; command: string; timestamp: number }> }>(
+      'session.history.get', { sessionId: 'default', limit: maxHistoryRef.current }
+    ).then(resp => {
+      historyRef.current = (resp?.history ?? []).map(h => h.command).reverse()
+    }).catch(() => {})
   }, [tabId])
 
   useEffect(() => {
@@ -594,7 +618,8 @@ export default function Terminal({
       const hist = historyRef.current
       if (hist.length === 0 || hist[hist.length - 1] !== value) {
         hist.push(value)
-        if (hist.length > 500) hist.shift()
+        if (hist.length > maxHistoryRef.current) hist.shift()
+        invoke('session.history.add', { sessionId: 'default', command: value }).catch(() => {})
       }
       historyIdxRef.current = -1
       savedInputRef.current = ''
@@ -817,6 +842,23 @@ export default function Terminal({
       setMenu(null)
       lineRef.current = ''
       undoStackRef.current = []
+    } else if (e.ctrlKey && e.key === 'r') {
+      e.preventDefault()
+      const hs = histSearchRef.current
+      if (!hs) {
+        const br = inputBarRef.current?.getBoundingClientRect()
+        const entries = [...historyRef.current].reverse()
+        const popupH = Math.min(entries.length * 28 + 40, 300)
+        const top = commandAlignmentRef.current === 'bottom'
+          ? (br?.top ?? 200) - popupH - 4
+          : (br?.bottom ?? 200) + 4
+        setHistSearch({ query: inputBarValue, entries, selectedIdx: 0, top, left: br?.left ?? 0 })
+        setTimeout(() => histSearchInputRef.current?.focus(), 10)
+      } else {
+        const filtered = hs.entries.filter(e => !hs.query || e.toLowerCase().includes(hs.query.toLowerCase()))
+        const nextIdx = (hs.selectedIdx + 1) % Math.max(1, filtered.length)
+        setHistSearch({ ...hs, selectedIdx: nextIdx })
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       const hist = historyRef.current
@@ -848,6 +890,13 @@ export default function Terminal({
   }, [inputBarValue, isCommandRunning, selectAllOutput]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── render ────────────────────────────────────────────────────────────────────
+  const filteredHist = histSearch
+    ? histSearch.entries
+        .filter(e => !histSearch.query || e.toLowerCase().includes(histSearch.query.toLowerCase()))
+        .slice(0, 100)
+    : []
+  const histClampedIdx = histSearch ? Math.min(histSearch.selectedIdx, Math.max(0, filteredHist.length - 1)) : 0
+
   const cwdLabel = React.useMemo(() => {
     const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
     if (parts.length === 0) return '~'
@@ -965,6 +1014,70 @@ export default function Terminal({
               )}
             </div>
           ))}
+        </div>,
+        document.body
+      )}
+
+      {histSearch && ReactDOM.createPortal(
+        <div
+          className="fixed z-[9999] bg-[var(--info-bar-bg)] border border-[var(--border-color)] rounded-md overflow-hidden font-mono text-[12px] backdrop-blur-[12px] shadow-lg"
+          style={{ top: histSearch.top, left: histSearch.left, width: 520, maxHeight: 300 }}
+        >
+          <div className="flex items-center border-b border-[var(--border-color)] px-3 py-[6px] gap-2">
+            <span className="text-[var(--info-bar-color)] text-[11px] shrink-0 select-none">history search:</span>
+            <input
+              ref={histSearchInputRef}
+              className="flex-1 bg-transparent outline-none text-[var(--info-bar-hover-color)] caret-[var(--info-bar-hover-color)]"
+              value={histSearch.query}
+              onChange={e => setHistSearch({ ...histSearch, query: e.target.value, selectedIdx: 0 })}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setHistSearch(prev => prev ? { ...prev, selectedIdx: Math.min(prev.selectedIdx + 1, Math.max(0, filteredHist.length - 1)) } : null)
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setHistSearch(prev => prev ? { ...prev, selectedIdx: Math.max(0, prev.selectedIdx - 1) } : null)
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const sel = filteredHist[histClampedIdx]
+                  if (sel) { setInputBarValue(sel); lineRef.current = sel }
+                  setHistSearch(null)
+                  inputBarRef.current?.focus()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setHistSearch(null)
+                  inputBarRef.current?.focus()
+                } else if (e.ctrlKey && e.key === 'r') {
+                  e.preventDefault()
+                  setHistSearch(prev => prev
+                    ? { ...prev, selectedIdx: (prev.selectedIdx + 1) % Math.max(1, filteredHist.length) }
+                    : null)
+                }
+              }}
+              onBlur={() => setTimeout(() => setHistSearch(null), 150)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+          <div className="overflow-y-auto max-h-[260px] py-1 no-scrollbar">
+            {filteredHist.length === 0 ? (
+              <div className="px-3 py-[6px] text-[var(--info-bar-color)] italic">no matches</div>
+            ) : filteredHist.map((entry, i) => (
+              <div
+                key={i}
+                className={`px-3 py-[4px] cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap leading-[1.6] transition-[background] duration-[100ms] ${i === histClampedIdx ? 'bg-surface-selected text-accent-hover' : 'text-[var(--info-bar-hover-color)] hover:bg-surface-raised'}`}
+                onMouseDown={e => {
+                  e.preventDefault()
+                  setInputBarValue(entry)
+                  lineRef.current = entry
+                  setHistSearch(null)
+                  inputBarRef.current?.focus()
+                }}
+              >
+                {entry}
+              </div>
+            ))}
+          </div>
         </div>,
         document.body
       )}
