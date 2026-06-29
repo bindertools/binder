@@ -92,6 +92,7 @@ ordered_json Config::make_defaults() {
     d["file_word_wrap"]     = false;
     d["scroll_speed"]       = 3;
     d["preferred_shell"]    = "";
+    d["max_history"]        = 1000;
     d["installed_apps"]     = json::array();
     d["sidebar_app_order"]  = ordered_json{{"visible", json::array()}, {"overflow", json::array()}};
     return d;
