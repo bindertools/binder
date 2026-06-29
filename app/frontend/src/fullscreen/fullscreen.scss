@@ -278,7 +278,8 @@
   border: 1px solid var(--ide-border-lo);
   border-radius: 4px;
   &:focus-within {
-    border-color: var(--ide-accent);
+    border-color: color-mix(in srgb, var(--ide-fg) 35%, transparent);
+    background: color-mix(in srgb, var(--ide-fg) 9%, transparent);
   }
 }
 .fe-search-icon {
