@@ -11,7 +11,7 @@ interface Props {
   gpuColors?:   GpuEditorColors
   minimap?:     boolean
   indentGuides?: boolean
-  diagnostics?: { line: number; sev: number }[]
+  diagnostics?: { line: number; sev: number; msg: string; code: string }[]
 }
 
 export default function Editor({

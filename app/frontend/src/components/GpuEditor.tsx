@@ -78,7 +78,7 @@ interface Props {
   showHeader?: boolean
   // Diagnostics for this file (lint/type-check errors and warnings), drawn
   // as gutter bars. `line` is 1-based to match ProbItem/gotoLine convention.
-  diagnostics?: { line: number; sev: number }[]
+  diagnostics?: { line: number; sev: number; msg: string; code: string }[]
   gitGutter?: boolean
   gotoToken?: number
   onCursorChange?: (line: number, col: number) => void
@@ -517,6 +517,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   // and 0-based line -> diagnostic severity (0=error, 1=warn) from `diagnostics`.
   const gitChangedLinesRef = useRef<Set<number>>(new Set())
   const diagnosticLinesRef = useRef<Map<number, number>>(new Map())
+  // Full diagnostic data per 0-based line, for hover tooltips.
+  const diagnosticsByLineRef = useRef<Map<number, Array<{ sev: number; msg: string; code: string }>>>(new Map())
 
   const onCursorChangeRef = useRef(onCursorChange)
   onCursorChangeRef.current = onCursorChange
@@ -535,6 +537,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   // ── Gutter overlay (pin dots + fold chevrons, rendered as DOM for hover) ─────
   const [gutterOverlay, setGutterOverlay] = useState<GutterOverlayState>({ gutterWidth: 0, cw: 0, ch: 0, rows: [] })
   const gutterOverlayKeyRef = useRef('')
+
+  // ── Diagnostic hover tooltip ─────────────────────────────────────────────────
+  const [hoverTooltip, setHoverTooltip] = useState<{ x: number; y: number; items: Array<{ sev: number; msg: string; code: string }> } | null>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverLineRef = useRef<number | null>(null)
 
   // ── Find / replace state ─────────────────────────────────────────────────────
   const [findOpen, setFindOpen] = useState(false)
@@ -1785,16 +1792,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [colors, draw])
 
-  // Re-derive the per-line diagnostic severity map whenever diagnostics
-  // change. Keeps the most severe (lowest sev) entry per line.
+  // Re-derive the per-line diagnostic maps whenever diagnostics change.
+  // diagnosticLinesRef: 0-based line -> most severe sev (lowest number).
+  // diagnosticsByLineRef: 0-based line -> all diagnostics (errors first).
   useEffect(() => {
     const map = new Map<number, number>()
+    const byLine = new Map<number, Array<{ sev: number; msg: string; code: string }>>()
     for (const d of diagnostics ?? []) {
       const ln = d.line - 1
       const existing = map.get(ln)
       if (existing === undefined || d.sev < existing) map.set(ln, d.sev)
+      const arr = byLine.get(ln) ?? []
+      arr.push({ sev: d.sev, msg: d.msg, code: d.code })
+      byLine.set(ln, arr)
     }
+    for (const arr of byLine.values()) arr.sort((a, b) => a.sev - b.sev)
     diagnosticLinesRef.current = map
+    diagnosticsByLineRef.current = byLine
     draw()
   }, [diagnostics, draw])
 
@@ -2055,16 +2069,47 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   }, [addCursorAt, pixelToPos, selectLineAt, setCursorTo, togglePin])
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!draggingRef.current) return
-    // The mouse button may have been released outside the canvas (e.g. over
-    // the file explorer or tab bar) — that mouseup never reaches our handler
-    // since it's only bound to this element, leaving draggingRef stuck true.
-    // Bail out (and stop tracking) if the primary button is no longer down.
-    if (e.buttons === 0) { draggingRef.current = false; return }
+    if (draggingRef.current) {
+      // Clear hover during drag selection.
+      if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null }
+      setHoverTooltip(null)
+      hoverLineRef.current = null
+      // The mouse button may have been released outside the canvas (e.g. over
+      // the file explorer or tab bar) — that mouseup never reaches our handler
+      // since it's only bound to this element, leaving draggingRef stuck true.
+      // Bail out (and stop tracking) if the primary button is no longer down.
+      if (e.buttons === 0) { draggingRef.current = false; return }
+      const pos = pixelToPos(e.clientX, e.clientY)
+      if (!pos) return
+      void setCursorTo(pos.line, pos.col, true)
+      return
+    }
+
+    // Hover: check if we moved to a different line.
     const pos = pixelToPos(e.clientX, e.clientY)
-    if (!pos) return
-    void setCursorTo(pos.line, pos.col, true)
+    if (!pos || pos.line === hoverLineRef.current) return
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null }
+    setHoverTooltip(null)
+    hoverLineRef.current = pos.line
+    const items = diagnosticsByLineRef.current.get(pos.line)
+    if (!items || items.length === 0) return
+    const cx = e.clientX
+    const cy = e.clientY
+    hoverTimerRef.current = setTimeout(() => {
+      hoverTimerRef.current = null
+      if (hoverLineRef.current !== pos.line) return
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      setHoverTooltip({ x: cx - rect.left + 14, y: cy - rect.top + 18, items })
+    }, 400)
   }, [pixelToPos, setCursorTo])
+
+  const onMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null }
+    hoverLineRef.current = null
+    setHoverTooltip(null)
+  }, [])
 
   const onMouseUp = useCallback(() => { draggingRef.current = false }, [])
 
@@ -2193,6 +2238,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
+          onMouseLeave={onMouseLeave}
           onDoubleClick={onDoubleClick}
           style={{ display: 'block', cursor: 'text' }}
         />
@@ -2298,6 +2344,29 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
             onSelect={setCompletionIndex}
             onAccept={i => { completionIndexRef.current = i; void acceptCompletion() }}
           />
+        )}
+        {hoverTooltip && (
+          <div
+            className="absolute z-30 max-w-[420px] rounded border border-[var(--border-color)] bg-[var(--info-bar-bg)] px-3 py-2 font-mono text-[12px] shadow-lg pointer-events-none"
+            style={{ left: hoverTooltip.x, top: hoverTooltip.y }}
+          >
+            {hoverTooltip.items.map((item, i) => (
+              <div key={i} className={i > 0 ? 'mt-2 pt-2 border-t border-[var(--border-color)]' : ''}>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span
+                    className="font-semibold text-[11px] uppercase"
+                    style={{ color: item.sev === 0 ? (colors ?? DEFAULT_GPU_COLORS).errorLine : item.sev === 1 ? (colors ?? DEFAULT_GPU_COLORS).warningLine : '#3794ff' }}
+                  >
+                    {item.sev === 0 ? 'Error' : item.sev === 1 ? 'Warning' : 'Info'}
+                  </span>
+                  {item.code && (
+                    <span className="text-[var(--info-bar-color)] text-[11px]">({item.code})</span>
+                  )}
+                </div>
+                <div className="text-[var(--info-bar-hover-color)] whitespace-pre-wrap break-words">{item.msg}</div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

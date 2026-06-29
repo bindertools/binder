@@ -1245,7 +1245,7 @@ export default function App() {
     if (tab.type === 'editor') {
       const fileDiagnostics = probItems
         .filter(p => p.file.replace(/\\/g, '/') === tab.filePath!.replace(/\\/g, '/'))
-        .map(p => ({ line: p.line, sev: p.sev }))
+        .map(p => ({ line: p.line, sev: p.sev, msg: p.msg, code: p.code }))
       return (
         <Editor tabId={tab.id} filePath={tab.filePath!} active={true}
           defaultZoom={currentZoom} gotoLine={tab.gotoLine} gpuColors={gpuColors} minimap={appConfig.minimap}
