@@ -1,4 +1,9 @@
 import React, { useReducer, useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react'
+import * as ReactDOM from 'react-dom'
+
+// Expose React globals for IIFE app bundles that externalize react/react-dom
+;(window as unknown as Record<string, unknown>)['React'] = React
+;(window as unknown as Record<string, unknown>)['ReactDOM'] = ReactDOM
 import Terminal from './components/Terminal'
 import Editor from './components/Editor'
 import Database from './components/Database'
@@ -709,6 +714,16 @@ export default function App() {
       setLiveColors(null)
     })
     return () => offAll('app:config')
+  }, [])
+
+  // Apply theme from AppStore without requiring a full settings save
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const themeId = (e as CustomEvent<{ theme: string }>).detail?.theme
+      if (themeId) setAppConfig(prev => ({ ...prev, theme: themeId }))
+    }
+    window.addEventListener('binder:apply-theme', handler)
+    return () => window.removeEventListener('binder:apply-theme', handler)
   }, [])
 
   // ── Session restore ──────────────────────────────────────────────────────────
