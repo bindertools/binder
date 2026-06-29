@@ -20,11 +20,9 @@ const _handlers = new Map<string, Set<Handler>>()
 // No extra JSON.parse is needed — the JS engine already evaluated the literal.
 if (typeof window !== 'undefined') {
   window.__binder_emit = (event: string, data: unknown) => {
-    try {
-      _handlers.get(event)?.forEach(h => h(data))
-    } catch {
-      // ignore handler errors
-    }
+    _handlers.get(event)?.forEach(h => {
+      try { h(data) } catch (err) { console.error('[ipc] handler error', event, err) }
+    })
   }
 }
 
