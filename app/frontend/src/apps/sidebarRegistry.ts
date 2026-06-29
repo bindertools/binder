@@ -60,6 +60,7 @@ export function useOrderedSidebarApps(): { visible: SidebarPageEntry[]; overflow
   const order = useSidebarOrder()
 
   useEffect(() => {
+    if (entries.length === 0) return
     reconcileSidebarOrder(entries.map(e => e.id), entries.map(e => e.id))
   }, [entries])
 
