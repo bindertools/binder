@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import ReactDOM from 'react-dom'
+import { Terminal, FileCode2, Bug, Search, Settings, LayoutGrid, MoreHorizontal, Folder } from 'lucide-react'
 import type { PageId } from '../paneModel'
 import { type SidebarPageEntry, useOrderedSidebarApps } from '../apps/sidebarRegistry'
 import { reorderSidebarApp, moveSidebarAppToList } from '../apps/sidebarOrder'
@@ -21,73 +22,6 @@ interface Props {
   recentPaths:        string[]
   onSelectRecentPath: (path: string) => void
 }
-
-// ── Icons ─────────────────────────────────────────────────────────────────────
-
-const TerminalIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m7 11 2-2-2-2"/>
-    <path d="M11 13h4"/>
-    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-  </svg>
-)
-
-const EditorIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 22h4a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v6"/>
-    <path d="M14 2v5a1 1 0 0 0 1 1h5"/>
-    <path d="M5 14a1 1 0 0 0-1 1v2a1 1 0 0 1-1 1 1 1 0 0 1 1 1v2a1 1 0 0 0 1 1"/>
-    <path d="M9 22a1 1 0 0 0 1-1v-2a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-2a1 1 0 0 0-1-1"/>
-  </svg>
-)
-
-const DebugIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M10 19.655A6 6 0 0 1 6 14v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 3.97"/>
-    <path d="M14 15.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"/>
-    <path d="M14.12 3.88 16 2"/>
-    <path d="M21 5a4 4 0 0 1-3.55 3.97"/>
-    <path d="M3 21a4 4 0 0 1 3.81-4"/>
-    <path d="M3 5a4 4 0 0 0 3.55 3.97"/>
-    <path d="M6 13H2"/>
-    <path d="m8 2 1.88 1.88"/>
-    <path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"/>
-  </svg>
-)
-
-const SearchIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/>
-    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-  </svg>
-)
-
-const SettingsIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-  </svg>
-)
-
-const AppsIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 7h3a1 1 0 0 0 1-1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1a2 2 0 0 0-4 0v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a2 2 0 0 0 0-4h-1a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/>
-  </svg>
-)
-
-const MoreIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="1"/>
-    <circle cx="19" cy="12" r="1"/>
-    <circle cx="5" cy="12" r="1"/>
-  </svg>
-)
-
-const FolderIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
-  </svg>
-)
 
 // ── SidebarBtn ────────────────────────────────────────────────────────────────
 
@@ -324,7 +258,7 @@ function MoreMenu({
                     title={p}
                     onClick={() => { close(); onSelectRecentPath(p) }}
                   >
-                    <span className="shrink-0 opacity-60"><FolderIcon /></span>
+                    <span className="shrink-0 opacity-60"><Folder size={14} strokeWidth={1.5} /></span>
                     <span className="truncate">{shortPath(p)}</span>
                   </button>
                 ))
@@ -354,7 +288,7 @@ function MoreMenu({
         {active && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
         )}
-        <MoreIcon />
+        <MoreHorizontal size={19} strokeWidth={1.5} />
       </button>
       {menuEl}
     </>
@@ -434,13 +368,13 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
       {/* Features */}
       <div className="flex flex-col items-center gap-0.5 flex-1 pt-1.5">
         <SidebarBtn active={activePage === 'terminal'} label="Terminal" onClick={() => onNavigate('terminal')} onMouseDown={e => onStartPageDrag('terminal', e.clientX, e.clientY)}>
-          <TerminalIcon />
+          <Terminal size={19} strokeWidth={1.5} />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'editor'} label="Code Editor" onClick={() => onNavigate('editor')} onMouseDown={e => onStartPageDrag('editor', e.clientX, e.clientY)}>
-          <EditorIcon />
+          <FileCode2 size={19} strokeWidth={1.5} />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'debug'} label="Debug" onClick={() => onNavigate('debug')} onMouseDown={e => onStartPageDrag('debug', e.clientX, e.clientY)}>
-          <DebugIcon />
+          <Bug size={19} strokeWidth={1.5} />
         </SidebarBtn>
 
         {/* Apps installed via the App Store that claim a sidebar slot, in the
@@ -484,7 +418,7 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
           onAppMouseDown={(id, listTarget, e) => handleAppMouseDown(id, listTarget, e)}
         />
         <SidebarBtn active={false} label="Search (Ctrl+K)" onClick={onSearch}>
-          <SearchIcon />
+          <Search size={19} strokeWidth={1.5} />
         </SidebarBtn>
       </div>
 
@@ -492,10 +426,10 @@ export default function Sidebar({ activePage, onNavigate, onSearch, onStartPageD
       <div className="flex flex-col items-center gap-0.5">
         <div className="w-6 h-px bg-sep mb-1" />
         <SidebarBtn active={activePage === 'apps'} label="App Store" onClick={() => onNavigate('apps')}>
-          <AppsIcon />
+          <LayoutGrid size={19} strokeWidth={1.5} />
         </SidebarBtn>
         <SidebarBtn active={activePage === 'settings'} label="Settings" onClick={() => onNavigate('settings')}>
-          <SettingsIcon />
+          <Settings size={19} strokeWidth={1.5} />
         </SidebarBtn>
       </div>
     </div>
