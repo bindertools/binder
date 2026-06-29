@@ -248,7 +248,19 @@ static bool history_add(const std::string& sess_id, const std::string& command) 
         return false;
     st.bind_text(1, sess_id);
     st.bind_text(2, command);
-    return st.step();
+    bool ok = st.step();
+
+    // Prune to keep at most 10 000 entries per session.
+    Stmt prune;
+    if (ok && prune.prepare(d,
+            "DELETE FROM command_history WHERE session_id=? AND "
+            "id < (SELECT id FROM command_history WHERE session_id=? "
+            "      ORDER BY id DESC LIMIT 1 OFFSET 9999)")) {
+        prune.bind_text(1, sess_id);
+        prune.bind_text(2, sess_id);
+        prune.step();
+    }
+    return ok;
 }
 
 // ─── session.history.get ──────────────────────────────────────────────────────
