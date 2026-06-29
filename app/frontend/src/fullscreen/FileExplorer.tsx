@@ -64,6 +64,8 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
   const [filterQuery,  setFilterQuery]  = useState('')
   const dragSrc = useRef<string | null>(null)
+  const dragExpandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dragOverTarget = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const filterInputRef = useRef<HTMLInputElement>(null)
   const installedApps = useInstalledApps()
@@ -126,7 +128,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   // ── flatten the cached tree for rendering — root is the first row ───────────
   const flatRows = useMemo(() => {
     const out: FlatRow[] = []
-    function walk(path: string, depth: number) {
+    function walk(path: string, depth: number): void {
       const children = dirCache.get(path)
       if (!children) return
       for (const child of children) {
@@ -303,23 +305,45 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   ], [handleNewFile, handleNewFolder, handleReveal, refreshAll, onRefresh, collapseAll])
 
   // ── Drag and drop ─────────────────────────────────────────────────────────
+  const clearDragExpand = () => {
+    if (dragExpandTimer.current) { clearTimeout(dragExpandTimer.current); dragExpandTimer.current = null }
+    dragOverTarget.current = null
+  }
+
   const onDragStart = (e: React.DragEvent, node: FileNode) => {
     dragSrc.current = node.path
     e.dataTransfer.effectAllowed = 'move'
   }
 
   const onDragOver = (e: React.DragEvent, node: FileNode) => {
-    if (!node.isDir || node.path === dragSrc.current) return
+    if (!node.isDir) return
+    const src = dragSrc.current
+    // Reject self-drop and dropping a folder into its own descendant
+    if (!src || node.path === src || node.path.startsWith(src + '/')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOver(node.path)
+    // Start auto-expand timer only when we enter a new target
+    if (dragOverTarget.current !== node.path) {
+      clearDragExpand()
+      dragOverTarget.current = node.path
+      if (!expanded.has(node.path)) {
+        dragExpandTimer.current = setTimeout(() => {
+          setExpanded(prev => new Set(prev).add(node.path))
+          if (!dirCache.has(node.path)) void loadDir(node.path)
+        }, 600)
+      }
+    }
   }
 
   const onDrop = async (e: React.DragEvent, node: FileNode) => {
     e.preventDefault()
     setDragOver(null)
-    if (!dragSrc.current || !node.isDir || node.path === dragSrc.current) return
+    clearDragExpand()
     const src = dragSrc.current
+    if (!src || !node.isDir) return
+    // Reject self-drop and ancestor drops (folder into its own subfolder)
+    if (node.path === src || node.path.startsWith(src + '/')) return
     const srcName = src.split('/').pop()!
     await invoke('fs.rename', { from: src, to: `${node.path}/${srcName}` })
     dragSrc.current = null
@@ -328,7 +352,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     onRefresh()
   }
 
-  const onDragEnd = () => { dragSrc.current = null; setDragOver(null) }
+  const onDragEnd = () => { dragSrc.current = null; setDragOver(null); clearDragExpand() }
 
   // ── Flat tree row ──────────────────────────────────────────────────────────
   function renderNode(node: FileNode, depth: number, style: React.CSSProperties): React.ReactNode {
@@ -363,7 +387,11 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
         onDragOver={e => onDragOver(e, node)}
         onDrop={e => onDrop(e, node)}
         onDragEnd={onDragEnd}
-        onDragLeave={() => setDragOver(null)}
+        onDragLeave={e => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return
+          setDragOver(null)
+          clearDragExpand()
+        }}
       >
         <span className="fe-node__chevron">
           {node.isDir ? (
