@@ -133,7 +133,7 @@ export default function StructureView({ filePath, onGotoLine }: Props) {
       }
     }
 
-    fetchOutline(4)
+    void fetchOutline(4)
     return () => { cancelled = true }
   }, [filePath])
 
