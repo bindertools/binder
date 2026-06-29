@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { Download, Trash2, RefreshCw, Search, Check, X } from 'lucide-react'
 import type { AppManifest } from './types'
 import { getAvailableAppIds, loadAppManifest } from './loader'
 import { getInstalledIds, installApp, uninstallApp } from './registry'
@@ -13,50 +14,6 @@ import './AppStore.scss'
 
 type Tab = 'apps' | 'themes'
 type AppFilter = 'all' | 'installed' | 'updates'
-
-function IconDownload() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7.5 2v8M4.5 7l3 3 3-3" />
-      <path d="M2.5 12.5h10" />
-    </svg>
-  )
-}
-
-function IconTrash() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2.5 4h10M6 4V3h3v1" />
-      <path d="M3.5 4l.8 8h6.4l.8-8" />
-    </svg>
-  )
-}
-
-function IconRefresh() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 7A6 6 0 1 1 7.5 1.07" />
-      <path d="M13 1v3.5H9.5" />
-    </svg>
-  )
-}
-
-function IconSearch() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="6.5" cy="6.5" r="4.5"/>
-      <path d="M10 10l3 3"/>
-    </svg>
-  )
-}
-
-function IconCheck() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2.5 7.5l3.5 3.5 6.5-6.5" />
-    </svg>
-  )
-}
 
 // ── Merged app entry (local bundled manifest + remote registry metadata) ────────
 interface MergedApp {
@@ -155,7 +112,7 @@ function AppsTab() {
   return (
     <>
       <div className="ps-search-wrap">
-        <span className="ps-search-icon"><IconSearch /></span>
+        <span className="ps-search-icon"><Search size={13} aria-hidden /></span>
         <input
           className="ps-search"
           placeholder="Search apps…"
@@ -163,7 +120,7 @@ function AppsTab() {
           onChange={e => setSearch(e.target.value)}
         />
         {search && (
-          <button className="ps-search-clear" onClick={() => setSearch('')}>×</button>
+          <button className="ps-search-clear" onClick={() => setSearch('')}><X size={13} /></button>
         )}
       </div>
 
@@ -241,7 +198,7 @@ function AppCard({ app, isBusy, onToggle, onUpdate }: AppCardProps) {
               title="Update"
               disabled={isBusy}
             >
-              {isBusy ? <span className="ps-spin"><IconRefresh /></span> : <IconRefresh />}
+              {isBusy ? <span className="ps-spin"><RefreshCw size={14} /></span> : <RefreshCw size={14} />}
             </button>
           )}
           <button
@@ -251,8 +208,8 @@ function AppCard({ app, isBusy, onToggle, onUpdate }: AppCardProps) {
             disabled={isBusy}
           >
             {isBusy
-              ? <span className="ps-spin"><IconRefresh /></span>
-              : app.isInstalled ? <IconTrash /> : <IconDownload />
+              ? <span className="ps-spin"><RefreshCw size={14} /></span>
+              : app.isInstalled ? <Trash2 size={14} /> : <Download size={14} />
             }
           </button>
         </div>
@@ -414,7 +371,7 @@ function ThemeCard({ id, name, description, author, official, preview, isActive,
       <div className="ps-theme-card__body">
         <div className="ps-theme-card__name">
           {name}
-          {isActive && <span className="ps-theme-card__active-dot"><IconCheck /></span>}
+          {isActive && <span className="ps-theme-card__active-dot"><Check size={13} /></span>}
         </div>
         <div className="ps-theme-card__byline">
           <span>{author}</span>
