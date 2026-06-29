@@ -385,6 +385,45 @@ const COMPLETIONS_MAX_HEIGHT = 300
 // inserted by the Tab key.
 const INDENT_SIZE = 2
 
+// Parse a VS Code-style snippet body (e.g. "foo($1, $2)") into plain text
+// and a sorted list of tab-stop positions in document coordinates.
+// $0 is treated as the final cursor position (sorted last).
+function parseSnippetBody(body: string, insertLine: number, insertCol: number): {
+  text: string
+  stops: { line: number; col: number }[]
+} {
+  let text = ''
+  const raw: { num: number; line: number; col: number }[] = []
+  let curLine = insertLine
+  let curCol = insertCol
+  let i = 0
+  while (i < body.length) {
+    if (body[i] === '$') {
+      const m = body.slice(i + 1).match(/^(\d+)/)
+      if (m) {
+        raw.push({ num: parseInt(m[1]), line: curLine, col: curCol })
+        i += 1 + m[0].length
+        continue
+      }
+    }
+    if (body[i] === '\n') {
+      text += '\n'
+      curLine++
+      curCol = 0
+    } else {
+      text += body[i]
+      curCol++
+    }
+    i++
+  }
+  raw.sort((a, b) => {
+    if (a.num === 0) return 1
+    if (b.num === 0) return -1
+    return a.num - b.num
+  })
+  return { text, stops: raw.map(({ line, col }) => ({ line, col })) }
+}
+
 // Extra leading column reserved in the gutter for the git-change /
 // diagnostic indicator bar, ahead of the right-aligned line number.
 const GUTTER_BAR_COLS = 1
@@ -536,6 +575,10 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const completionIndexRef = useRef(0)
   completionIndexRef.current = completionIndex
   const completionDebounceRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // ── Snippet tab-stop state ────────────────────────────────────────────────────
+  const snippetStopsRef = useRef<{ line: number; col: number }[]>([])
+  const snippetStopIdxRef = useRef(0)
 
   // Notify consumers (e.g. FullscreenIDE's status bar) of the primary
   // cursor's position. Cheap to call after every cursor-affecting op.
@@ -1019,6 +1062,21 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     completionDebounceRef.current = setTimeout(() => { void requestCompletions() }, 150)
   }, [requestCompletions])
 
+  const advanceSnippetStop = useCallback(() => {
+    const stops = snippetStopsRef.current
+    const nextIdx = snippetStopIdxRef.current + 1
+    if (nextIdx >= stops.length) {
+      snippetStopsRef.current = []
+      return
+    }
+    snippetStopIdxRef.current = nextIdx
+    const stop = stops[nextIdx]
+    cursorsRef.current = [{ line: stop.line, col: stop.col }]
+    notifyCursor()
+    ensureCursorVisible()
+    draw()
+  }, [draw, ensureCursorVisible, notifyCursor])
+
   // ── Editing ─────────────────────────────────────────────────────────────────
 
   // Apply one edit per cursor (some cursors may be skipped — e.g. a no-op
@@ -1078,7 +1136,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   }, [draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
 
   // Replace the identifier prefix immediately left of the cursor with the
-  // selected completion's insertText.
+  // selected completion's insertText, or expand its snippet body if present.
   const acceptCompletion = useCallback(async () => {
     const item = completionItemsRef.current[completionIndexRef.current]
     closeCompletions()
@@ -1088,7 +1146,23 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const text = data?.text ?? ''
     let start = col
     while (start > 0 && /[A-Za-z0-9_]/.test(text[start - 1])) start--
-    await applyMultiEdit([{ idx: 0, range: [line, start, line, col], text: item.insertText }])
+
+    if (item.snippet) {
+      const { text: snippetText, stops } = parseSnippetBody(item.snippet, line, start)
+      const firstStop = stops[0]
+      await applyMultiEdit([{
+        idx: 0,
+        range: [line, start, line, col],
+        text: snippetText,
+        cursor: firstStop ? { lineOffset: firstStop.line - line, col: firstStop.col } : undefined,
+      }])
+      if (stops.length > 0) {
+        snippetStopsRef.current = stops
+        snippetStopIdxRef.current = 0
+      }
+    } else {
+      await applyMultiEdit([{ idx: 0, range: [line, start, line, col], text: item.insertText }])
+    }
   }, [applyMultiEdit, closeCompletions, ensureLine])
 
   const applyUndoRedo = useCallback(async (op: 'editor.undo' | 'editor.redo') => {
@@ -1786,6 +1860,21 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const shift = e.shiftKey
 
+    if (snippetStopsRef.current.length > 0) {
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        advanceSnippetStop()
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        snippetStopsRef.current = []
+        return
+      }
+      // Any other key exits snippet mode and falls through to normal handling.
+      snippetStopsRef.current = []
+    }
+
     if (completionOpenRef.current) {
       switch (e.key) {
         case 'ArrowUp':
@@ -1886,7 +1975,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
+  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget

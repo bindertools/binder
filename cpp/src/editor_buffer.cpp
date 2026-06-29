@@ -1645,6 +1645,86 @@ const std::map<std::string, std::vector<std::string>> kKeywords = {
     }},
 };
 
+// Snippet bodies (VS Code format: $1, $2 ... $0 = final cursor) keyed by
+// language name → symbol name. Sent alongside `insertText` when present.
+const std::map<std::string, std::map<std::string, std::string>> kSnippets = {
+    {"javascript", {
+        {"for",         "for ($1; $2; $3) {\n  $0\n}"},
+        {"if",          "if ($1) {\n  $0\n}"},
+        {"function",    "function $1($2) {\n  $0\n}"},
+        {"class",       "class $1 {\n  $0\n}"},
+        {"switch",      "switch ($1) {\n  case $2:\n    $0\n}"},
+        {"try",         "try {\n  $1\n} catch ($2) {\n  $0\n}"},
+        {"useEffect",   "useEffect(() => {\n  $1\n}, [$2])"},
+        {"useState",    "useState($1)"},
+        {"useCallback", "useCallback(($1) => {\n  $2\n}, [$3])"},
+        {"useMemo",     "useMemo(() => $1, [$2])"},
+        {"useRef",      "useRef($1)"},
+    }},
+    {"typescript", {
+        {"for",         "for ($1; $2; $3) {\n  $0\n}"},
+        {"if",          "if ($1) {\n  $0\n}"},
+        {"function",    "function $1($2) {\n  $0\n}"},
+        {"class",       "class $1 {\n  $0\n}"},
+        {"switch",      "switch ($1) {\n  case $2:\n    $0\n}"},
+        {"try",         "try {\n  $1\n} catch ($2) {\n  $0\n}"},
+        {"useEffect",   "useEffect(() => {\n  $1\n}, [$2])"},
+        {"useState",    "useState($1)"},
+        {"useCallback", "useCallback(($1) => {\n  $2\n}, [$3])"},
+        {"useMemo",     "useMemo(() => $1, [$2])"},
+        {"useRef",      "useRef($1)"},
+    }},
+    {"tsx", {
+        {"for",         "for ($1; $2; $3) {\n  $0\n}"},
+        {"if",          "if ($1) {\n  $0\n}"},
+        {"function",    "function $1($2) {\n  $0\n}"},
+        {"class",       "class $1 {\n  $0\n}"},
+        {"switch",      "switch ($1) {\n  case $2:\n    $0\n}"},
+        {"try",         "try {\n  $1\n} catch ($2) {\n  $0\n}"},
+        {"useEffect",   "useEffect(() => {\n  $1\n}, [$2])"},
+        {"useState",    "useState($1)"},
+        {"useCallback", "useCallback(($1) => {\n  $2\n}, [$3])"},
+        {"useMemo",     "useMemo(() => $1, [$2])"},
+        {"useRef",      "useRef($1)"},
+    }},
+    {"c", {
+        {"for",    "for ($1; $2; $3) {\n  $0\n}"},
+        {"if",     "if ($1) {\n  $0\n}"},
+        {"while",  "while ($1) {\n  $0\n}"},
+        {"switch", "switch ($1) {\n  case $2:\n    $0\n    break;\n}"},
+    }},
+    {"cpp", {
+        {"for",    "for ($1; $2; $3) {\n  $0\n}"},
+        {"if",     "if ($1) {\n  $0\n}"},
+        {"while",  "while ($1) {\n  $0\n}"},
+        {"switch", "switch ($1) {\n  case $2:\n    $0\n    break;\n}"},
+        {"class",  "class $1 {\npublic:\n  $0\n};"},
+    }},
+    {"rust", {
+        {"fn",     "fn $1($2) {\n  $0\n}"},
+        {"for",    "for $1 in $2 {\n  $0\n}"},
+        {"if",     "if $1 {\n  $0\n}"},
+        {"match",  "match $1 {\n  $2 => $0,\n}"},
+        {"impl",   "impl $1 {\n  $0\n}"},
+        {"struct", "struct $1 {\n  $0\n}"},
+        {"enum",   "enum $1 {\n  $0\n}"},
+    }},
+    {"go", {
+        {"func",   "func $1($2) $3 {\n  $0\n}"},
+        {"for",    "for $1 {\n  $0\n}"},
+        {"if",     "if $1 {\n  $0\n}"},
+        {"switch", "switch $1 {\n  case $2:\n    $0\n}"},
+    }},
+    {"python", {
+        {"def",   "def $1($2):\n  $0"},
+        {"class", "class $1:\n  $0"},
+        {"for",   "for $1 in $2:\n  $0"},
+        {"if",    "if $1:\n  $0"},
+        {"while", "while $1:\n  $0"},
+        {"with",  "with $1 as $2:\n  $0"},
+    }},
+};
+
 struct LanguageDef {
     const char* name;
     const TSLanguage* (*fn)(void);
@@ -2581,9 +2661,21 @@ json op_completions(const json& msg) {
             matches.emplace(name, sym);
     }
 
+    // Pre-fetch the snippet map for this language (null if none).
+    const std::map<std::string, std::string>* lang_snippets = nullptr;
+    if (b->lang) {
+        auto sit = kSnippets.find(b->lang->name);
+        if (sit != kSnippets.end()) lang_snippets = &sit->second;
+    }
+
     json items = json::array();
     for (const auto& [name, sym] : matches) {
-        items.push_back({{"label", name}, {"kind", sym.kind}, {"insertText", name}, {"detail", sym.detail}});
+        json item = {{"label", name}, {"kind", sym.kind}, {"insertText", name}, {"detail", sym.detail}};
+        if (lang_snippets) {
+            auto snip = lang_snippets->find(name);
+            if (snip != lang_snippets->end()) item["snippet"] = snip->second;
+        }
+        items.push_back(std::move(item));
         if (items.size() >= 50) break;
     }
     return {{"items", items}};

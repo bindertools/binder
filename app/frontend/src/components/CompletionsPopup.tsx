@@ -8,6 +8,7 @@ export interface CompletionItem {
   kind: string
   insertText: string
   detail?: string
+  snippet?: string
 }
 
 interface Props {
