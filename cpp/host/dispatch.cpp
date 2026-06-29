@@ -1440,6 +1440,24 @@ void Dispatcher::dispatch_worker(const std::string& seq,
             static constexpr size_t kMaxFileSize = 2 * 1024 * 1024;
             static constexpr size_t kMaxFindings = 200;
 
+            auto is_comment_line = [](const std::string& line, const std::string& ext) -> bool {
+                auto t = line;
+                auto first = t.find_first_not_of(" \t");
+                if (first == std::string::npos) return true;
+                t = t.substr(first);
+                if (ext == ".c" || ext == ".cpp" || ext == ".h" || ext == ".hpp" ||
+                    ext == ".js" || ext == ".ts" || ext == ".jsx" || ext == ".tsx" ||
+                    ext == ".java" || ext == ".go" || ext == ".rs" || ext == ".swift") {
+                    if (t.rfind("//", 0) == 0 || t.rfind("/*", 0) == 0 || t.rfind("*", 0) == 0) return true;
+                }
+                if (ext == ".py" || ext == ".sh" || ext == ".rb") {
+                    if (t[0] == '#') return true;
+                }
+                if (ext == ".sql" && t.rfind("--", 0) == 0) return true;
+                if ((ext == ".html" || ext == ".xml") && t.rfind("<!--", 0) == 0) return true;
+                return false;
+            };
+
             json results = json::array();
             try {
                 for (auto it = fs::recursive_directory_iterator(
@@ -1496,6 +1514,7 @@ void Dispatcher::dispatch_worker(const std::string& seq,
 
                     for (int li = 0; li < totalLines && results.size() < kMaxFindings; ++li) {
                         const std::string& curLine = allLines[li];
+                        if (is_comment_line(curLine, ext)) continue;
                         for (auto* pat : applicable) {
                             auto col = curLine.find(pat->pattern);
                             if (col == std::string::npos) continue;
