@@ -109,7 +109,6 @@ export function buildInstalledAppCommandMap(apps: AppManifest[]): Record<string,
   const registry: Record<string, InstalledAppCommand> = {}
   for (const app of apps) {
     for (const command of app.commands ?? []) addCommand(registry, app, command)
-    if (app.tabType) addCommand(registry, app, { name: app.tabType, description: defaultCommandDescription(app) })
   }
   return registry
 }

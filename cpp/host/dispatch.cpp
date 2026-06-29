@@ -366,9 +366,6 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                         }
                     }
                 }
-            } else if (name == "problems") {
-                emit("app:open-problems", json({{"cwd",cwd},{"terminalId",id},
-                                                {"sources",json::array()},{"items",json::array()}}));
             } else if (name == "debug") {
                 std::string info = "\r\nBinder v" + std::string(kHostVersion) + " (C++ host)\r\n";
                 info += "CWD: " + cwd + "\r\n";
@@ -391,13 +388,6 @@ void Dispatcher::dispatch_worker(const std::string& seq,
                 ShellExecuteW(nullptr, L"open", dispatch_to_wide(cwd).c_str(),
                               nullptr, nullptr, SW_SHOWNORMAL);
 #endif
-            } else if (name == "ports") {
-                emit("app:open-tab", json({{"type","ports"},{"title","ports"},{"terminalId",id}}));
-            } else if (name == "performance") {
-                emit("app:open-tab", json({{"type","perf"},{"title","performance"},{"terminalId",id}}));
-            } else if (name == "fullscreen" || name == "fs") {
-                emit("app:open-tab", json({{"type","fullscreen"},{"title","explorer"},
-                                           {"terminalId",id},{"cwd",cwd}}));
             } else if (name == "plugins") {
                 emit("app:open-tab", json({{"type","plugins"},{"title","plugins"},{"terminalId",id}}));
             } else if (name == "pack") {
