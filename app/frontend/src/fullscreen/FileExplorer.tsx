@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { ChevronRight, ChevronDown } from 'lucide-react'
+import { ChevronRight, ChevronDown, Search, X } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { invoke, on } from '../lib/ipc'
 import ContextMenu, { ContextMenuItem } from './ContextMenu'
@@ -62,8 +62,10 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   const [dragOver,     setDragOver]     = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
   const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
+  const [filterQuery,  setFilterQuery]  = useState('')
   const dragSrc = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const filterInputRef = useRef<HTMLInputElement>(null)
   const installedApps = useInstalledApps()
 
   // (Re)fetch a directory's children and store them in the cache.
@@ -139,8 +141,47 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     return out
   }, [root, dirCache, expanded])
 
+  const filterRows = useMemo(() => {
+    const q = filterQuery.trim().toLowerCase()
+    if (!q || !root) return null
+
+    function fuzzyMatch(name: string): boolean {
+      const n = name.toLowerCase()
+      let qi = 0
+      for (let i = 0; i < n.length && qi < q.length; i++) {
+        if (n[i] === q[qi]) qi++
+      }
+      return qi === q.length
+    }
+
+    function walkFiltered(path: string, depth: number): FlatRow[] | null {
+      const children = dirCache.get(path)
+      if (!children) return null
+      const result: FlatRow[] = []
+      for (const child of children) {
+        if (child.isDir) {
+          const sub = walkFiltered(child.path, depth + 1)
+          if (fuzzyMatch(child.name) || sub !== null) {
+            result.push({ node: child, depth })
+            if (sub) result.push(...sub)
+          }
+        } else {
+          if (fuzzyMatch(child.name)) result.push({ node: child, depth })
+        }
+      }
+      return result.length > 0 ? result : null
+    }
+
+    const rows: FlatRow[] = [{ node: root, depth: 0 }]
+    const sub = walkFiltered(root.path, 1)
+    if (sub) rows.push(...sub)
+    return rows
+  }, [filterQuery, root, dirCache])
+
+  const displayRows = filterRows ?? flatRows
+
   const virtualizer = useVirtualizer({
-    count: flatRows.length,
+    count: displayRows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 10,
@@ -363,16 +404,54 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     : []
 
   return (
-    <div className="fe-root">
+    <div
+      className="fe-root"
+      onKeyDown={e => {
+        if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault()
+          filterInputRef.current?.focus()
+        }
+      }}
+    >
+      {/* Filter input */}
+      <div className="fe-search-wrap">
+        <Search size={12} className="fe-search-icon" />
+        <input
+          ref={filterInputRef}
+          className="fe-search-input"
+          placeholder="Filter files..."
+          value={filterQuery}
+          onChange={e => setFilterQuery(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') {
+              setFilterQuery('')
+              scrollRef.current?.focus()
+              e.preventDefault()
+            }
+            e.stopPropagation()
+          }}
+        />
+        {filterQuery && (
+          <button
+            className="fe-search-clear"
+            onClick={() => { setFilterQuery(''); filterInputRef.current?.focus() }}
+            tabIndex={-1}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+
       {/* Tree — area menu on empty space */}
       <div
         ref={scrollRef}
         className="fe-tree"
+        tabIndex={-1}
         onContextMenu={e => openAreaCtx(e, root)}
       >
         <div style={{ position: 'relative', height: virtualizer.getTotalSize(), width: '100%' }}>
           {virtualizer.getVirtualItems().map(item => {
-            const { node, depth } = flatRows[item.index]
+            const { node, depth } = displayRows[item.index]
             return renderNode(node, depth, {
               position: 'absolute', top: 0, left: 0, right: 0,
               height: `${item.size}px`, transform: `translateY(${item.start}px)`,
