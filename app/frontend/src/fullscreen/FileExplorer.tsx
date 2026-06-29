@@ -128,7 +128,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   // ── flatten the cached tree for rendering — root is the first row ───────────
   const flatRows = useMemo(() => {
     const out: FlatRow[] = []
-    function walk(path: string, depth: number) {
+    function walk(path: string, depth: number): void {
       const children = dirCache.get(path)
       if (!children) return
       for (const child of children) {
