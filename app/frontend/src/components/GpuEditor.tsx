@@ -67,6 +67,7 @@ interface Props {
   readOnly?: boolean
   minimap?: boolean
   indentGuides?: boolean
+  wordWrap?: boolean
   gotoLine?: number
   // Per-pane view-state key (cursor/scroll position), so two panes showing
   // the same buffer keep independent cursor/scroll. Omit for single-pane
@@ -322,6 +323,41 @@ function computeVisibleLines(top: number, count: number, lineCount: number, fold
   return result
 }
 
+// Start column of each visual row when `text` is soft-wrapped at `cols`.
+function computeWraps(text: string, cols: number): number[] {
+  if (cols <= 0) return [0]
+  const starts: number[] = [0]
+  for (let pos = cols; pos < text.length; pos += cols) starts.push(pos)
+  return starts
+}
+
+interface DisplayRow { logicalLine: number; startCol: number; isFirst: boolean }
+
+// Build visual display rows for word-wrap mode. Each logical line may produce
+// multiple rows; folded anchor lines always emit exactly 1 row.
+function computeDisplayRows(
+  top: number, maxRows: number, lineCount: number,
+  folds: Map<number, number>, cache: Map<number, LineData>, wrapCols: number,
+): DisplayRow[] {
+  const result: DisplayRow[] = []
+  let ln = top
+  while (result.length < maxRows && ln < lineCount) {
+    if (!isLineHidden(ln, folds)) {
+      if (folds.has(ln)) {
+        result.push({ logicalLine: ln, startCol: 0, isFirst: true })
+      } else {
+        const text = cache.get(ln)?.text ?? ''
+        const starts = computeWraps(text, wrapCols)
+        for (let wi = 0; wi < starts.length && result.length < maxRows; wi++) {
+          result.push({ logicalLine: ln, startCol: starts[wi], isFirst: wi === 0 })
+        }
+      }
+    }
+    ln++
+  }
+  return result
+}
+
 // Highlight color for matched bracket pairs — a subtle neutral box that
 // works against any theme (not theme-derived, unlike the other paint colors).
 const BRACKET_MATCH_COLOR: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.4 }
@@ -387,8 +423,9 @@ function pinDotX(gutterWidth: number, cw: number): number {
 }
 
 const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
-  filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, gotoLine, gotoToken, viewKey,
-  showHeader = true, diagnostics, gitGutter = true, onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
+  filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, wordWrap = false,
+  gotoLine, gotoToken, viewKey, showHeader = true, diagnostics, gitGutter = true,
+  onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -416,6 +453,8 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   minimapRef.current = minimap
   const indentGuidesRef = useRef<boolean>(indentGuides)
   indentGuidesRef.current = indentGuides
+  const wordWrapRef = useRef<boolean>(wordWrap)
+  wordWrapRef.current = wordWrap
   // Code folding: anchor line (0-based) -> last hidden line (inclusive) of
   // the collapsed block. Cleared whenever the line count changes, since
   // anchors would otherwise point at the wrong lines after an edit.
@@ -533,90 +572,97 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const { line: curLine } = cursors[0]
     const ranges = cursors.map(rangeOf).filter((r): r is [number, number, number, number] => r !== null)
 
-    const visLines = computeVisibleLines(top, rows, lineCount, foldedRangesRef.current)
+    const wordWrap = wordWrapRef.current
+    // Build a unified display-row list. Non-wrap: one row per visible logical
+    // line (startCol = left scroll offset). Wrap: each logical line may yield
+    // multiple rows; startCol is the text column that row starts at.
+    const displayRows: DisplayRow[] = wordWrap && cols > 0
+      ? computeDisplayRows(top, rows, lineCount, foldedRangesRef.current, lineCacheRef.current, cols)
+      : computeVisibleLines(top, rows, lineCount, foldedRangesRef.current).map(ln => ({ logicalLine: ln, startCol: left, isFirst: true }))
     const overlayRows: GutterOverlayRow[] = []
 
-    // Current-line highlight (full width, behind text)
-    const curRow = visLines.indexOf(curLine)
-    if (curRow >= 0) {
-      const y = curRow * ch
-      renderer.drawRect(0, y, canvas.clientWidth, ch, paintRef.current.currentLine)
+    // Current-line highlight — all visual rows of the cursor's logical line.
+    for (let row = 0; row < displayRows.length; row++) {
+      if (displayRows[row].logicalLine === curLine) {
+        renderer.drawRect(0, row * ch, canvas.clientWidth, ch, paintRef.current.currentLine)
+      }
     }
 
-    for (let row = 0; row < visLines.length; row++) {
-      const ln = visLines[row]
+    for (let row = 0; row < displayRows.length; row++) {
+      const { logicalLine: ln, startCol: rowStart, isFirst } = displayRows[row]
       const data = lineCacheRef.current.get(ln)
       const y = row * ch
 
-      // Line number (right-aligned in gutter, left of the pin-dot/fold
-      // columns), brightened on the current line or shown in red if
-      // pinned/marked.
-      const numStr = String(ln + 1)
-      const numX = pinDotX(gutterWidth, cw) - GUTTER_PIN_PAD - numStr.length * cw
-      const numColor = pinnedLinesRef.current.has(ln) ? paintRef.current.errorLine
-        : ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter
-      renderer.drawText(numX, y, numStr, numColor)
+      // Gutter decorations only on the first visual row of each logical line.
+      if (isFirst) {
+        const numStr = String(ln + 1)
+        const numX = pinDotX(gutterWidth, cw) - GUTTER_PIN_PAD - numStr.length * cw
+        const numColor = pinnedLinesRef.current.has(ln) ? paintRef.current.errorLine
+          : ln === curLine ? paintRef.current.gutterActive : paintRef.current.gutter
+        renderer.drawText(numX, y, numStr, numColor)
 
-      // Gutter indicator bar: diagnostics take priority over git changes,
-      // errors over warnings — one bar per line, matching the reference UI.
-      const sev = diagnosticLinesRef.current.get(ln)
-      const barColor = sev === 0 ? paintRef.current.errorLine
-        : sev === 1 ? paintRef.current.warningLine
-        : gitChangedLinesRef.current.has(ln) ? paintRef.current.gitModified
-        : null
-      if (barColor) {
-        renderer.drawRect(GUTTER_LEFT_PAD + GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
+        const sev = diagnosticLinesRef.current.get(ln)
+        const barColor = sev === 0 ? paintRef.current.errorLine
+          : sev === 1 ? paintRef.current.warningLine
+          : gitChangedLinesRef.current.has(ln) ? paintRef.current.gitModified
+          : null
+        if (barColor) {
+          renderer.drawRect(GUTTER_LEFT_PAD + GUTTER_BAR_INSET, y, GUTTER_BAR_WIDTH, ch, barColor)
+        }
+
+        const foldEnd = computeFoldEnd(ln, lineCount, lineCacheRef.current)
+        overlayRows.push({
+          ln, y,
+          foldable: foldEnd !== null,
+          folded: foldedRangesRef.current.has(ln),
+          pinned: pinnedLinesRef.current.has(ln),
+          current: ln === curLine,
+        })
       }
-
-      // Pin dot and fold chevron for this row are rendered as a DOM overlay
-      // (see gutterOverlay) so they get real CSS hover/cursor states.
-      const foldEnd = computeFoldEnd(ln, lineCount, lineCacheRef.current)
-      overlayRows.push({
-        ln, y,
-        foldable: foldEnd !== null,
-        folded: foldedRangesRef.current.has(ln),
-        pinned: pinnedLinesRef.current.has(ln),
-        current: ln === curLine,
-      })
 
       if (!data) continue
 
-      // Indent guides — a thin vertical line at each indent stop preceding
-      // the line's first non-whitespace character. Blank lines borrow the
-      // deeper surrounding indentation so guides run continuously through
-      // gaps in a block instead of disappearing.
-      if (indentGuidesRef.current) {
+      // Indent guides — only on the first visual row of each logical line.
+      if (indentGuidesRef.current && isFirst) {
         const indentCols = guideIndent(ln, lineCount, lineCacheRef.current)
         for (let col = 0; col < indentCols; col += INDENT_SIZE) {
-          const vis = col - left
+          const vis = col - rowStart
           if (vis < 0 || vis >= cols) continue
           renderer.drawRect(gutterWidth + vis * cw, y, 1, ch, paintRef.current.indentGuide)
         }
       }
 
-      // Selection backgrounds (one per cursor with an active selection)
+      // Selection backgrounds clipped to this visual row's column range.
       for (const [sLine, sCol, eLine, eCol] of ranges) {
         if (ln >= sLine && ln <= eLine) {
-          const from = ln === sLine ? sCol : 0
-          const to = ln === eLine ? eCol : data.text.length + 1
-          const x0 = gutterWidth + (from - left) * cw
-          const x1 = gutterWidth + (to - left) * cw
+          let from = ln === sLine ? sCol : 0
+          let to = ln === eLine ? eCol : data.text.length + 1
+          if (wordWrap) {
+            from = Math.max(from, rowStart)
+            to = Math.min(to, rowStart + cols)
+            if (from >= to) continue
+          }
+          const x0 = gutterWidth + (from - rowStart) * cw
+          const x1 = gutterWidth + (to - rowStart) * cw
           renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, paintRef.current.selection)
         }
       }
 
-      // Build a per-character style array, then draw runs of matching style.
+      // Build a per-character style array, then draw runs of matching style,
+      // limited to the column range visible in this visual row.
       const text = data.text
       const styleAt = new Uint8Array(text.length)
       for (const [s, e, style] of data.spans) {
         for (let i = Math.max(0, s); i < Math.min(text.length, e); i++) styleAt[i] = style
       }
-      let i = 0
-      while (i < text.length) {
+      const iStart = wordWrap ? rowStart : 0
+      const iEnd = wordWrap ? Math.min(text.length, rowStart + cols) : text.length
+      let i = iStart
+      while (i < iEnd) {
         const st = styleAt[i]
         let j = i + 1
-        while (j < text.length && styleAt[j] === st) j++
-        const col = i - left
+        while (j < iEnd && styleAt[j] === st) j++
+        const col = i - rowStart
         if (col + (j - i) > 0 && col < cols) {
           const visStart = Math.max(0, col)
           const skip = visStart - col
@@ -627,12 +673,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         i = j
       }
 
-      // Collapsed-fold placeholder, drawn right after the line's text.
+      // Collapsed-fold placeholder. With wrap, pin it near the right edge of
+      // the first (and only) visual row shown for the folded line.
       if (foldedRangesRef.current.has(ln)) {
-        const col = text.length - left
-        if (col < cols) {
-          const x = gutterWidth + Math.max(0, col) * cw
-          renderer.drawText(x, y, FOLD_PLACEHOLDER, paintRef.current.gutter)
+        const col = wordWrap
+          ? Math.min(text.length, Math.max(0, cols - FOLD_PLACEHOLDER.length))
+          : text.length - rowStart
+        if (col >= 0 && col < cols) {
+          renderer.drawText(gutterWidth + Math.max(0, col) * cw, y, FOLD_PLACEHOLDER, paintRef.current.gutter)
         }
       }
     }
@@ -640,44 +688,57 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     // Matched bracket pair highlight
     if (bracketMatchRef.current) {
       for (const [bLine, bCol] of bracketMatchRef.current) {
-        const row = visLines.indexOf(bLine)
+        let row = -1
+        for (let ri = displayRows.length - 1; ri >= 0; ri--) {
+          const r = displayRows[ri]
+          if (r.logicalLine === bLine && bCol >= r.startCol) { row = ri; break }
+        }
         if (row < 0) continue
-        const x = gutterWidth + (bCol - left) * cw
-        const y = row * ch
-        if (bCol - left >= 0 && bCol - left < cols) {
-          renderer.drawRect(x, y, cw, ch, BRACKET_MATCH_COLOR)
+        const rowStart = displayRows[row].startCol
+        const visCol = bCol - rowStart
+        if (visCol >= 0 && visCol < cols) {
+          renderer.drawRect(gutterWidth + visCol * cw, row * ch, cw, ch, BRACKET_MATCH_COLOR)
         }
       }
     }
 
-    // Find/replace match highlights
+    // Find/replace match highlights — iterate display rows so word-wrap
+    // segments within the same logical line each get their slice highlighted.
     const matches = matchesRef.current
+    const firstVisLine = displayRows.length > 0 ? displayRows[0].logicalLine : top
+    const lastVisLine = displayRows.length > 0 ? displayRows[displayRows.length - 1].logicalLine : top
     for (let mi = 0; mi < matches.length; mi++) {
       const m = matches[mi]
-      if (m.endLine < top || m.startLine >= top + rows) continue
+      if (m.endLine < firstVisLine || m.startLine > lastVisLine) continue
       const color = mi === currentMatchRef.current ? paintRef.current.findMatchActive : paintRef.current.findMatch
-      for (let ln = Math.max(m.startLine, top); ln <= Math.min(m.endLine, top + rows - 1); ln++) {
-        const row = visLines.indexOf(ln)
-        if (row < 0) continue
-        const data = lineCacheRef.current.get(ln)
-        const from = ln === m.startLine ? m.startCol : 0
-        const to = ln === m.endLine ? m.endCol : (data?.text.length ?? 0) + 1
-        const x0 = gutterWidth + (from - left) * cw
-        const x1 = gutterWidth + (to - left) * cw
-        const y = row * ch
-        renderer.drawRect(Math.max(gutterWidth, x0), y, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, color)
+      for (let ri = 0; ri < displayRows.length; ri++) {
+        const r = displayRows[ri]
+        if (r.logicalLine < m.startLine || r.logicalLine > m.endLine) continue
+        const mdata = lineCacheRef.current.get(r.logicalLine)
+        const mFrom = r.logicalLine === m.startLine ? m.startCol : 0
+        const mTo = r.logicalLine === m.endLine ? m.endCol : (mdata?.text.length ?? 0) + 1
+        const rfrom = wordWrap ? Math.max(mFrom, r.startCol) : mFrom
+        const rto = wordWrap ? Math.min(mTo, r.startCol + cols) : mTo
+        if (wordWrap && rfrom >= rto) continue
+        const x0 = gutterWidth + (rfrom - r.startCol) * cw
+        const x1 = gutterWidth + (rto - r.startCol) * cw
+        renderer.drawRect(Math.max(gutterWidth, x0), ri * ch, Math.max(0, x1 - Math.max(gutterWidth, x0)), ch, color)
       }
     }
 
-    // Carets — one per cursor
+    // Carets — one per cursor, placed on the correct visual row.
     if (cursorVisibleRef.current) {
       for (const c of cursors) {
-        const row = visLines.indexOf(c.line)
+        let row = -1
+        for (let ri = displayRows.length - 1; ri >= 0; ri--) {
+          const r = displayRows[ri]
+          if (r.logicalLine === c.line && c.col >= r.startCol) { row = ri; break }
+        }
         if (row < 0) continue
-        const x = gutterWidth + (c.col - left) * cw
-        const y = row * ch
-        if (c.col - left >= 0 && c.col - left <= cols) {
-          renderer.drawRect(x, y, 2, ch, paintRef.current.cursor)
+        const rowStart = displayRows[row].startCol
+        const visCol = c.col - rowStart
+        if (visCol >= 0 && visCol <= cols) {
+          renderer.drawRect(gutterWidth + visCol * cw, row * ch, 2, ch, paintRef.current.cursor)
         }
       }
     }
@@ -841,17 +902,27 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     if (isLineHidden(topLineRef.current, foldedRangesRef.current)) {
       topLineRef.current = nextVisibleLine(topLineRef.current, foldedRangesRef.current)
     }
-    leftColRef.current = Math.max(0, leftColRef.current)
+    leftColRef.current = wordWrapRef.current ? 0 : Math.max(0, leftColRef.current)
   }, [])
 
   const ensureCursorVisible = useCallback(() => {
     const { line, col } = cursorsRef.current[0]
     const rows = visibleRowsRef.current
     const cols = visibleColsRef.current
-    if (line < topLineRef.current) topLineRef.current = line
-    else if (line >= topLineRef.current + rows) topLineRef.current = line - rows + 1
-    if (col < leftColRef.current) leftColRef.current = col
-    else if (col >= leftColRef.current + cols) leftColRef.current = col - cols + 1
+    if (wordWrapRef.current) {
+      if (line < topLineRef.current) {
+        topLineRef.current = line
+      } else if (line > topLineRef.current) {
+        const vrows = computeDisplayRows(topLineRef.current, rows, lineCountRef.current, foldedRangesRef.current, lineCacheRef.current, cols)
+        if (!vrows.some(r => r.logicalLine === line)) topLineRef.current = line
+      }
+      leftColRef.current = 0
+    } else {
+      if (line < topLineRef.current) topLineRef.current = line
+      else if (line >= topLineRef.current + rows) topLineRef.current = line - rows + 1
+      if (col < leftColRef.current) leftColRef.current = col
+      else if (col >= leftColRef.current + cols) leftColRef.current = col - cols + 1
+    }
     clampScroll()
   }, [clampScroll])
 
@@ -890,10 +961,27 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const { line, col } = cursorsRef.current[0]
     if (!renderer) return { x: 0, y: 0, above: false, maxHeight: COMPLETIONS_MAX_HEIGHT }
     const gutterWidth = computeGutterWidth(lineCountRef.current, renderer.cellWidth)
-    const x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
-    const visLines = computeVisibleLines(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current)
-    const row = visLines.indexOf(line)
-    const rowIndex = row >= 0 ? row : line - topLineRef.current
+    let x: number, rowIndex: number
+    if (wordWrapRef.current) {
+      const wrapCols = visibleColsRef.current
+      const visRows = computeDisplayRows(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current, lineCacheRef.current, wrapCols)
+      let found = -1
+      for (let ri = visRows.length - 1; ri >= 0; ri--) {
+        if (visRows[ri].logicalLine === line && visRows[ri].startCol <= col) { found = ri; break }
+      }
+      if (found < 0) {
+        rowIndex = Math.max(0, line - topLineRef.current)
+        x = gutterWidth + (wrapCols > 0 ? col % wrapCols : col) * renderer.cellWidth
+      } else {
+        rowIndex = found
+        x = gutterWidth + (col - visRows[found].startCol) * renderer.cellWidth
+      }
+    } else {
+      x = gutterWidth + (col - leftColRef.current) * renderer.cellWidth
+      const visLines = computeVisibleLines(topLineRef.current, visibleRowsRef.current, lineCountRef.current, foldedRangesRef.current)
+      const row = visLines.indexOf(line)
+      rowIndex = row >= 0 ? row : line - topLineRef.current
+    }
     const rowTop = rowIndex * renderer.cellHeight
     const rowBottom = rowTop + renderer.cellHeight
     const containerHeight = containerRef.current?.clientHeight ?? 0
@@ -1345,9 +1433,36 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
       let { line, col } = c
       if (dl !== 0) {
-        line = Math.max(0, Math.min(lineCountRef.current - 1, line + dl))
-        const data = await ensureLine(line)
-        col = Math.min(col, data?.text.length ?? 0)
+        const wrapCols = visibleColsRef.current
+        if (wordWrapRef.current && (dl === 1 || dl === -1) && wrapCols > 0) {
+          const data = await ensureLine(line)
+          const lineLen = data?.text.length ?? 0
+          const visualCol = col % wrapCols
+          if (dl === -1) {
+            if (col >= wrapCols) {
+              col = col - wrapCols
+            } else {
+              line = Math.max(0, line - 1)
+              const prevData = await ensureLine(line)
+              const prevLen = prevData?.text.length ?? 0
+              const lastRowStart = Math.floor(prevLen / wrapCols) * wrapCols
+              col = Math.min(lastRowStart + visualCol, prevLen)
+            }
+          } else {
+            const nextRowStart = Math.floor(col / wrapCols) * wrapCols + wrapCols
+            if (nextRowStart <= lineLen) {
+              col = Math.min(nextRowStart + visualCol, lineLen)
+            } else {
+              line = Math.min(lineCountRef.current - 1, line + 1)
+              const nextData = await ensureLine(line)
+              col = Math.min(visualCol, nextData?.text.length ?? 0)
+            }
+          }
+        } else {
+          line = Math.max(0, Math.min(lineCountRef.current - 1, line + dl))
+          const data = await ensureLine(line)
+          col = Math.min(col, data?.text.length ?? 0)
+        }
       }
       if (dc !== 0) {
         col += dc
@@ -1658,6 +1773,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [indentGuides, ready, draw])
 
+  // Toggling word wrap resets horizontal scroll and re-lays-out the viewport.
+  useEffect(() => {
+    if (!ready) return
+    if (wordWrap) leftColRef.current = 0
+    recomputeViewport()
+    draw()
+  }, [wordWrap, ready, recomputeViewport, draw])
+
   // ── Input handlers ──────────────────────────────────────────────────────────
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1785,6 +1908,14 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     const x = clientX - rect.left - gutterWidth
     const y = clientY - rect.top
     const rowIdx = Math.max(0, Math.floor(y / renderer.cellHeight))
+    if (wordWrapRef.current) {
+      const wrapCols = visibleColsRef.current
+      const visRows = computeDisplayRows(topLineRef.current, rowIdx + 1, lineCountRef.current, foldedRangesRef.current, lineCacheRef.current, wrapCols)
+      const vr = rowIdx < visRows.length ? visRows[rowIdx] : visRows[visRows.length - 1]
+      if (!vr) return null
+      const col = vr.startCol + Math.round(x / renderer.cellWidth)
+      return { line: vr.logicalLine, col: Math.max(0, col) }
+    }
     const visLines = computeVisibleLines(topLineRef.current, rowIdx + 1, lineCountRef.current, foldedRangesRef.current)
     const line = rowIdx < visLines.length ? visLines[rowIdx] : Math.max(0, lineCountRef.current - 1)
     const col = leftColRef.current + Math.round(x / renderer.cellWidth)
@@ -1931,7 +2062,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       wheelAccumRef.current += wheelLines
       const dLines = Math.trunc(wheelAccumRef.current)
       wheelAccumRef.current -= dLines
-      const dCols = Math.round(e.deltaX / renderer.cellWidth)
+      const dCols = wordWrapRef.current ? 0 : Math.round(e.deltaX / renderer.cellWidth)
       if (dLines !== 0) topLineRef.current += dLines
       if (dCols !== 0) leftColRef.current += dCols
       clampScroll()

@@ -102,7 +102,7 @@ interface PaneStatus {
 
 const INITIAL_PANE_STATUS: PaneStatus = { line: 1, col: 1, totalLines: 0, eol: 'LF' }
 
-export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defaultZoom, openFileRequest }: Props) {
+export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordWrap, defaultZoom, openFileRequest }: Props) {
   // ── file state ───────────────────────────────────────────────────────────────
   const [openFiles,  setOpenFiles]  = useState<OpenFile[]>([])
   const [leftActive, setLeftActive] = useState<string | null>(null)
@@ -578,6 +578,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, defau
         colors={gpuColors}
         minimap={minimapEnabled}
         indentGuides={indentGuides}
+        wordWrap={wordWrap}
         viewKey={viewKey}
         showHeader={false}
         gotoLine={pending?.line}
