@@ -173,4 +173,5 @@ export interface AppConfig {
   scroll_speed: number
   preferred_shell: string  // "zsh" | "bash" | "sh" | "" (auto-detect)
   database_privacy: boolean
+  max_history: number
 }
