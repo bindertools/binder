@@ -1454,6 +1454,90 @@ const char* kCompletionQueryMarkdown = R"TSQ(
 (info_string) @type
 )TSQ";
 
+// ── Outline queries ───────────────────────────────────────────────────────────
+// Each pattern captures @decl (the full declaration node, for containment
+// tree-building) and a kind-named capture on the name node (@function, @class,
+// @method, @interface, @type, @enum, @struct, @constructor).
+// Languages without an outline query return an empty symbol list.
+
+const char* kOutlineQueryJavascript = R"TSQ(
+(function_declaration name: (identifier) @function) @decl
+(class_declaration name: (identifier) @class) @decl
+(method_definition name: (property_identifier) @method) @decl
+)TSQ";
+
+const char* kOutlineQueryTypescript = R"TSQ(
+(function_declaration name: (identifier) @function) @decl
+(class_declaration name: (type_identifier) @class) @decl
+(method_definition name: (property_identifier) @method) @decl
+(interface_declaration name: (type_identifier) @interface) @decl
+(type_alias_declaration name: (type_identifier) @type) @decl
+(enum_declaration name: (identifier) @enum) @decl
+)TSQ";
+
+const char* kOutlineQueryC = R"TSQ(
+(function_definition declarator: (function_declarator declarator: (identifier) @function)) @decl
+(struct_specifier name: (type_identifier) @struct) @decl
+(enum_specifier name: (type_identifier) @enum) @decl
+)TSQ";
+
+const char* kOutlineQueryCpp = R"TSQ(
+(function_definition declarator: (function_declarator declarator: (identifier) @function)) @decl
+(function_definition declarator: (function_declarator declarator: (field_identifier) @method)) @decl
+(class_specifier name: (type_identifier) @class) @decl
+(struct_specifier name: (type_identifier) @struct) @decl
+(enum_specifier name: (type_identifier) @enum) @decl
+(namespace_definition name: (namespace_identifier) @type) @decl
+)TSQ";
+
+const char* kOutlineQueryCSharp = R"TSQ(
+(class_declaration name: (identifier) @class) @decl
+(interface_declaration name: (identifier) @interface) @decl
+(enum_declaration name: (identifier) @enum) @decl
+(struct_declaration (identifier) @struct) @decl
+(method_declaration name: (identifier) @method) @decl
+(constructor_declaration name: (identifier) @constructor) @decl
+)TSQ";
+
+const char* kOutlineQueryRust = R"TSQ(
+(function_item name: (identifier) @function) @decl
+(struct_item name: (type_identifier) @struct) @decl
+(enum_item name: (type_identifier) @enum) @decl
+(trait_item name: (type_identifier) @interface) @decl
+(impl_item type: (type_identifier) @class) @decl
+)TSQ";
+
+const char* kOutlineQueryGo = R"TSQ(
+(function_declaration name: (identifier) @function) @decl
+(method_declaration name: (field_identifier) @method) @decl
+(type_spec name: (type_identifier) @struct) @decl
+)TSQ";
+
+const char* kOutlineQueryJava = R"TSQ(
+(class_declaration name: (identifier) @class) @decl
+(interface_declaration name: (identifier) @interface) @decl
+(enum_declaration name: (identifier) @enum) @decl
+(method_declaration name: (identifier) @method) @decl
+(constructor_declaration name: (identifier) @constructor) @decl
+)TSQ";
+
+const char* kOutlineQueryLua = R"TSQ(
+(function_declaration name: (identifier) @function) @decl
+)TSQ";
+
+const char* kOutlineQueryPython = R"TSQ(
+(function_definition name: (identifier) @function) @decl
+(class_definition name: (identifier) @class) @decl
+)TSQ";
+
+const char* kOutlineQueryBash = R"TSQ(
+(function_definition name: (word) @function) @decl
+)TSQ";
+
+const char* kOutlineQueryZig = R"TSQ(
+(function_declaration name: (identifier) @function) @decl
+)TSQ";
+
 // HTML — adapted from tree-sitter-html's own highlights.scm. `@tag`/
 // `@tag.error` (no kStyles slot) remapped to `@type`; `@attribute`
 // remapped to `@property`; `(entity) @escape` added for character
@@ -1733,23 +1817,25 @@ struct LanguageDef {
     // tree-sitter completions for this language (word-based + keyword
     // completions still work).
     const char* completion_query_src = "";
+    // Structural symbol query for editor.outline. Empty = no outline for this language.
+    const char* outline_query_src = "";
 };
 
 const LanguageDef kLanguages[] = {
-    {"json",       tree_sitter_json,       kQueryJson,               kCompletionQueryJson},
-    {"javascript", tree_sitter_javascript, kQueryJavascript.c_str(), kCompletionQueryJavascript},
-    {"typescript", tree_sitter_typescript, kQueryTypescript.c_str(), kCompletionQueryTypescript},
-    {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript},
-    {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC},
-    {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp},
-    {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp},
-    {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust},
-    {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo},
-    {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava},
-    {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua},
-    {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython},
-    {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash},
-    {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig},
+    {"json",       tree_sitter_json,       kQueryJson,               kCompletionQueryJson,       ""},
+    {"javascript", tree_sitter_javascript, kQueryJavascript.c_str(), kCompletionQueryJavascript, kOutlineQueryJavascript},
+    {"typescript", tree_sitter_typescript, kQueryTypescript.c_str(), kCompletionQueryTypescript, kOutlineQueryTypescript},
+    {"tsx",        tree_sitter_tsx,        kQueryTypescript.c_str(), kCompletionQueryTypescript, kOutlineQueryTypescript},
+    {"c",          tree_sitter_c,          kQueryC,                  kCompletionQueryC,          kOutlineQueryC},
+    {"cpp",        tree_sitter_cpp,        kQueryCpp.c_str(),        kCompletionQueryCpp,        kOutlineQueryCpp},
+    {"csharp",     tree_sitter_c_sharp,    kQueryCSharp,             kCompletionQueryCSharp,     kOutlineQueryCSharp},
+    {"rust",       tree_sitter_rust,       kQueryRust,               kCompletionQueryRust,       kOutlineQueryRust},
+    {"go",         tree_sitter_go,         kQueryGo,                 kCompletionQueryGo,         kOutlineQueryGo},
+    {"java",       tree_sitter_java,       kQueryJava,               kCompletionQueryJava,       kOutlineQueryJava},
+    {"lua",        tree_sitter_lua,        kQueryLua,                kCompletionQueryLua,        kOutlineQueryLua},
+    {"python",     tree_sitter_python,     kQueryPython,             kCompletionQueryPython,     kOutlineQueryPython},
+    {"bash",       tree_sitter_bash,       kQueryBash,               kCompletionQueryBash,       kOutlineQueryBash},
+    {"zig",        tree_sitter_zig,        kQueryZig,                kCompletionQueryZig,        kOutlineQueryZig},
     {"toml",       tree_sitter_toml,       kQueryToml,               kCompletionQueryToml},
     {"dockerfile", tree_sitter_dockerfile, kQueryDockerfile,         kCompletionQueryDockerfile},
     {"yaml",       tree_sitter_yaml,       kQueryYaml,               kCompletionQueryYaml},
@@ -1877,6 +1963,47 @@ CompiledCompletionQuery* completion_query_for(const LanguageDef* lang) {
     }
     auto* raw = cq.get();
     cache[lang] = std::move(cq);
+    return raw;
+}
+
+// Compiled outline-query cache (one per language, compiled on first use).
+// Patterns capture pairs: a kind-named name node (@function, @class, …) and
+// @decl (the full declaration node) for containment-based tree building.
+struct CompiledOutlineQuery {
+    TSQuery* query = nullptr;
+    std::vector<std::string> capture_kinds; // capture index → kind name
+};
+
+CompiledOutlineQuery* outline_query_for(const LanguageDef* lang) {
+    static std::map<const LanguageDef*, std::unique_ptr<CompiledOutlineQuery>> cache;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lk(mu);
+    auto it = cache.find(lang);
+    if (it != cache.end()) return it->second.get();
+
+    auto oq = std::make_unique<CompiledOutlineQuery>();
+    const char* src = lang->outline_query_src;
+    if (src && src[0]) {
+        uint32_t err_offset = 0;
+        TSQueryError err_type = TSQueryErrorNone;
+        TSQuery* q = ts_query_new(lang->fn(), src, (uint32_t)strlen(src),
+                                  &err_offset, &err_type);
+        if (!q) {
+            spdlog::error("editor: outline query failed for {} at offset {} (err {})",
+                          lang->name, err_offset, (int)err_type);
+        } else {
+            oq->query = q;
+            uint32_t n = ts_query_capture_count(q);
+            oq->capture_kinds.resize(n);
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t len = 0;
+                const char* nm = ts_query_capture_name_for_id(q, i, &len);
+                oq->capture_kinds[i] = std::string(nm, len);
+            }
+        }
+    }
+    auto* raw = oq.get();
+    cache[lang] = std::move(oq);
     return raw;
 }
 
@@ -2681,6 +2808,109 @@ json op_completions(const json& msg) {
     return {{"items", items}};
 }
 
+// ── Outline ───────────────────────────────────────────────────────────────────
+// Run the language's outline query over the live tree-sitter AST.  Each pattern
+// captures @decl (the full declaration node) and a kind-named capture on the
+// name identifier.  Symbols are sorted by declaration start byte, then a
+// stack-based containment pass assigns parent→child relationships so methods
+// defined inside a class body appear as children of their class node.
+
+struct OutlineSym {
+    std::string name;
+    std::string kind;
+    uint32_t start_byte; // declaration node start (for containment)
+    uint32_t end_byte;   // declaration node end
+    uint32_t line;       // 0-indexed source line of the name node
+};
+
+json build_outline_tree(const std::vector<OutlineSym>& syms) {
+    std::vector<int> parents(syms.size(), -1);
+    std::vector<int> stk;
+    for (int i = 0; i < (int)syms.size(); i++) {
+        while (!stk.empty() && syms[(size_t)stk.back()].end_byte <= syms[(size_t)i].start_byte)
+            stk.pop_back();
+        if (!stk.empty()) parents[(size_t)i] = stk.back();
+        stk.push_back(i);
+    }
+
+    std::vector<std::vector<int>> children(syms.size());
+    std::vector<int> roots;
+    for (int i = 0; i < (int)syms.size(); i++) {
+        if (parents[(size_t)i] == -1) roots.push_back(i);
+        else children[(size_t)parents[(size_t)i]].push_back(i);
+    }
+
+    std::function<json(int)> make_node = [&](int idx) -> json {
+        json kids = json::array();
+        for (int c : children[(size_t)idx]) kids.push_back(make_node(c));
+        return {{"name", syms[(size_t)idx].name}, {"kind", syms[(size_t)idx].kind},
+                {"line", syms[(size_t)idx].line + 1}, {"children", std::move(kids)}};
+    };
+
+    json arr = json::array();
+    for (int r : roots) arr.push_back(make_node(r));
+    return arr;
+}
+
+json op_outline(const json& msg) {
+    std::string path = msg.value("path", "");
+    std::lock_guard<std::mutex> lk(g_mu);
+
+    Buffer* b = nullptr;
+    if (!path.empty()) {
+        for (auto& kv : g_buffers) {
+            if (kv.second->path == path) { b = kv.second.get(); break; }
+        }
+    }
+
+    if (!b) return {{"symbols", json::array()}, {"ready", false}};
+    if (!b->tree || !b->lang) return {{"symbols", json::array()}, {"ready", true}};
+
+    CompiledOutlineQuery* oq = outline_query_for(b->lang);
+    if (!oq || !oq->query) return {{"symbols", json::array()}, {"ready", true}};
+
+    std::vector<OutlineSym> syms;
+    TSQueryCursor* cursor = ts_query_cursor_new();
+    ts_query_cursor_exec(cursor, oq->query, ts_tree_root_node(b->tree));
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match)) {
+        TSNode name_node = {}, decl_node = {};
+        std::string kind;
+        bool name_found = false, decl_found = false;
+        for (uint16_t ci = 0; ci < match.capture_count; ci++) {
+            const TSQueryCapture& cap = match.captures[ci];
+            const std::string& cname = oq->capture_kinds[cap.index];
+            if (cname == "decl") {
+                decl_node = cap.node;
+                decl_found = true;
+            } else {
+                name_node = cap.node;
+                kind = cname;
+                name_found = true;
+            }
+        }
+        if (!name_found || !decl_found) continue;
+        uint32_t ns = ts_node_start_byte(name_node);
+        uint32_t ne = ts_node_end_byte(name_node);
+        if (ne <= ns || ne > b->text.size()) continue;
+        std::string name = b->text.substr(ns, ne - ns);
+        if (name.empty()) continue;
+        TSPoint pt = ts_node_start_point(name_node);
+        syms.push_back({name, kind,
+                        ts_node_start_byte(decl_node),
+                        ts_node_end_byte(decl_node),
+                        pt.row});
+    }
+    ts_query_cursor_delete(cursor);
+
+    std::sort(syms.begin(), syms.end(),
+              [](const OutlineSym& x, const OutlineSym& y) {
+                  return x.start_byte < y.start_byte;
+              });
+
+    return {{"symbols", build_outline_tree(syms)}, {"ready", true}};
+}
+
 json op_save(const json& msg) {
     int id = msg.value("bufferId", 0);
     std::lock_guard<std::mutex> lk(g_mu);
@@ -2749,6 +2979,7 @@ bool dispatch(const std::string& type, const json& msg,
     else if (type == "editor.matchBracket")  resp = op_match_bracket(msg);
     else if (type == "editor.search")        resp = op_search(msg);
     else if (type == "editor.completions")   resp = op_completions(msg);
+    else if (type == "editor.outline")       resp = op_outline(msg);
     else if (type == "editor.save")          resp = op_save(msg);
     else if (type == "editor.close")         resp = op_close(msg);
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);
