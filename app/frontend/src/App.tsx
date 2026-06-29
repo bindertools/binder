@@ -359,7 +359,7 @@ const defaultConfig: AppConfig = {
   git_recognition: { show_git_branch: false }, soft_close: false,
   zoom_insights: true, minimal_pwd: false, default_zoom: 1, command_alignment: 'default',
   terminal_word_wrap: false, file_word_wrap: false, scroll_speed: 1,
-  preferred_shell: '', database_privacy: false,
+  preferred_shell: '', database_privacy: false, max_history: 1000,
 }
 
 const LAYOUT_STORAGE_KEY = 'binder_pane_layout_v2'
@@ -1504,6 +1504,7 @@ export default function App() {
                   defaultZoom={currentZoom}
                   commandAlignment={(appConfig.command_alignment) ?? 'default'}
                   appCommands={appCommands}
+                  maxHistory={appConfig.max_history ?? 1000}
                   onCwdChange={cwd => handleTerminalCwdChange(tab.id, cwd)}
                 />
               </div>

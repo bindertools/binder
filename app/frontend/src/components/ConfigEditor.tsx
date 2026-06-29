@@ -340,6 +340,7 @@ export default function ConfigEditor({ appConfig, onSaveSettings, onApply, onSav
               onExport={handleExport}
               onToggle={handleToggle}
               onGitToggle={handleGitToggle}
+              updateCfg={updateCfg}
             />
           )}
           {activeSection === 'preferences' && (
@@ -494,6 +495,7 @@ function AppearanceSection({
   onExport,
   onToggle,
   onGitToggle,
+  updateCfg,
 }: {
   cfg: AppConfig
   colors: Record<string, string>
@@ -505,6 +507,7 @@ function AppearanceSection({
   onExport: () => void
   onToggle: (k: keyof AppConfig) => void
   onGitToggle: () => void
+  updateCfg: (patch: Partial<AppConfig>) => void
 }) {
   const themeOptions = [
     ...PRESET_KEYS.map(k => ({ label: k, value: k })),
@@ -535,6 +538,20 @@ function AppearanceSection({
         </SettingRow>
         <SettingRow label="Word Wrap" description="Soft-wrap long output lines in the terminal">
           <Toggle checked={!!cfg.terminal_word_wrap} onChange={() => onToggle('terminal_word_wrap')} />
+        </SettingRow>
+        <SettingRow label="History Limit" description="Maximum number of commands saved to persistent history">
+          <div className="sp-range-row">
+            <input
+              type="range"
+              className="sp-range"
+              min={100}
+              max={10000}
+              step={100}
+              value={cfg.max_history ?? 1000}
+              onChange={e => updateCfg({ max_history: parseInt(e.target.value) })}
+            />
+            <span className="sp-range-val">{(cfg.max_history ?? 1000).toLocaleString()}</span>
+          </div>
         </SettingRow>
       </SettingGroup>
 
