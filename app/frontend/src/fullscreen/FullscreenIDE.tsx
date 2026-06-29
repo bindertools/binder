@@ -693,8 +693,7 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
             }
           >
             <StructureView
-              content={activeFileObj?.content ?? ''}
-              language={activeFileObj?.language ?? 'plaintext'}
+              filePath={activeFileObj?.path ?? ''}
               onGotoLine={handleStructureGotoLine}
             />
           </div>

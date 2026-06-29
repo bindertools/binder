@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { invoke } from '../lib/ipc'
 
 type SymbolKind = 'class' | 'function' | 'method' | 'constructor' | 'interface' | 'enum' | 'struct' | 'type'
 
@@ -12,159 +13,8 @@ export interface SymbolNode {
 }
 
 interface Props {
-  content: string
-  language: string
+  filePath: string
   onGotoLine: (line: number) => void
-}
-
-const JS_RESERVED = new Set([
-  'if','else','for','while','do','switch','case','break','continue','return',
-  'throw','try','catch','finally','new','delete','typeof','instanceof','void',
-  'await','yield','import','export','default','from','of','in','as',
-])
-
-interface RawSym { name: string; kind: SymbolKind; line: number }
-
-function extractRaw(content: string, language: string): RawSym[] {
-  if (!content) return []
-  const lines = content.split('\n')
-  const out: RawSym[] = []
-  const lang = language === 'typescript' || language === 'javascript' ? 'js' : language
-
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]
-    const lineNum = i + 1
-    const trimmed = raw.trimStart()
-    const indent = raw.length - trimmed.length
-
-    if (lang === 'js') {
-      if (indent === 0) {
-        let m = trimmed.match(/^(?:export\s+(?:default\s+)?)?(?:declare\s+)?(?:abstract\s+)?class\s+(\w+)/)
-        if (m) { out.push({ name: m[1], kind: 'class', line: lineNum }); continue }
-
-        m = trimmed.match(/^(?:export\s+(?:default\s+)?)?(?:declare\s+)?(?:async\s+)?function\s*\*?\s*(\w+)\s*[(<]/)
-        if (m) { out.push({ name: m[1], kind: 'function', line: lineNum }); continue }
-
-        m = trimmed.match(/^(?:export\s+)?(?:declare\s+)?(?:const|let)\s+(\w+)(?:\s*:[^=\n]+)?\s*=\s*(?:async\s+)?(?:function|\(|[a-zA-Z_$]\w*\s*=>)/)
-        if (m) { out.push({ name: m[1], kind: 'function', line: lineNum }); continue }
-
-        m = trimmed.match(/^(?:export\s+)?(?:declare\s+)?interface\s+(\w+)/)
-        if (m) { out.push({ name: m[1], kind: 'interface', line: lineNum }); continue }
-
-        m = trimmed.match(/^(?:export\s+)?(?:const\s+)?(?:declare\s+)?enum\s+(\w+)/)
-        if (m) { out.push({ name: m[1], kind: 'enum', line: lineNum }); continue }
-
-        m = trimmed.match(/^(?:export\s+)?(?:declare\s+)?type\s+(\w+)\s*(?:<[^>]*>)?\s*=/)
-        if (m) { out.push({ name: m[1], kind: 'type', line: lineNum }); continue }
-      }
-
-      if (indent >= 2) {
-        const body = trimmed.replace(
-          /^(?:(?:public|private|protected|static|async|override|abstract|readonly|get|set|declare)\s+)+/,
-          ''
-        )
-        if (body.startsWith('constructor(') || body.startsWith('constructor<') || body.startsWith('constructor ')) {
-          out.push({ name: 'constructor', kind: 'constructor', line: lineNum }); continue
-        }
-        const meth = body.match(/^([a-zA-Z_$#][\w$]*)\s*(?:<[^>]*>)?\s*\(/)
-        if (meth && !JS_RESERVED.has(meth[1]) && meth[1] !== 'constructor') {
-          out.push({ name: meth[1], kind: 'method', line: lineNum }); continue
-        }
-      }
-      continue
-    }
-
-    if (lang === 'python') {
-      let m = raw.match(/^class\s+(\w+)/)
-      if (m) { out.push({ name: m[1], kind: 'class', line: lineNum }); continue }
-      m = raw.match(/^(\s*)(?:async\s+)?def\s+(\w+)/)
-      if (m) {
-        out.push({ name: m[2], kind: m[1].length === 0 ? 'function' : 'method', line: lineNum })
-        continue
-      }
-      continue
-    }
-
-    if (lang === 'go') {
-      let m = raw.match(/^func\s+\(\s*[\w\s*]+\)\s+(\w+)\s*[(<]/)
-      if (m) { out.push({ name: m[1], kind: 'method', line: lineNum }); continue }
-      m = raw.match(/^func\s+(\w+)\s*[(<]/)
-      if (m) { out.push({ name: m[1], kind: 'function', line: lineNum }); continue }
-      m = raw.match(/^type\s+(\w+)\s+struct/)
-      if (m) { out.push({ name: m[1], kind: 'struct', line: lineNum }); continue }
-      m = raw.match(/^type\s+(\w+)\s+interface/)
-      if (m) { out.push({ name: m[1], kind: 'interface', line: lineNum }); continue }
-      continue
-    }
-
-    if (lang === 'rust') {
-      const pfx = /^(?:pub(?:\([\w\s]+\))?\s+)?(?:async\s+)?/
-      let m = raw.match(new RegExp(pfx.source + 'fn\\s+(\\w+)'))
-      if (m) { out.push({ name: m[1], kind: indent >= 4 ? 'method' : 'function', line: lineNum }); continue }
-      m = raw.match(new RegExp(pfx.source + 'struct\\s+(\\w+)'))
-      if (m) { out.push({ name: m[1], kind: 'struct', line: lineNum }); continue }
-      m = raw.match(new RegExp(pfx.source + 'enum\\s+(\\w+)'))
-      if (m) { out.push({ name: m[1], kind: 'enum', line: lineNum }); continue }
-      m = raw.match(new RegExp(pfx.source + 'trait\\s+(\\w+)'))
-      if (m) { out.push({ name: m[1], kind: 'interface', line: lineNum }); continue }
-      continue
-    }
-
-    if (lang === 'c' || lang === 'cpp') {
-      let m = raw.match(/^(?:class|struct)\s+(\w+)\s*(?:[:{\n])/)
-      if (m) { out.push({ name: m[1], kind: lang === 'cpp' ? 'class' : 'struct', line: lineNum }); continue }
-      m = raw.match(/^(?:(?:static|inline|virtual|explicit|constexpr|extern|override)\s+)*(?:[\w:*&<>, ]+\s+)?(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?\{?\s*$/)
-      if (m && !JS_RESERVED.has(m[1]) && !['if','for','while','switch','else','catch','do'].includes(m[1])) {
-        out.push({ name: m[1], kind: 'function', line: lineNum }); continue
-      }
-      continue
-    }
-
-    if (lang === 'java' || lang === 'csharp' || lang === 'kotlin' || lang === 'swift') {
-      const modifiers = /(?:(?:public|private|protected|static|final|abstract|sealed|open|data|inner|async|override|virtual|new|extern|unsafe|synchronized|native)\s+)*/
-      let m = raw.match(new RegExp('^\\s*' + modifiers.source + '(?:class|interface|enum|record|object|struct)\\s+(\\w+)'))
-      if (m) {
-        const kw = raw.match(/\b(interface|enum|record|struct)\b/)
-        const kind: SymbolKind = kw
-          ? kw[1] === 'interface' ? 'interface'
-          : kw[1] === 'enum' ? 'enum'
-          : kw[1] === 'struct' ? 'struct'
-          : 'class'
-          : 'class'
-        out.push({ name: m[1], kind, line: lineNum }); continue
-      }
-      m = raw.match(new RegExp('^\\s+' + modifiers.source + '(?:[\\w<>\\[\\]?,\\s]+\\s+)?(\\w+)\\s*\\([^)]*\\)\\s*(?:throws[^{]+)?\\{?\\s*$'))
-      if (m && !JS_RESERVED.has(m[1]) && !['if','for','while','switch','else','catch','do','try'].includes(m[1])) {
-        out.push({ name: m[1], kind: 'method', line: lineNum }); continue
-      }
-      continue
-    }
-  }
-
-  return out
-}
-
-function buildTree(content: string, language: string): SymbolNode[] {
-  const raw = extractRaw(content, language)
-  const roots: SymbolNode[] = []
-  let currentClass: SymbolNode | null = null
-
-  for (const sym of raw) {
-    const node: SymbolNode = { name: sym.name, kind: sym.kind, line: sym.line, children: [] }
-
-    if (sym.kind === 'method' || sym.kind === 'constructor') {
-      if (currentClass) {
-        currentClass.children.push(node)
-      } else {
-        roots.push(node)
-      }
-    } else {
-      roots.push(node)
-      currentClass = (sym.kind === 'class' || sym.kind === 'struct') ? node : null
-    }
-  }
-
-  return roots
 }
 
 interface FlatRow {
@@ -254,12 +104,40 @@ function KindIcon({ kind }: { kind: SymbolKind }) {
 const ROW_H = 22
 const INDENT_SIZE = 16
 
-export default function StructureView({ content, language, onGotoLine }: Props) {
-  const roots = useMemo(() => buildTree(content, language), [content, language])
+export default function StructureView({ filePath, onGotoLine }: Props) {
+  const [roots, setRoots] = useState<SymbolNode[]>([])
+  const [ready, setReady] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const flatRows = useMemo(() => flattenTree(roots, collapsed), [roots, collapsed])
+  useEffect(() => {
+    if (!filePath) { setRoots([]); setReady(false); return }
+
+    let cancelled = false
+    setReady(false)
+
+    async function fetchOutline(retriesLeft: number) {
+      try {
+        const resp = await invoke<{ symbols: SymbolNode[]; ready: boolean }>(
+          'editor.outline', { path: filePath }
+        )
+        if (cancelled) return
+        if (!resp.ready && retriesLeft > 0) {
+          setTimeout(() => fetchOutline(retriesLeft - 1), 200)
+          return
+        }
+        setRoots(resp.symbols)
+        setReady(true)
+      } catch {
+        if (!cancelled) { setRoots([]); setReady(true) }
+      }
+    }
+
+    fetchOutline(4)
+    return () => { cancelled = true }
+  }, [filePath])
+
+  const flatRows = flattenTree(roots, collapsed)
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -278,7 +156,8 @@ export default function StructureView({ content, language, onGotoLine }: Props) 
     })
   }, [])
 
-  if (!content) return <div className="sv-empty">No file open</div>
+  if (!filePath) return <div className="sv-empty">No file open</div>
+  if (!ready) return <div className="sv-empty">Loading…</div>
   if (flatRows.length === 0) return <div className="sv-empty">No symbols found</div>
 
   return (
@@ -327,7 +206,7 @@ export default function StructureView({ content, language, onGotoLine }: Props) 
               </span>
 
               {/* Symbol kind icon */}
-              <span className={`sv-kind ${KIND_CSS[node.kind]}`}>
+              <span className={`sv-kind ${KIND_CSS[node.kind] ?? ''}`}>
                 <KindIcon kind={node.kind} />
               </span>
 
