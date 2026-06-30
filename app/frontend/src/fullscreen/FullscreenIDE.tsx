@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { invoke, on, offAll, b64ToText, textToB64 } from '../lib/ipc'
 import FileExplorer, { FileNode } from './FileExplorer'
@@ -129,6 +129,9 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
 
   // ── drag-and-drop ─────────────────────────────────────────────────────────────
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
+
+  // ── format document toast ─────────────────────────────────────────────────────
+  const [formatMsg, setFormatMsg] = useState<string | null>(null)
 
   // ── status bar (per-panel — each GpuEditor reports its own state) ─────────────
   const [leftStatus,  setLeftStatus]  = useState<PaneStatus>(INITIAL_PANE_STATUS)
@@ -467,6 +470,68 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     const ref = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
     await ref?.save()
   }, [])
+  const formatDocumentAction = useCallback(async () => {
+    const panel = focusedPanelRef.current
+    const handle = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
+    const filePath = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
+    if (!handle || !filePath) return
+
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+
+    if (ext === 'json') {
+      const raw = await invoke<{ content: string }>('fs.readfile', { path: filePath })
+      const text = b64ToText(raw.content)
+      try {
+        const formatted = JSON.stringify(JSON.parse(text), null, 2)
+        await handle.formatDocument(formatted)
+      } catch {
+        setFormatMsg('JSON parse error - file not formatted')
+        setTimeout(() => setFormatMsg(null), 3000)
+      }
+      return
+    }
+
+    type FormatterSpec = { cmd: string; args: (path: string) => string[] }
+    const FORMATTERS: Record<string, FormatterSpec> = {
+      ts:   { cmd: 'prettier', args: p => ['--write', p] },
+      tsx:  { cmd: 'prettier', args: p => ['--write', p] },
+      js:   { cmd: 'prettier', args: p => ['--write', p] },
+      jsx:  { cmd: 'prettier', args: p => ['--write', p] },
+      css:  { cmd: 'prettier', args: p => ['--write', p] },
+      html: { cmd: 'prettier', args: p => ['--write', p] },
+      md:   { cmd: 'prettier', args: p => ['--write', p] },
+      rs:   { cmd: 'rustfmt', args: p => [p] },
+      go:   { cmd: 'gofmt', args: p => ['-w', p] },
+      py:   { cmd: 'black', args: p => [p] },
+      c:    { cmd: 'clang-format', args: p => ['-i', p] },
+      cpp:  { cmd: 'clang-format', args: p => ['-i', p] },
+      h:    { cmd: 'clang-format', args: p => ['-i', p] },
+    }
+
+    const spec = FORMATTERS[ext]
+    if (!spec) {
+      const lang = langFromExt(ext)
+      setFormatMsg(`No formatter available for ${lang === 'plaintext' ? ext || 'this file type' : lang}`)
+      setTimeout(() => setFormatMsg(null), 3000)
+      return
+    }
+
+    await handle.save()
+    const dir = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : cwd
+    const output = await invoke<string>('shell.exec', { cmd: spec.cmd, dir, args: spec.args(filePath) })
+    const errorSignals = ['error', 'not found', 'command not found', 'is not recognized', 'No such file']
+    const hasError = errorSignals.some(s => output.toLowerCase().includes(s.toLowerCase()))
+    if (hasError) {
+      const msg = output.trim().split('\n')[0]?.slice(0, 80) ?? 'Formatter error'
+      setFormatMsg(msg)
+      setTimeout(() => setFormatMsg(null), 4000)
+      return
+    }
+
+    const raw = await invoke<{ content: string }>('fs.readfile', { path: filePath })
+    const formatted = b64ToText(raw.content)
+    await handle.formatDocument(formatted)
+  }, [cwd])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -781,6 +846,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
           </>
         )}
       </div>
+
+      {formatMsg && (
+        <div className="ide-format-toast">{formatMsg}</div>
+      )}
     </div>
   )
 
@@ -811,9 +880,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         else if (cmd === 'editor.action.moveLinesDownAction') handle.moveLineDown()
         else if (cmd === 'editor.action.copyLinesUpAction') handle.copyLineUp()
         else if (cmd === 'editor.action.copyLinesDownAction') handle.copyLineDown()
+        else if (cmd === 'editor.action.formatDocument') void formatDocumentAction()
       },
     }
-  }, [])
+  }, [formatDocumentAction])
 
   // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
   const zoomIn    = useCallback(() => setFontSize(f => Math.min(f + 1, 36)), [])

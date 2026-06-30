@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
+﻿import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { invoke } from '../lib/ipc'
 import { git, parseChangedLines } from '../lib/git'
@@ -64,6 +64,7 @@ export interface GpuEditorHandle {
   moveLineDown: () => void
   copyLineUp: () => void
   copyLineDown: () => void
+  formatDocument: (newContent: string) => Promise<void>
 }
 
 interface Props {
@@ -2403,7 +2404,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     moveLineDown: () => { void moveLineDown() },
     copyLineUp: () => { void copyLineUp() },
     copyLineDown: () => { void copyLineDown() },
-  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect, moveLineUp, moveLineDown, copyLineUp, copyLineDown])
+    formatDocument: async (newContent: string) => {
+      const lineCount = lineCountRef.current
+      if (lineCount === 0) return
+      const cursor = cursorsRef.current[0]
+      await applyRawEdits([{ startLine: 0, startCol: 0, endLine: lineCount - 1, endCol: 999999, text: newContent }])
+      if (cursor) {
+        const clampedLine = Math.min(cursor.line, lineCountRef.current - 1)
+        cursorsRef.current = [{ line: clampedLine, col: cursor.col }]
+        void ensureCursorVisible()
+        draw()
+      }
+    },
+  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect, moveLineUp, moveLineDown, copyLineUp, copyLineDown, applyRawEdits, ensureCursorVisible, draw])
 
   return (
     <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">
