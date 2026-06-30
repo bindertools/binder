@@ -46,7 +46,7 @@ function AppsTab() {
       if (!cancelled && catalog) setRemote(catalog.apps)
     })
 
-    Promise.all([loadBundled, loadRemote]).finally(() => {
+    void Promise.all([loadBundled, loadRemote]).finally(() => {
       if (!cancelled) setLoading(false)
     })
 
@@ -269,7 +269,7 @@ function ThemesTab({ activeTheme, onApplyTheme }: ThemesTabProps) {
   const [remoteThemes, setRemoteThemes] = useState<RemoteThemeEntry[]>([])
 
   useEffect(() => {
-    fetchRemoteCatalog().then(catalog => {
+    void fetchRemoteCatalog().then(catalog => {
       if (catalog?.themes) setRemoteThemes(catalog.themes)
     })
   }, [])
