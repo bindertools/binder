@@ -28,7 +28,7 @@ export interface RemoteAppEntry {
   description: string
   author: string
   version: string
-  category: string
+  category: 'productivity' | 'development' | 'utilities' | string
   repo: string
   official: boolean
   bundleUrl: string
