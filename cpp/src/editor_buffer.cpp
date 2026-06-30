@@ -2911,6 +2911,68 @@ json op_outline(const json& msg) {
     return {{"symbols", build_outline_tree(syms)}, {"ready", true}};
 }
 
+// ── Smart Select (expand/shrink by AST node) ──────────────────────────────────
+// editor.smartSelect {bufferId, startLine, startCol, endLine, endCol}
+//   → {startLine, startCol, endLine, endCol} for the expanded node
+//   → {noop: true} when no tree is available or selection is already the root
+
+json op_smart_select(const json& msg) {
+    int id = msg.value("bufferId", 0);
+    std::lock_guard<std::mutex> lk(g_mu);
+    Buffer* b = find_buffer(id);
+    if (!b || !b->tree) return {{"noop", true}};
+
+    uint32_t sl = msg.value("startLine", 0u);
+    uint32_t sc = msg.value("startCol",  0u);
+    uint32_t el = msg.value("endLine",   0u);
+    uint32_t ec = msg.value("endCol",    0u);
+
+    if (sl >= b->line_count() || el >= b->line_count()) return {{"noop", true}};
+
+    uint32_t sls, sle, els, ele;
+    b->line_bytes(sl, sls, sle);
+    b->line_bytes(el, els, ele);
+    uint32_t start_byte = u16_col_to_byte(b->text, sls, sle, sc);
+    uint32_t end_byte   = u16_col_to_byte(b->text, els, ele, ec);
+
+    // Walk up the AST to find the smallest named node that strictly contains
+    // [start_byte, end_byte). Skip anonymous nodes (punctuation) when a named
+    // parent is available at the same span, so Shift+Alt+Right steps to
+    // semantically meaningful nodes.
+    TSNode node = ts_node_named_descendant_for_byte_range(
+        ts_tree_root_node(b->tree), start_byte, end_byte > start_byte ? end_byte - 1 : start_byte);
+
+    // Walk up until we find a node whose byte span strictly contains the
+    // current selection (i.e. is wider on at least one side).
+    while (!ts_node_is_null(node)) {
+        uint32_t ns = ts_node_start_byte(node);
+        uint32_t ne = ts_node_end_byte(node);
+        if (ns < start_byte || ne > end_byte) break; // node is wider
+        TSNode parent = ts_node_parent(node);
+        if (ts_node_is_null(parent)) break; // already at root
+        node = parent;
+    }
+
+    if (ts_node_is_null(node)) return {{"noop", true}};
+
+    uint32_t ns = ts_node_start_byte(node);
+    uint32_t ne = ts_node_end_byte(node);
+
+    // No change — selection already covers this node exactly.
+    if (ns == start_byte && ne == end_byte) return {{"noop", true}};
+
+    auto to_pos = [&](uint32_t byte_off) -> std::pair<uint32_t, uint32_t> {
+        TSPoint p = point_for_byte(*b, byte_off);
+        uint32_t line_start = b->line_offsets[p.row];
+        return {p.row, byte_to_u16_col(b->text, line_start, byte_off)};
+    };
+
+    auto [newSL, newSC] = to_pos(ns);
+    auto [newEL, newEC] = to_pos(ne);
+    return {{"startLine", newSL}, {"startCol", newSC},
+            {"endLine",   newEL}, {"endCol",   newEC}};
+}
+
 json op_save(const json& msg) {
     int id = msg.value("bufferId", 0);
     std::lock_guard<std::mutex> lk(g_mu);
@@ -2985,6 +3047,7 @@ bool dispatch(const std::string& type, const json& msg,
     else if (type == "editor.viewstate.set") resp = op_viewstate_set(msg);
     else if (type == "editor.viewstate.get") resp = op_viewstate_get(msg);
     else if (type == "editor.buffers")       resp = op_buffers(msg);
+    else if (type == "editor.smartSelect")   resp = op_smart_select(msg);
     else return false;
     return true;
 }

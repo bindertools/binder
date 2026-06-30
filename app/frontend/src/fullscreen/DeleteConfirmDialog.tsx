@@ -1,14 +1,12 @@
 import React, { useEffect } from 'react'
 
 interface Props {
-  name: string
-  isDir: boolean
+  targets: Array<{ name: string; isDir: boolean }>
   onConfirm: () => void
   onCancel: () => void
 }
 
-export default function DeleteConfirmDialog({ name, isDir, onConfirm, onCancel }: Props) {
-  // Close on Escape
+export default function DeleteConfirmDialog({ targets, onConfirm, onCancel }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel()
@@ -18,16 +16,28 @@ export default function DeleteConfirmDialog({ name, isDir, onConfirm, onCancel }
     return () => document.removeEventListener('keydown', handler)
   }, [onConfirm, onCancel])
 
+  const isSingle = targets.length === 1
+  const title    = isSingle
+    ? `Delete ${targets[0].isDir ? 'Folder' : 'File'}`
+    : `Delete ${targets.length} Items`
+
   return (
     <div className="del-dialog-overlay" onMouseDown={onCancel}>
       <div className="del-dialog" onMouseDown={e => e.stopPropagation()}>
-        <div className="del-dialog__title">
-          Delete {isDir ? 'Folder' : 'File'}
-        </div>
+        <div className="del-dialog__title">{title}</div>
         <div className="del-dialog__body">
-          Are you sure you want to delete <strong>"{name}"</strong>?
-          {isDir && (
-            <span className="del-dialog__warn"> All contents will be removed.</span>
+          {isSingle ? (
+            <>
+              Are you sure you want to delete <strong>"{targets[0].name}"</strong>?
+              {targets[0].isDir && (
+                <span className="del-dialog__warn"> All contents will be removed.</span>
+              )}
+            </>
+          ) : (
+            <>
+              Are you sure you want to delete <strong>{targets.length} items</strong>?
+              <span className="del-dialog__warn"> Folders and their contents will be removed.</span>
+            </>
           )}
           <span className="del-dialog__note"> This cannot be undone.</span>
         </div>
