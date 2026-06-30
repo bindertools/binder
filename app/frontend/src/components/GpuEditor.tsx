@@ -508,7 +508,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const minimapFetchRef = useRef<(first: number, last: number) => void>(() => {})
   // Forward ref to runSearch (declared later) so edit paths above it can
   // re-run the active find query without reordering the file.
-  const runSearchRef = useRef<() => Promise<void>>(async () => {})
+  const runSearchRef = useRef<(jump?: boolean) => Promise<void>>(async () => {})
   const minimapFetchingRef = useRef(false)
   const fontSizeRef = useRef<number>(fontSize)
   const lastGotoLineRef = useRef<number | undefined>(undefined)
@@ -1142,7 +1142,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     fetchVisible()
     draw()
     void updateBracketMatch()
-    if (findOpenRef.current) void runSearchRef.current()
+    if (findOpenRef.current) void runSearchRef.current(false)
   }, [draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
 
   // Replace the identifier prefix immediately left of the cursor with the
@@ -1242,7 +1242,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   // Re-run editor.search with the current query/options and pick the match
   // nearest the primary cursor as "current". Fire-and-forget.
-  const runSearch = useCallback(async () => {
+  const runSearch = useCallback(async (jump = true) => {
     const query = findQueryRef.current
     if (!query) {
       matchesRef.current = []
@@ -1270,8 +1270,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         currentMatchRef.current = -1
         setCurrentMatch(-1)
         draw()
-      } else {
+      } else if (jump) {
         jumpToMatch(idx)
+      } else {
+        currentMatchRef.current = idx
+        setCurrentMatch(idx)
+        draw()
       }
     } catch {
       matchesRef.current = []
