@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Download, Trash2, RefreshCw, Search, Check, X } from 'lucide-react'
 import type { AppManifest } from './types'
-import { getAvailableAppIds, loadAppManifest } from './loader'
 import { getInstalledIds, installApp, uninstallApp } from './registry'
 import {
   fetchRemoteCatalog, loadRemoteBundle, invalidateRemoteBundle,
@@ -15,7 +14,6 @@ import './AppStore.scss'
 type Tab = 'apps' | 'themes'
 type AppFilter = 'all' | 'installed' | 'updates'
 
-// ── Merged app entry (local bundled manifest + remote registry metadata) ────────
 interface MergedApp {
   id: string
   manifest: AppManifest | null
@@ -27,7 +25,6 @@ interface MergedApp {
 // ── Apps Tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab() {
-  const [bundled, setBundled]     = useState<AppManifest[]>([])
   const [remote, setRemote]       = useState<RemoteAppEntry[]>([])
   const [installed, setInstalled] = useState<Set<string>>(new Set(getInstalledIds()))
   const [search, setSearch]       = useState('')
@@ -37,31 +34,33 @@ function AppsTab() {
 
   useEffect(() => {
     let cancelled = false
-
-    const loadBundled = Promise.all(getAvailableAppIds().map(loadAppManifest)).then(loaded => {
-      if (!cancelled) setBundled(loaded.filter((m): m is AppManifest => m != null))
+    void fetchRemoteCatalog().then(catalog => {
+      if (!cancelled) {
+        if (catalog) setRemote(catalog.apps)
+        setLoading(false)
+      }
     })
-
-    const loadRemote = fetchRemoteCatalog().then(catalog => {
-      if (!cancelled && catalog) setRemote(catalog.apps)
-    })
-
-    void Promise.all([loadBundled, loadRemote]).finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-
     return () => { cancelled = true }
   }, [])
 
-  const merged = buildMerged(bundled, remote, installed)
+  const merged: MergedApp[] = remote.map(r => {
+    const installedVersion = getInstalledBundleVersion(r.id)
+    return {
+      id: r.id,
+      manifest: null,
+      remote: r,
+      isInstalled: installed.has(r.id),
+      hasUpdate: !!installedVersion && compareVersions(r.version, installedVersion) > 0,
+    }
+  })
 
   const filtered = merged.filter(a => {
     if (filter === 'installed' && !a.isInstalled) return false
     if (filter === 'updates' && !a.hasUpdate) return false
     if (search) {
       const q = search.toLowerCase()
-      const name = (a.manifest?.name ?? a.remote?.name ?? '').toLowerCase()
-      const desc = (a.manifest?.description ?? a.remote?.description ?? '').toLowerCase()
+      const name = (a.remote?.name ?? '').toLowerCase()
+      const desc = (a.remote?.description ?? '').toLowerCase()
       if (!name.includes(q) && !desc.includes(q)) return false
     }
     return true
@@ -78,13 +77,10 @@ function AppsTab() {
         await uninstallApp(a.id)
         invalidateRemoteBundle(a.id)
         setInstalled(prev => { const s = new Set(prev); s.delete(a.id); return s })
-      } else {
-        if (a.remote && !a.manifest) {
-          // Remote-only app: download bundle first
-          const manifest = await loadRemoteBundle(a.id, a.remote.bundleUrl)
-          if (!manifest) { setBusy(prev => { const s = new Set(prev); s.delete(a.id); return s }); return }
-          if (a.remote.version) setInstalledBundleVersion(a.id, a.remote.version)
-        }
+      } else if (a.remote) {
+        const manifest = await loadRemoteBundle(a.id, a.remote.bundleUrl)
+        if (!manifest) { setBusy(prev => { const s = new Set(prev); s.delete(a.id); return s }); return }
+        if (a.remote.version) setInstalledBundleVersion(a.id, a.remote.version)
         await installApp(a.id)
         setInstalled(prev => new Set([...prev, a.id]))
       }
@@ -101,7 +97,6 @@ function AppsTab() {
       const manifest = await loadRemoteBundle(a.id, a.remote.bundleUrl)
       if (manifest && a.remote.version) {
         setInstalledBundleVersion(a.id, a.remote.version)
-        // Trigger re-merge
         setInstalled(prev => new Set(prev))
       }
     } finally {
@@ -170,17 +165,16 @@ interface AppCardProps {
 }
 
 function AppCard({ app, isBusy, onToggle, onUpdate }: AppCardProps) {
-  const name    = app.manifest?.name    ?? app.remote?.name    ?? app.id
-  const desc    = app.manifest?.description ?? app.remote?.description ?? ''
-  const author  = app.manifest?.author  ?? app.remote?.author  ?? ''
-  const version = app.manifest?.version ?? app.remote?.version ?? ''
-  const icon    = app.manifest?.sidebar?.icon
+  const name    = app.remote?.name    ?? app.id
+  const desc    = app.remote?.description ?? ''
+  const author  = app.remote?.author  ?? ''
+  const version = app.remote?.version ?? ''
 
   return (
     <div className={`ps-card${app.isInstalled ? ' ps-card--installed' : ''}${app.hasUpdate ? ' ps-card--has-update' : ''}`}>
       <div className="ps-card__top">
         <div className="ps-card__icon">
-          {icon ? React.createElement(icon) : <span className="ps-card__icon-letter">{name.charAt(0)}</span>}
+          <span className="ps-card__icon-letter">{name.charAt(0)}</span>
         </div>
         <div className="ps-card__identity">
           <div className="ps-card__name">{name}</div>
@@ -222,32 +216,6 @@ function AppCard({ app, isBusy, onToggle, onUpdate }: AppCardProps) {
   )
 }
 
-function buildMerged(
-  bundled: AppManifest[],
-  remote: RemoteAppEntry[],
-  installed: Set<string>,
-): MergedApp[] {
-  const byId = new Map<string, MergedApp>()
-
-  for (const m of bundled) {
-    byId.set(m.id, { id: m.id, manifest: m, remote: null, isInstalled: installed.has(m.id), hasUpdate: false })
-  }
-
-  for (const r of remote) {
-    const existing = byId.get(r.id)
-    if (existing) {
-      existing.remote = r
-      // Check for update: registry version > locally installed bundle version
-      const installedVersion = existing.manifest?.version ?? getInstalledBundleVersion(r.id)
-      existing.hasUpdate = !!installedVersion && compareVersions(r.version, installedVersion) > 0
-    } else {
-      byId.set(r.id, { id: r.id, manifest: null, remote: r, isInstalled: installed.has(r.id), hasUpdate: false })
-    }
-  }
-
-  return [...byId.values()]
-}
-
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
@@ -267,6 +235,7 @@ interface ThemesTabProps {
 
 function ThemesTab({ activeTheme, onApplyTheme }: ThemesTabProps) {
   const [remoteThemes, setRemoteThemes] = useState<RemoteThemeEntry[]>([])
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     void fetchRemoteCatalog().then(catalog => {
@@ -274,7 +243,6 @@ function ThemesTab({ activeTheme, onApplyTheme }: ThemesTabProps) {
     })
   }, [])
 
-  // Merge built-in THEMES with remote metadata
   const builtinIds = Object.keys(THEMES)
   const merged = builtinIds.map(id => {
     const remote = remoteThemes.find(t => t.id === id)
@@ -289,33 +257,58 @@ function ThemesTab({ activeTheme, onApplyTheme }: ThemesTabProps) {
     }
   })
 
-  // Community themes from remote that are NOT built-in
   const community = remoteThemes.filter(t => !t.builtin && !builtinIds.includes(t.id))
+
+  const matchSearch = (t: { name: string; description: string }) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
+  }
+
+  const filteredMerged    = merged.filter(matchSearch)
+  const filteredCommunity = community.filter(matchSearch)
 
   return (
     <>
-      <div className="ps-section-label">Built-in Themes</div>
-      <div className="ps-theme-grid">
-        {merged.map(t => (
-          <ThemeCard
-            key={t.id}
-            id={t.id}
-            name={t.name}
-            description={t.description}
-            author={t.author}
-            official={t.official}
-            preview={t.preview}
-            isActive={activeTheme === t.id}
-            onApply={onApplyTheme}
-          />
-        ))}
+      <div className="ps-search-wrap">
+        <span className="ps-search-icon"><Search size={13} aria-hidden /></span>
+        <input
+          className="ps-search"
+          placeholder="Search themes…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="ps-search-clear" onClick={() => setSearch('')}><X size={13} /></button>
+        )}
       </div>
 
-      {community.length > 0 && (
+      {filteredMerged.length > 0 && (
+        <>
+          <div className="ps-section-label">Built-in Themes</div>
+          <div className="ps-theme-grid">
+            {filteredMerged.map(t => (
+              <ThemeCard
+                key={t.id}
+                id={t.id}
+                name={t.name}
+                description={t.description}
+                author={t.author}
+                official={t.official}
+                preview={t.preview}
+                isActive={activeTheme === t.id}
+                onApply={onApplyTheme}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {filteredCommunity.length > 0 && (
         <>
           <div className="ps-section-label ps-section-label--spaced">Community Themes</div>
           <div className="ps-theme-grid">
-            {community.map(t => (
+            {filteredCommunity.map(t => (
               <ThemeCard
                 key={t.id}
                 id={t.id}
@@ -330,6 +323,10 @@ function ThemesTab({ activeTheme, onApplyTheme }: ThemesTabProps) {
             ))}
           </div>
         </>
+      )}
+
+      {filteredMerged.length === 0 && filteredCommunity.length === 0 && (
+        <div className="ps-empty">No themes match your search.</div>
       )}
     </>
   )
@@ -391,7 +388,6 @@ function ThemeCard({ id, name, description, author, official, preview, isActive,
 export default function AppStore() {
   const [tab, setTab] = useState<Tab>('apps')
   const [activeTheme, setActiveTheme] = useState(() => {
-    // Read from data-theme attribute as best-effort before IPC resolves
     return document.documentElement.getAttribute('data-theme') ?? 'dark'
   })
 

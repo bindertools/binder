@@ -78,10 +78,14 @@ export function loadRemoteBundle(id: string, bundleUrl: string): Promise<AppMani
     try {
       let code = localStorage.getItem(localKey)
       if (!code) {
+        if (!bundleUrl) return null
         const res = await fetch(bundleUrl)
         if (!res.ok) return null
         code = await res.text()
-        try { localStorage.setItem(localKey, code) } catch { /* quota */ }
+        try {
+          localStorage.setItem(localKey, code)
+          localStorage.setItem(`binder:remote-app:${id}:url`, bundleUrl)
+        } catch { /* quota */ }
       }
       return await _injectBundle(code)
     } catch {
@@ -97,6 +101,7 @@ export function invalidateRemoteBundle(id: string): void {
   _remoteCache.delete(id)
   localStorage.removeItem(`binder:remote-app:${id}:bundle`)
   localStorage.removeItem(`binder:remote-app:${id}:version`)
+  localStorage.removeItem(`binder:remote-app:${id}:url`)
 }
 
 export function getInstalledBundleVersion(id: string): string | null {
@@ -105,6 +110,16 @@ export function getInstalledBundleVersion(id: string): string | null {
 
 export function setInstalledBundleVersion(id: string, version: string): void {
   localStorage.setItem(`binder:remote-app:${id}:version`, version)
+}
+
+/**
+ * Loads an installed app's bundle using its cached URL.
+ * Falls back to re-downloading if the bundle code was evicted from localStorage
+ * but the URL was retained. Returns null if neither is available.
+ */
+export function loadInstalledBundle(id: string): Promise<AppManifest | null> {
+  const bundleUrl = localStorage.getItem(`binder:remote-app:${id}:url`) ?? ''
+  return loadRemoteBundle(id, bundleUrl)
 }
 
 function _injectBundle(code: string): Promise<AppManifest | null> {
