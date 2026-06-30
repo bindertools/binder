@@ -35,6 +35,9 @@
 //                          viewKey lets two panes showing the same buffer
 //                          (editor.open refcounts by path) keep independent
 //                          cursor/scroll; omitted = shared "" key.
+//   editor.smartSelect {bufferId, startLine, startCol, endLine, endCol}
+//                                                     → {startLine, startCol, endLine, endCol} (expanded node)
+//                                                     | {noop: true} (unsupported language or already at root)
 //   editor.buffers   {}                              → {buffers: [{bufferId, path, lineCount, dirty}]}
 //
 // Columns in the IPC contract are UTF-16 code units (JS string indexing).

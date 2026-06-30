@@ -805,6 +805,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         else if (cmd === 'actions.find') handle.openFind('find')
         else if (cmd === 'editor.action.startFindReplaceAction') handle.openFind('replace')
         else if (cmd === 'editor.action.toggleMinimap') setMinimapEnabled(v => !v)
+        else if (cmd === 'editor.action.smartSelect.expand') handle.expandSmartSelect()
+        else if (cmd === 'editor.action.smartSelect.shrink') handle.shrinkSmartSelect()
       },
     }
   }, [])

@@ -58,6 +58,8 @@ export interface GpuEditorHandle {
   selectAll: () => void
   openFind: (mode: 'find' | 'replace') => void
   goToLine: (line: number) => void
+  expandSmartSelect: () => void
+  shrinkSmartSelect: () => void
 }
 
 interface Props {
@@ -481,6 +483,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   const leftColRef = useRef<number>(0)
   const wheelAccumRef = useRef<number>(0)
   const cursorsRef = useRef<Cursor[]>([{ line: 0, col: 0 }])
+  const smartSelectHistoryRef = useRef<Cursor[][]>([])
   const bracketMatchRef = useRef<[[number, number], [number, number]] | null>(null)
   const visibleRowsRef = useRef<number>(1)
   const visibleColsRef = useRef<number>(1)
@@ -1505,6 +1508,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
 
   const moveCursor = useCallback(async (dl: number, dc: number, extend: boolean) => {
     closeCompletions()
+    smartSelectHistoryRef.current = []
     const cursors = cursorsRef.current
     const next: Cursor[] = []
     for (const c of cursors) {
@@ -1660,6 +1664,46 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
     void updateBracketMatch()
   }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible, notifyCursor, updateBracketMatch])
+
+  // Shift+Alt+Right/Left — expand or shrink the selection by AST node.
+  const expandSmartSelect = useCallback(async () => {
+    if (!bufferIdRef.current) return
+    const c = cursorsRef.current[0]
+    // Normalize current selection: [anchorLine/Col, line/col] ordered by position.
+    let sl = c.anchorLine ?? c.line
+    let sc = c.anchorCol  ?? c.col
+    let el = c.line
+    let ec = c.col
+    if (el < sl || (el === sl && ec < sc)) {
+      [sl, sc, el, ec] = [el, ec, sl, sc]
+    }
+    const resp = await invoke<{
+      noop?: boolean; startLine: number; startCol: number; endLine: number; endCol: number
+    }>('editor.smartSelect', { bufferId: bufferIdRef.current, startLine: sl, startCol: sc, endLine: el, endCol: ec })
+    if (resp.noop) return
+    // Save current cursors so shrink can restore them.
+    smartSelectHistoryRef.current.push(cursorsRef.current.map(x => ({ ...x })))
+    // Anchor at start, active end at end of expanded node.
+    cursorsRef.current = [{ line: resp.endLine, col: resp.endCol, anchorLine: resp.startLine, anchorCol: resp.startCol }]
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, updateBracketMatch])
+
+  const shrinkSmartSelect = useCallback(() => {
+    const prev = smartSelectHistoryRef.current.pop()
+    if (!prev) return
+    cursorsRef.current = prev
+    cursorVisibleRef.current = true
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+  }, [draw, ensureCursorVisible, fetchVisible, notifyCursor, updateBracketMatch])
 
   // Triple-click — select the entire line.
   const selectLineAt = useCallback(async (line: number) => {
@@ -1924,8 +1968,12 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
       case 'ArrowDown':
         if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(1); return }
         e.preventDefault(); void moveCursor(1, 0, shift); return
-      case 'ArrowLeft':  e.preventDefault(); void moveCursor(0, -1, shift); return
-      case 'ArrowRight': e.preventDefault(); void moveCursor(0, 1, shift); return
+      case 'ArrowLeft':
+        if (e.shiftKey && e.altKey) { e.preventDefault(); shrinkSmartSelect(); return }
+        e.preventDefault(); void moveCursor(0, -1, shift); return
+      case 'ArrowRight':
+        if (e.shiftKey && e.altKey) { e.preventDefault(); void expandSmartSelect(); return }
+        e.preventDefault(); void moveCursor(0, 1, shift); return
       case 'PageUp':     e.preventDefault(); void moveCursor(-visibleRowsRef.current, 0, shift); return
       case 'PageDown':   e.preventDefault(); void moveCursor(visibleRowsRef.current, 0, shift); return
       case 'Home':       e.preventDefault(); void moveCursorsTo(c => ({ line: c.line, col: 0 }), shift); return
@@ -1989,7 +2037,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, undo])
+  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, expandSmartSelect, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, shrinkSmartSelect, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -2219,7 +2267,9 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         textareaRef.current?.focus()
       })
     },
-  }), [save, undo, redo, selectAll, openFind, setCursorTo])
+    expandSmartSelect: () => { void expandSmartSelect() },
+    shrinkSmartSelect,
+  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect])
 
   return (
     <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">
