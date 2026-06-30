@@ -807,6 +807,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         else if (cmd === 'editor.action.toggleMinimap') setMinimapEnabled(v => !v)
         else if (cmd === 'editor.action.smartSelect.expand') handle.expandSmartSelect()
         else if (cmd === 'editor.action.smartSelect.shrink') handle.shrinkSmartSelect()
+        else if (cmd === 'editor.action.moveLinesUpAction') handle.moveLineUp()
+        else if (cmd === 'editor.action.moveLinesDownAction') handle.moveLineDown()
+        else if (cmd === 'editor.action.copyLinesUpAction') handle.copyLineUp()
+        else if (cmd === 'editor.action.copyLinesDownAction') handle.copyLineDown()
       },
     }
   }, [])

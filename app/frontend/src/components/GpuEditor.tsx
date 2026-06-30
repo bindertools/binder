@@ -60,6 +60,10 @@ export interface GpuEditorHandle {
   goToLine: (line: number) => void
   expandSmartSelect: () => void
   shrinkSmartSelect: () => void
+  moveLineUp: () => void
+  moveLineDown: () => void
+  copyLineUp: () => void
+  copyLineDown: () => void
 }
 
 interface Props {
@@ -1750,6 +1754,124 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     draw()
   }, [closeCompletions, draw, ensureCursorVisible, ensureLine, fetchVisible])
 
+  // Returns the union of all line indices touched by any cursor or selection.
+  function touchedLines(cursors: Cursor[]): [number, number] {
+    let first = Infinity, last = -Infinity
+    for (const c of cursors) {
+      const r = rangeOf(c)
+      if (r) { first = Math.min(first, r[0]); last = Math.max(last, r[2]) }
+      else { first = Math.min(first, c.line); last = Math.max(last, c.line) }
+    }
+    return [first, last]
+  }
+
+  // Shared post-edit housekeeping for line move/copy operations.
+  const applyLineEdit = useCallback(async (
+    edit: { startLine: number; startCol: number; endLine: number; endCol: number; text: string },
+    newCursors: Cursor[],
+  ) => {
+    if (readOnlyRef.current) return
+    const resp = await invoke<{ version: number; lineCount: number; dirtyStart: number; dirtyEnd: number }>('editor.edit', {
+      bufferId: bufferIdRef.current, edits: [edit],
+    })
+    const prevLineCount = lineCountRef.current
+    versionRef.current = resp.version
+    lineCountRef.current = resp.lineCount
+    if (resp.lineCount !== prevLineCount) foldedRangesRef.current.clear()
+    shiftLineSet(pinnedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    shiftLineSet(gitChangedLinesRef.current, prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    markLinesChanged(gitChangedLinesRef.current, resp.dirtyStart, resp.dirtyEnd, resp.lineCount)
+    invalidateDirtyLines(prevLineCount, resp.lineCount, resp.dirtyStart, resp.dirtyEnd)
+    cursorsRef.current = newCursors
+    cursorVisibleRef.current = true
+    setStatus('●')
+    notifyDirty(true)
+    onLineCountChangeRef.current?.(lineCountRef.current)
+    notifyCursor()
+    ensureCursorVisible()
+    fetchVisible()
+    draw()
+    void updateBracketMatch()
+    if (findOpenRef.current) void runSearchRef.current(false)
+  }, [draw, ensureCursorVisible, fetchVisible, invalidateDirtyLines, notifyCursor, notifyDirty, updateBracketMatch])
+
+  // Alt+Up — swap the block of lines touched by any cursor/selection with the line above.
+  const moveLineUp = useCallback(async () => {
+    closeCompletions()
+    const cursors = cursorsRef.current
+    const [firstLine, lastLine] = touchedLines(cursors)
+    if (firstLine === 0) return
+    const lineTexts: string[] = []
+    for (let ln = firstLine - 1; ln <= lastLine; ln++) {
+      lineTexts.push((await ensureLine(ln))?.text ?? '')
+    }
+    const aboveText = lineTexts[0]
+    const movedTexts = lineTexts.slice(1)
+    const newText = movedTexts.join('\n') + '\n' + aboveText
+    const endCol = lineTexts[lineTexts.length - 1].length
+    const newCursors = cursors.map(c => ({
+      ...c,
+      line: c.line - 1,
+      ...(c.anchorLine !== undefined ? { anchorLine: c.anchorLine - 1 } : {}),
+    }))
+    await applyLineEdit({ startLine: firstLine - 1, startCol: 0, endLine: lastLine, endCol, text: newText }, newCursors)
+  }, [applyLineEdit, closeCompletions, ensureLine])
+
+  // Alt+Down — swap the block of lines touched by any cursor/selection with the line below.
+  const moveLineDown = useCallback(async () => {
+    closeCompletions()
+    const cursors = cursorsRef.current
+    const [firstLine, lastLine] = touchedLines(cursors)
+    if (lastLine >= lineCountRef.current - 1) return
+    const lineTexts: string[] = []
+    for (let ln = firstLine; ln <= lastLine + 1; ln++) {
+      lineTexts.push((await ensureLine(ln))?.text ?? '')
+    }
+    const belowText = lineTexts[lineTexts.length - 1]
+    const movedTexts = lineTexts.slice(0, -1)
+    const newText = belowText + '\n' + movedTexts.join('\n')
+    const endCol = belowText.length
+    const newCursors = cursors.map(c => ({
+      ...c,
+      line: c.line + 1,
+      ...(c.anchorLine !== undefined ? { anchorLine: c.anchorLine + 1 } : {}),
+    }))
+    await applyLineEdit({ startLine: firstLine, startCol: 0, endLine: lastLine + 1, endCol, text: newText }, newCursors)
+  }, [applyLineEdit, closeCompletions, ensureLine])
+
+  // Shift+Alt+Up — insert a duplicate of the touched lines immediately above; cursor follows original content down.
+  const copyLineUp = useCallback(async () => {
+    closeCompletions()
+    const cursors = cursorsRef.current
+    const [firstLine, lastLine] = touchedLines(cursors)
+    const lineTexts: string[] = []
+    for (let ln = firstLine; ln <= lastLine; ln++) {
+      lineTexts.push((await ensureLine(ln))?.text ?? '')
+    }
+    const blockText = lineTexts.join('\n') + '\n'
+    const count = lastLine - firstLine + 1
+    const newCursors = cursors.map(c => ({
+      ...c,
+      line: c.line + count,
+      ...(c.anchorLine !== undefined ? { anchorLine: c.anchorLine + count } : {}),
+    }))
+    await applyLineEdit({ startLine: firstLine, startCol: 0, endLine: firstLine, endCol: 0, text: blockText }, newCursors)
+  }, [applyLineEdit, closeCompletions, ensureLine])
+
+  // Shift+Alt+Down — insert a duplicate of the touched lines immediately below; cursor stays on original.
+  const copyLineDown = useCallback(async () => {
+    closeCompletions()
+    const cursors = cursorsRef.current
+    const [firstLine, lastLine] = touchedLines(cursors)
+    const lineTexts: string[] = []
+    for (let ln = firstLine; ln <= lastLine; ln++) {
+      lineTexts.push((await ensureLine(ln))?.text ?? '')
+    }
+    const blockText = '\n' + lineTexts.join('\n')
+    const endCol = lineTexts[lineTexts.length - 1].length
+    await applyLineEdit({ startLine: lastLine, startCol: endCol, endLine: lastLine, endCol, text: blockText }, cursors.slice())
+  }, [applyLineEdit, closeCompletions, ensureLine])
+
   // ── Init ────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -1968,9 +2090,13 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     switch (e.key) {
       case 'ArrowUp':
         if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(-1); return }
+        if (e.altKey && e.shiftKey) { e.preventDefault(); void copyLineUp(); return }
+        if (e.altKey) { e.preventDefault(); void moveLineUp(); return }
         e.preventDefault(); void moveCursor(-1, 0, shift); return
       case 'ArrowDown':
         if (e.ctrlKey && e.altKey) { e.preventDefault(); void addCursorVertical(1); return }
+        if (e.altKey && e.shiftKey) { e.preventDefault(); void copyLineDown(); return }
+        if (e.altKey) { e.preventDefault(); void moveLineDown(); return }
         e.preventDefault(); void moveCursor(1, 0, shift); return
       case 'ArrowLeft':
         if (e.shiftKey && e.altKey) { e.preventDefault(); shrinkSmartSelect(); return }
@@ -2041,7 +2167,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copySelection, deleteBackward, deleteForward, draw, expandSmartSelect, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, openFind, redo, requestCompletions, save, selectAll, shrinkSmartSelect, undo])
+  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copyLineDown, copyLineUp, copySelection, deleteBackward, deleteForward, draw, expandSmartSelect, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, moveLineDown, moveLineUp, openFind, redo, requestCompletions, save, selectAll, shrinkSmartSelect, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -2273,7 +2399,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
     },
     expandSmartSelect: () => { void expandSmartSelect() },
     shrinkSmartSelect,
-  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect])
+    moveLineUp: () => { void moveLineUp() },
+    moveLineDown: () => { void moveLineDown() },
+    copyLineUp: () => { void copyLineUp() },
+    copyLineDown: () => { void copyLineDown() },
+  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect, moveLineUp, moveLineDown, copyLineUp, copyLineDown])
 
   return (
     <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">
