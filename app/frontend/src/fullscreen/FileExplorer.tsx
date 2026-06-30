@@ -255,6 +255,30 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     onRefresh()
   }, [newItem, onRefresh, loadDir])
 
+  const handleDuplicate = useCallback(async (node: FileNode) => {
+    const dir = parentDir(node.path)
+    const siblings = dirCache.get(dir) ?? []
+    const existingNames = new Set(siblings.map(n => n.name))
+
+    const dotIdx = node.name.lastIndexOf('.')
+    const hasDot = dotIdx > 0
+    const base = hasDot ? node.name.slice(0, dotIdx) : node.name
+    const ext  = hasDot ? node.name.slice(dotIdx)    : ''
+
+    let copyName = `${base} copy${ext}`
+    if (existingNames.has(copyName)) {
+      let n = 2
+      while (existingNames.has(`${base} copy ${n}${ext}`)) n++
+      copyName = `${base} copy ${n}${ext}`
+    }
+
+    const destPath = `${dir}/${copyName}`
+    await invoke('fs.copy', { from: node.path, to: destPath })
+    setRenaming(destPath)
+    setRenameVal(copyName)
+    void loadDir(dir)
+  }, [dirCache, loadDir])
+
   const handleCopyPath = useCallback((node: FileNode) => {
     void navigator.clipboard.writeText(node.path)
   }, [])
@@ -276,6 +300,9 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
       { label: 'Rename',     action: () => startRename(node) },
       { label: 'Copy Path',  action: () => handleCopyPath(node) },
     ]
+    if (!node.isDir) {
+      items.push({ label: 'Duplicate', action: () => { void handleDuplicate(node) } })
+    }
     // Apps contribute their own items here (e.g. Live Preview adds "Open Live
     // Preview" for .md/.html files) instead of the host hardcoding knowledge
     // of specific apps.
@@ -292,7 +319,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     }
     items.push({ divider: true }, { label: 'Delete', danger: true, action: () => handleDelete(node) })
     return items
-  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDelete, onAddToGitIgnore, installedApps])
+  }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDuplicate, handleDelete, onAddToGitIgnore, installedApps])
 
   // ── Empty-area context menu — acts on root dir ─────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [
