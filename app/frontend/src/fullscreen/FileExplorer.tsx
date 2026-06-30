@@ -27,7 +27,7 @@ interface Props {
   onAddToGitIgnore?: (node: FileNode) => void
 }
 
-type CtxKind = 'file' | 'area'
+type CtxKind = 'file' | 'area' | 'multi'
 
 interface CtxState {
   x: number
@@ -54,21 +54,24 @@ function hasGitChange(code: string | undefined): boolean {
 
 export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, onLoadDir, gitStatus, diagnosticErrors, onAddToGitIgnore }: Props) {
   // ── lazy directory cache ─────────────────────────────────────────────────────
-  const [dirCache,     setDirCache]     = useState<Map<string, FileNode[]>>(new Map())
-  const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
-  const [ctx,          setCtx]          = useState<CtxState | null>(null)
-  const [renaming,     setRenaming]     = useState<string | null>(null)
-  const [renameVal,    setRenameVal]    = useState('')
-  const [dragOver,     setDragOver]     = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
-  const [newItem,      setNewItem]      = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
-  const [filterQuery,  setFilterQuery]  = useState('')
-  const dragSrc = useRef<string | null>(null)
+  const [dirCache,       setDirCache]       = useState<Map<string, FileNode[]>>(new Map())
+  const [expanded,       setExpanded]       = useState<Set<string>>(new Set())
+  const [ctx,            setCtx]            = useState<CtxState | null>(null)
+  const [renaming,       setRenaming]       = useState<string | null>(null)
+  const [renameVal,      setRenameVal]      = useState('')
+  const [dragOver,       setDragOver]       = useState<string | null>(null)
+  const [deleteTargets,  setDeleteTargets]  = useState<FileNode[]>([])
+  const [newItem,        setNewItem]        = useState<{ kind: 'file' | 'folder'; dir: string } | null>(null)
+  const [filterQuery,    setFilterQuery]    = useState('')
+  const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set())
+  const dragSrc         = useRef<string | null>(null)
+  const dragSrcs        = useRef<string[]>([])
   const dragExpandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dragOverTarget = useRef<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const filterInputRef = useRef<HTMLInputElement>(null)
-  const installedApps = useInstalledApps()
+  const dragOverTarget  = useRef<string | null>(null)
+  const scrollRef       = useRef<HTMLDivElement>(null)
+  const filterInputRef  = useRef<HTMLInputElement>(null)
+  const lastClickedPath = useRef<string | null>(null)
+  const installedApps   = useInstalledApps()
 
   // (Re)fetch a directory's children and store them in the cache.
   const loadDir = useCallback(async (path: string) => {
@@ -81,7 +84,6 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   }, [onLoadDir])
 
   // New root (cwd changed) — reset cache/expansion and load the root's children.
-  // The root itself is shown as the first (expanded) tree row.
   useEffect(() => {
     setExpanded(new Set(root ? [root.path] : []))
     setDirCache(new Map())
@@ -101,17 +103,14 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     })
   }, [dirCache, loadDir])
 
-  // Re-fetch the root and every expanded directory (e.g. after a mutation
-  // whose exact target dir we don't want to track individually, or the
-  // "Refresh" context menu action).
+  // Re-fetch root and every expanded directory.
   const refreshAll = useCallback(() => {
     if (!root) return
     void loadDir(root.path)
     for (const path of expanded) void loadDir(path)
   }, [root, expanded, loadDir])
 
-  // Native file-watcher push ('fs:changed' {dirs:[...]}) — re-fetch any
-  // directory that's currently cached (i.e. visible/expanded).
+  // Native file-watcher push ('fs:changed' {dirs:[...]}).
   const dirCacheRef = useRef(dirCache)
   useEffect(() => { dirCacheRef.current = dirCache }, [dirCache])
 
@@ -125,7 +124,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     return () => unsub()
   }, [loadDir])
 
-  // ── flatten the cached tree for rendering — root is the first row ───────────
+  // ── flatten the cached tree for rendering ────────────────────────────────────
   const flatRows = useMemo(() => {
     const out: FlatRow[] = []
     function walk(path: string, depth: number): void {
@@ -189,12 +188,17 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     overscan: 10,
   })
 
-  // Right-click on a file/folder node
+  // Right-click on a file/folder node — show batch menu when multiple items are selected.
   const openFileCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtx({ x: e.clientX, y: e.clientY, node, kind: 'file' })
-  }, [])
+    if (multiSelection.size > 1 && multiSelection.has(node.path)) {
+      setCtx({ x: e.clientX, y: e.clientY, node, kind: 'multi' })
+    } else {
+      if (!multiSelection.has(node.path)) setMultiSelection(new Set())
+      setCtx({ x: e.clientX, y: e.clientY, node, kind: 'file' })
+    }
+  }, [multiSelection])
 
   // Right-click on empty tree area or header
   const openAreaCtx = useCallback((e: React.MouseEvent, node: FileNode) => {
@@ -216,18 +220,20 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     onRefresh()
   }, [renameVal, onRefresh, loadDir])
 
-  // Opens the custom delete confirm dialog
+  // Opens the delete confirm dialog for one or more nodes.
   const handleDelete = useCallback((node: FileNode) => {
-    setDeleteTarget(node)
+    setDeleteTargets([node])
   }, [])
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) return
-    await invoke('fs.delete', { path: deleteTarget.path })
-    setDeleteTarget(null)
-    void loadDir(parentDir(deleteTarget.path))
+    if (!deleteTargets.length) return
+    await Promise.all(deleteTargets.map(t => invoke('fs.delete', { path: t.path }).catch(() => {})))
+    const dirs = new Set(deleteTargets.map(t => parentDir(t.path)))
+    for (const dir of dirs) void loadDir(dir)
+    setDeleteTargets([])
+    setMultiSelection(new Set())
     onRefresh()
-  }, [deleteTarget, onRefresh, loadDir])
+  }, [deleteTargets, onRefresh, loadDir])
 
   const handleNewFile = useCallback((node: FileNode) => {
     const dir = node.isDir ? node.path : parentDir(node.path)
@@ -291,7 +297,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     setExpanded(new Set())
   }, [])
 
-  // ── File-node context menu — no icons ──────────────────────────────────────
+  // ── File-node context menu ────────────────────────────────────────────────────
   const buildFileMenu = useCallback((node: FileNode): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [
       { label: 'New File',   action: () => handleNewFile(node) },
@@ -303,9 +309,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     if (!node.isDir) {
       items.push({ label: 'Duplicate', action: () => { void handleDuplicate(node) } })
     }
-    // Apps contribute their own items here (e.g. Live Preview adds "Open Live
-    // Preview" for .md/.html files) instead of the host hardcoding knowledge
-    // of specific apps.
+    // Apps contribute their own items (e.g. Live Preview adds "Open Live Preview").
     for (const app of installedApps) {
       const contributed = app.contributes?.fileExplorerContextMenu?.({
         path: node.path, name: node.name, ext: node.ext, isDir: node.isDir,
@@ -321,7 +325,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     return items
   }, [handleNewFile, handleNewFolder, startRename, handleCopyPath, handleDuplicate, handleDelete, onAddToGitIgnore, installedApps])
 
-  // ── Empty-area context menu — acts on root dir ─────────────────────────────
+  // ── Empty-area context menu ────────────────────────────────────────────────────
   const buildAreaMenu = useCallback((node: FileNode): ContextMenuItem[] => [
     { label: 'New File',         action: () => handleNewFile(node) },
     { label: 'New Folder',       action: () => handleNewFolder(node) },
@@ -331,22 +335,62 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     { label: 'Collapse All',     action: collapseAll },
   ], [handleNewFile, handleNewFolder, handleReveal, refreshAll, onRefresh, collapseAll])
 
-  // ── Drag and drop ─────────────────────────────────────────────────────────
+  // ── Multi-selection batch context menu ────────────────────────────────────────
+  const buildBatchMenu = useCallback((): ContextMenuItem[] => {
+    const count = multiSelection.size
+    return [
+      {
+        label: `Delete Selected (${count})`,
+        danger: true,
+        action: () => {
+          const targets = displayRows
+            .filter(r => multiSelection.has(r.node.path))
+            .map(r => r.node)
+          setDeleteTargets(targets)
+        },
+      },
+      {
+        label: 'Copy Paths',
+        action: () => {
+          const paths = displayRows
+            .filter(r => multiSelection.has(r.node.path))
+            .map(r => r.node.path)
+            .join('\n')
+          void navigator.clipboard.writeText(paths)
+        },
+      },
+    ]
+  }, [multiSelection, displayRows])
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────────
   const clearDragExpand = () => {
     if (dragExpandTimer.current) { clearTimeout(dragExpandTimer.current); dragExpandTimer.current = null }
     dragOverTarget.current = null
   }
 
   const onDragStart = (e: React.DragEvent, node: FileNode) => {
-    dragSrc.current = node.path
+    if (multiSelection.has(node.path) && multiSelection.size > 1) {
+      dragSrcs.current = Array.from(multiSelection)
+      dragSrc.current = null
+    } else {
+      dragSrcs.current = []
+      dragSrc.current = node.path
+    }
     e.dataTransfer.effectAllowed = 'move'
   }
 
   const onDragOver = (e: React.DragEvent, node: FileNode) => {
     if (!node.isDir) return
-    const src = dragSrc.current
-    // Reject self-drop and dropping a folder into its own descendant
-    if (!src || node.path === src || node.path.startsWith(src + '/')) return
+    if (dragSrcs.current.length > 0) {
+      const isInvalid = dragSrcs.current.some(s =>
+        node.path === s || node.path.startsWith(s + '/')
+      )
+      if (isInvalid) return
+    } else {
+      const src = dragSrc.current
+      // Reject self-drop and dropping a folder into its own descendant
+      if (!src || node.path === src || node.path.startsWith(src + '/')) return
+    }
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOver(node.path)
@@ -367,8 +411,27 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     e.preventDefault()
     setDragOver(null)
     clearDragExpand()
+    if (!node.isDir) return
+
+    if (dragSrcs.current.length > 0) {
+      // Multi-file move: filter out invalid sources then move all in parallel.
+      const srcs = dragSrcs.current.filter(s =>
+        s !== node.path && !node.path.startsWith(s + '/')
+      )
+      await Promise.all(srcs.map(src => {
+        const name = src.split('/').pop()!
+        return invoke('fs.rename', { from: src, to: `${node.path}/${name}` }).catch(() => {})
+      }))
+      const dirs = new Set([...srcs.map(s => parentDir(s)), node.path])
+      for (const dir of dirs) void loadDir(dir)
+      setMultiSelection(new Set())
+      dragSrcs.current = []
+      onRefresh()
+      return
+    }
+
     const src = dragSrc.current
-    if (!src || !node.isDir) return
+    if (!src) return
     // Reject self-drop and ancestor drops (folder into its own subfolder)
     if (node.path === src || node.path.startsWith(src + '/')) return
     const srcName = src.split('/').pop()!
@@ -379,34 +442,65 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
     onRefresh()
   }
 
-  const onDragEnd = () => { dragSrc.current = null; setDragOver(null); clearDragExpand() }
+  const onDragEnd = () => { dragSrc.current = null; dragSrcs.current = []; setDragOver(null); clearDragExpand() }
 
-  // ── Flat tree row ──────────────────────────────────────────────────────────
-  function renderNode(node: FileNode, depth: number, style: React.CSSProperties): React.ReactNode {
-    const isOpen         = node.isDir && expanded.has(node.path)
-    const isSelected     = node.path === selectedPath
-    const isDragTarget   = dragOver === node.path
-    const isRenamingThis = renaming === node.path
-    const gitCode        = gitStatus?.[node.path]
-    const isIgnored      = gitCode === '!'
-    const isGitChanged   = hasGitChange(gitCode)
-    const isError        = !!(diagnosticErrors?.has(node.path))
+  // ── Flat tree row ──────────────────────────────────────────────────────────────
+  function renderNode(node: FileNode, depth: number, style: React.CSSProperties, rowIndex: number): React.ReactNode {
+    const isOpen          = node.isDir && expanded.has(node.path)
+    const isSelected      = node.path === selectedPath
+    const isMultiSelected = multiSelection.has(node.path)
+    const isDragTarget    = dragOver === node.path
+    const isRenamingThis  = renaming === node.path
+    const gitCode         = gitStatus?.[node.path]
+    const isIgnored       = gitCode === '!'
+    const isGitChanged    = hasGitChange(gitCode)
+    const isError         = !!(diagnosticErrors?.has(node.path))
 
     return (
       <div
         key={node.path}
         className={[
           'fe-node',
-          isSelected   ? 'fe-node--selected'   : '',
-          isDragTarget ? 'fe-node--dragover'    : '',
-          isIgnored    ? 'fe-node--git-ignored' : '',
-          isError && !isSelected      ? 'fe-node--has-error'   : '',
-          isGitChanged && !isSelected && !isError ? 'fe-node--git-changed' : '',
+          isSelected      ? 'fe-node--selected'      : '',
+          isMultiSelected ? 'fe-node--multi-selected' : '',
+          isDragTarget    ? 'fe-node--dragover'       : '',
+          isIgnored       ? 'fe-node--git-ignored'    : '',
+          isError && !isSelected && !isMultiSelected                             ? 'fe-node--has-error'   : '',
+          isGitChanged && !isSelected && !isMultiSelected && !isError            ? 'fe-node--git-changed' : '',
         ].join(' ')}
         style={{ ...style, paddingLeft: `${depth * 14 + 8}px` }}
-        onClick={() => {
-          if (node.isDir) toggle(node)
-          else onSelect(node)
+        onClick={(e: React.MouseEvent) => {
+          const isMeta  = e.ctrlKey || e.metaKey
+          const isShift = e.shiftKey
+          if (isMeta) {
+            // Ctrl/Cmd+Click: toggle this item in the selection.
+            setMultiSelection(prev => {
+              const next = new Set(prev)
+              if (next.has(node.path)) next.delete(node.path)
+              else next.add(node.path)
+              return next
+            })
+            lastClickedPath.current = node.path
+          } else if (isShift) {
+            // Shift+Click: select a contiguous range from the last-clicked item.
+            const anchorPath = lastClickedPath.current
+            const anchorIdx  = anchorPath
+              ? displayRows.findIndex(r => r.node.path === anchorPath)
+              : -1
+            if (anchorIdx === -1) {
+              setMultiSelection(new Set([node.path]))
+            } else {
+              const start = Math.min(anchorIdx, rowIndex)
+              const end   = Math.max(anchorIdx, rowIndex)
+              setMultiSelection(new Set(displayRows.slice(start, end + 1).map(r => r.node.path)))
+            }
+          } else {
+            // Plain click: clear selection, open file or toggle folder.
+            setMultiSelection(new Set())
+            lastClickedPath.current = node.path
+            if (node.isDir) toggle(node)
+            else onSelect(node)
+          }
         }}
         onContextMenu={e => openFileCtx(e, node)}
         draggable
@@ -455,7 +549,9 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
   }
 
   const activeItems = ctx
-    ? ctx.kind === 'area' ? buildAreaMenu(ctx.node) : buildFileMenu(ctx.node)
+    ? ctx.kind === 'area'  ? buildAreaMenu(ctx.node)
+    : ctx.kind === 'multi' ? buildBatchMenu()
+    : buildFileMenu(ctx.node)
     : []
 
   return (
@@ -465,6 +561,15 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
         if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
           e.preventDefault()
           filterInputRef.current?.focus()
+        }
+        if (e.key === 'Escape' && multiSelection.size > 0) {
+          setMultiSelection(new Set())
+          e.preventDefault()
+        }
+        if ((e.key === 'Delete' || e.key === 'Backspace') && multiSelection.size > 0) {
+          const targets = displayRows.filter(r => multiSelection.has(r.node.path)).map(r => r.node)
+          if (targets.length) setDeleteTargets(targets)
+          e.preventDefault()
         }
       }}
     >
@@ -510,7 +615,7 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
             return renderNode(node, depth, {
               position: 'absolute', top: 0, left: 0, right: 0,
               height: `${item.size}px`, transform: `translateY(${item.start}px)`,
-            })
+            }, item.index)
           })}
         </div>
       </div>
@@ -526,12 +631,11 @@ export default function FileExplorer({ root, selectedPath, onSelect, onRefresh, 
       )}
 
       {/* Delete confirmation dialog */}
-      {deleteTarget && (
+      {deleteTargets.length > 0 && (
         <DeleteConfirmDialog
-          name={deleteTarget.name}
-          isDir={deleteTarget.isDir}
+          targets={deleteTargets.map(t => ({ name: t.name, isDir: t.isDir }))}
           onConfirm={confirmDelete}
-          onCancel={() => setDeleteTarget(null)}
+          onCancel={() => setDeleteTargets([])}
         />
       )}
 

@@ -352,6 +352,12 @@
   background: color-mix(in srgb, var(--ide-fg) 12%, transparent) !important;
   color: var(--ide-fg);
 }
+.fe-node--multi-selected {
+  background: color-mix(in srgb, var(--ide-accent) 22%, transparent) !important;
+  color: var(--ide-fg);
+}
+.fe-node--multi-selected .fe-node__chevron { opacity: 1; }
+.fe-node--multi-selected .fe-node__icon { color: var(--ide-text-hi); }
 .fe-node--dragover {
   outline: 1px solid var(--ide-accent);
   outline-offset: -1px;
