@@ -65,6 +65,7 @@ export interface GpuEditorHandle {
   copyLineUp: () => void
   copyLineDown: () => void
   formatDocument: (newContent: string) => Promise<void>
+  getWordAtCursor: () => Promise<string | null>
 }
 
 interface Props {
@@ -92,6 +93,8 @@ interface Props {
   onLineCountChange?: (count: number) => void
   onDirtyChange?: (dirty: boolean) => void
   onEolChange?: (eol: 'LF' | 'CRLF') => void
+  onGoToDefinition?: () => void
+  onGoToReferences?: () => void
 }
 
 // Fallback palette used until a theme-derived `colors` prop arrives —
@@ -472,6 +475,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
   filePath, fontSize = 13, colors, readOnly = false, minimap = false, indentGuides = false, wordWrap = false,
   gotoLine, gotoToken, viewKey, showHeader = true, diagnostics, gitGutter = true,
   onCursorChange, onLineCountChange, onDirtyChange, onEolChange,
+  onGoToDefinition, onGoToReferences,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -2161,6 +2165,11 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
           void copySelection().then(() => deleteForward())
         }
         return
+      case 'F12':
+        e.preventDefault()
+        if (shift) onGoToReferences?.()
+        else onGoToDefinition?.()
+        return
       default:
         if (!e.ctrlKey && !e.metaKey && !e.altKey && (AUTO_CLOSE_PAIRS[e.key] !== undefined || AUTO_CLOSE_CLOSERS.has(e.key))) {
           e.preventDefault()
@@ -2168,7 +2177,7 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         }
         return
     }
-  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copyLineDown, copyLineUp, copySelection, deleteBackward, deleteForward, draw, expandSmartSelect, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, moveLineDown, moveLineUp, openFind, redo, requestCompletions, save, selectAll, shrinkSmartSelect, undo])
+  }, [acceptCompletion, addCursorVertical, advanceSnippetStop, closeCompletions, closeFind, copyLineDown, copyLineUp, copySelection, deleteBackward, deleteForward, draw, expandSmartSelect, handleEnter, handleTypedChar, insertText, moveCursor, moveCursorsTo, moveLineDown, moveLineUp, onGoToDefinition, onGoToReferences, openFind, redo, requestCompletions, save, selectAll, shrinkSmartSelect, undo])
 
   const onInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -2416,7 +2425,19 @@ const GpuEditor = forwardRef<GpuEditorHandle, Props>(function GpuEditor({
         draw()
       }
     },
-  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect, moveLineUp, moveLineDown, copyLineUp, copyLineDown, applyRawEdits, ensureCursorVisible, draw])
+    getWordAtCursor: async () => {
+      const { line, col } = cursorsRef.current[0]
+      const data = await ensureLine(line)
+      if (!data) return null
+      const text = data.text
+      let start = col
+      let end = col
+      while (start > 0 && /[\w$]/.test(text[start - 1])) start--
+      while (end < text.length && /[\w$]/.test(text[end])) end++
+      if (start === end) return null
+      return text.slice(start, end)
+    },
+  }), [save, undo, redo, selectAll, openFind, setCursorTo, expandSmartSelect, shrinkSmartSelect, moveLineUp, moveLineDown, copyLineUp, copyLineDown, applyRawEdits, ensureCursorVisible, draw, ensureLine])
 
   return (
     <div className="h-full flex flex-col bg-[var(--app-bg)] overflow-hidden">

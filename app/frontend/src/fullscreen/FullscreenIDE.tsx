@@ -133,6 +133,13 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
   // ── format document toast ─────────────────────────────────────────────────────
   const [formatMsg, setFormatMsg] = useState<string | null>(null)
 
+  // ── goto definition / references results panel ────────────────────────────────
+  const [gotoResults, setGotoResults] = useState<{
+    kind: 'definition' | 'references'
+    symbol: string
+    results: Array<{ path: string; line: number; text: string }>
+  } | null>(null)
+
   // ── status bar (per-panel — each GpuEditor reports its own state) ─────────────
   const [leftStatus,  setLeftStatus]  = useState<PaneStatus>(INITIAL_PANE_STATUS)
   const [rightStatus, setRightStatus] = useState<PaneStatus>(INITIAL_PANE_STATUS)
@@ -368,6 +375,53 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
       return next
     })
   }, [])
+
+  // ── goto definition / references ─────────────────────────────────────────────
+  const navigateToResult = useCallback(async (relPath: string, line: number) => {
+    const cwdSlash = cwd.replace(/\\/g, '/')
+    const fullPath = relPath.startsWith('/') || /^[A-Za-z]:/.test(relPath)
+      ? relPath.replace(/\\/g, '/')
+      : `${cwdSlash}/${relPath}`
+    const name = fullPath.split('/').pop() ?? fullPath
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot + 1) : ''
+    const token = Date.now()
+    setGotoResults(null)
+    setPendingGotoLine({ path: fullPath, line, token })
+    await openFile({ name, path: fullPath, isDir: false, ext })
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    handle?.goToLine(line)
+  }, [cwd, openFile])
+
+  const handleGoToDefinition = useCallback(async () => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return
+    const symbol = await handle.getWordAtCursor()
+    if (!symbol) return
+    try {
+      const { results } = await invoke<{ results: Array<{ path: string; line: number; text: string }> }>(
+        'search.definition', { path: cwd, symbol }
+      )
+      if (results.length === 1) {
+        void navigateToResult(results[0].path, results[0].line)
+      } else {
+        setGotoResults({ kind: 'definition', symbol, results })
+      }
+    } catch { /* rg not available */ }
+  }, [cwd, navigateToResult])
+
+  const handleGoToReferences = useCallback(async () => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return
+    const symbol = await handle.getWordAtCursor()
+    if (!symbol) return
+    try {
+      const { results } = await invoke<{ results: Array<{ path: string; line: number; text: string }> }>(
+        'search.references', { path: cwd, symbol }
+      )
+      setGotoResults({ kind: 'references', symbol, results })
+    } catch { /* rg not available */ }
+  }, [cwd])
 
   // Auto-close tabs for files removed from disk, detected via the native file
   // watcher's 'fs:changed' dir-change events (re-list each affected directory
@@ -654,6 +708,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>
           f.path === fileObj.path ? { ...f, dirty, pinned: dirty ? true : f.pinned } : f
         ))}
+        onGoToDefinition={handleGoToDefinition}
+        onGoToReferences={handleGoToReferences}
       />
     )
   }
@@ -824,6 +880,44 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         )}
       </div>{/* end ide-panes-row */}
 
+      {gotoResults && (
+        <div className="ide-goto-results">
+          <div className="ide-goto-results__header">
+            <span className="ide-goto-results__title">
+              {gotoResults.kind === 'definition' ? 'Definition' : 'References'} of &apos;{gotoResults.symbol}&apos;
+              {gotoResults.results.length > 0 && (
+                <span className="ide-goto-results__count"> ({gotoResults.results.length})</span>
+              )}
+            </span>
+            <button className="ide-goto-results__close" onClick={() => setGotoResults(null)}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M2 2l8 8M10 2l-8 8"/>
+              </svg>
+            </button>
+          </div>
+          {gotoResults.results.length === 0 ? (
+            <div className="ide-goto-results__empty">
+              No {gotoResults.kind} found for &apos;{gotoResults.symbol}&apos;
+            </div>
+          ) : (
+            <div className="ide-goto-results__list">
+              {gotoResults.results.map((r, i) => (
+                <button
+                  key={`${r.path}:${r.line}:${i}`}
+                  className="ide-goto-results__row"
+                  onClick={() => void navigateToResult(r.path, r.line)}
+                >
+                  <span className="ide-goto-results__loc">
+                    {r.path}<span className="ide-goto-results__line">:{r.line}</span>
+                  </span>
+                  <span className="ide-goto-results__text">{r.text.trim()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status bar — spans full width below both panes */}
       <div className="ide-statusbar">
         <span className="ide-statusbar__segment">
@@ -881,9 +975,11 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         else if (cmd === 'editor.action.copyLinesUpAction') handle.copyLineUp()
         else if (cmd === 'editor.action.copyLinesDownAction') handle.copyLineDown()
         else if (cmd === 'editor.action.formatDocument') void formatDocumentAction()
+        else if (cmd === 'editor.action.revealDefinition') void handleGoToDefinition()
+        else if (cmd === 'editor.action.goToReferences') void handleGoToReferences()
       },
     }
-  }, [formatDocumentAction])
+  }, [formatDocumentAction, handleGoToDefinition, handleGoToReferences])
 
   // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
   const zoomIn    = useCallback(() => setFontSize(f => Math.min(f + 1, 36)), [])
