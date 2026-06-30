@@ -249,6 +249,13 @@ bool make_dirs(const std::string& path) {
     return !ec;
 }
 
+bool copy_path(const std::string& from, const std::string& to) {
+    std::error_code ec;
+    fs::copy(from_u8(from), from_u8(to),
+             fs::copy_options::recursive | fs::copy_options::copy_symlinks, ec);
+    return !ec;
+}
+
 // ─── IPC dispatch ─────────────────────────────────────────────────────────────
 
 bool dispatch(const std::string& type, const json& msg,
@@ -302,6 +309,11 @@ bool dispatch(const std::string& type, const json& msg,
     }
     if (type == "fs.mkdir") {
         reply({{"ok", make_dirs(msg.value("path", std::string{}))}});
+        return true;
+    }
+    if (type == "fs.copy") {
+        reply({{"ok", copy_path(msg.value("from", std::string{}),
+                                msg.value("to",   std::string{}))}});
         return true;
     }
     return false;

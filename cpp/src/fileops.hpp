@@ -31,6 +31,9 @@ bool create_file(const std::string& path);
 // Create directories recursively.
 bool make_dirs(const std::string& path);
 
+// Copy a file or directory tree to a new path.
+bool copy_path(const std::string& from, const std::string& to);
+
 // Monaco language ID — byte-for-byte match with Go's detectLanguage.
 std::string detect_language(const std::string& path);
 
