@@ -912,11 +912,7 @@ export default function Terminal({
   // input. Positioned above the block list ('top') or below it (default/'bottom').
   const inputRow = (
     <div
-      className={[
-        'term-input-row flex items-stretch min-h-9 shrink-0',
-        commandAlignment === 'top' ? 'border-b' : 'border-t',
-        'border-[var(--border-color)]',
-      ].join(' ')}
+      className="term-input-row flex items-stretch min-h-9 shrink-0"
     >
       <span className={`term-dot term-dot--${isPtyActive || isCommandRunning ? 'running' : 'idle'}`} />
       <span className="term-cwd">{barPath}</span>
