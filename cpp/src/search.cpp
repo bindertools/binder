@@ -287,6 +287,120 @@ json content_impl(const std::string& root_path, const std::string& query,
     return results;
 }
 
+// Run ripgrep and return raw NDJSON output. Returns empty string + sets
+// warning if rg is not found. extra_flags are appended before the pattern.
+std::string run_rg(const std::string& root_path, const std::string& extra_flags,
+                   const std::string& pattern, std::string& warning) {
+    std::string output;
+#ifdef _WIN32
+    wchar_t rg_path[MAX_PATH] = {};
+    if (!SearchPathW(nullptr, L"rg.exe", nullptr, MAX_PATH, rg_path, nullptr)) {
+        warning = "ripgrep not found";
+        return output;
+    }
+    std::wstring cmd = L"\"";
+    cmd += rg_path;
+    cmd += L"\" --json ";
+    // Append extra_flags as wide string
+    if (!extra_flags.empty()) {
+        int nf = MultiByteToWideChar(CP_UTF8, 0, extra_flags.data(), (int)extra_flags.size(), nullptr, 0);
+        std::wstring wf(nf, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, extra_flags.data(), (int)extra_flags.size(), wf.data(), nf);
+        cmd += wf + L" ";
+    }
+    auto wq = from_u8(pattern).wstring();
+    cmd += L"\"" + wq + L"\" ";
+    cmd += L"\"" + from_u8(root_path).wstring() + L"\"";
+
+    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
+    HANDLE rd = INVALID_HANDLE_VALUE, wr = INVALID_HANDLE_VALUE;
+    CreatePipe(&rd, &wr, &sa, 0);
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = wr;
+    si.hStdError  = INVALID_HANDLE_VALUE;
+    si.hStdInput  = INVALID_HANDLE_VALUE;
+    PROCESS_INFORMATION pi{};
+    std::wstring cmdBuf = cmd;
+    if (!CreateProcessW(nullptr, cmdBuf.data(), nullptr, nullptr, TRUE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(rd); CloseHandle(wr);
+        warning = "ripgrep not found";
+        return output;
+    }
+    CloseHandle(wr);
+    CloseHandle(pi.hThread);
+    char buf[4096]; DWORD n;
+    while (ReadFile(rd, buf, sizeof(buf), &n, nullptr) && n > 0) output.append(buf, n);
+    CloseHandle(rd);
+    WaitForSingleObject(pi.hProcess, 10000);
+    CloseHandle(pi.hProcess);
+#else
+    auto shell_quote = [](const std::string& s) -> std::string {
+        std::string r = "'";
+        for (char c : s) { if (c == '\'') r += "'\\''"; else r += c; }
+        r += "'";
+        return r;
+    };
+    std::string cmd = "rg --json " + extra_flags + " " +
+                      shell_quote(pattern) + " " + shell_quote(root_path) + " 2>/dev/null";
+    FILE* f = popen(cmd.c_str(), "r");
+    if (!f) { warning = "ripgrep not found"; return output; }
+    char buf[4096];
+    while (fgets(buf, sizeof(buf), f)) output += buf;
+    pclose(f);
+#endif
+    return output;
+}
+
+// Parse run_rg output into [{path, line, text}] relative to root_path.
+json parse_rg_results(const std::string& output, const std::string& root_path, int max_results) {
+    json results = json::array();
+    std::istringstream ss(output);
+    std::string line;
+    while (std::getline(ss, line) && (int)results.size() < max_results) {
+        if (line.empty()) continue;
+        try {
+            auto obj = json::parse(line);
+            if (obj.value("type", std::string{}) != "match") continue;
+            auto& data = obj["data"];
+            std::string path = data["path"].value("text", std::string{});
+            std::error_code ec;
+            auto rel = fs::relative(from_u8(path), from_u8(root_path), ec).generic_u8string();
+            int line_no = data.value("line_number", 0);
+            std::string text = data["lines"].value("text", std::string{});
+            if (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+            if (!text.empty() && text.back() == '\r') text.pop_back();
+            results.push_back({{"path", rel}, {"line", line_no}, {"text", text}});
+        } catch (...) {}
+    }
+    return results;
+}
+
+// Go to Definition: search for declaration patterns for the given symbol.
+json definition_impl(const std::string& root_path, const std::string& symbol,
+                     std::string& warning) {
+    // Pattern matches common declaration keywords before the symbol name
+    std::string pattern =
+        "\\b(?:function|class|const|let|var|type|interface|enum|struct|fn|def|sub|func|proc|macro)\\s+" +
+        symbol + "\\b";
+    std::string flags = "--max-count=5 --pcre2";
+    auto output = run_rg(root_path, flags, pattern, warning);
+    if (!warning.empty()) return json::array();
+    return parse_rg_results(output, root_path, 50);
+}
+
+// Go to References: search for all word-boundary occurrences of the symbol.
+json references_impl(const std::string& root_path, const std::string& symbol,
+                     std::string& warning) {
+    std::string flags = "--word-regexp --max-count=200";
+    auto output = run_rg(root_path, flags, symbol, warning);
+    if (!warning.empty()) return json::array();
+    return parse_rg_results(output, root_path, 200);
+}
+
 // Path completion — matches Go's search.Completions.
 json complete_path_impl(const std::string& cwd, const std::string& dir,
                         const std::string& prefix) {
@@ -357,6 +471,26 @@ bool dispatch(const std::string& type, const json& msg,
         int  max   = msg.value("maxResults", 50);
         std::string warning;
         auto results = content_impl(path, query, max, warning);
+        json body = {{"results", results}};
+        if (!warning.empty()) body["warning"] = warning;
+        reply(body);
+        return true;
+    }
+    if (type == "search.definition") {
+        auto path   = msg.value("path",   std::string{});
+        auto symbol = msg.value("symbol", std::string{});
+        std::string warning;
+        auto results = definition_impl(path, symbol, warning);
+        json body = {{"results", results}};
+        if (!warning.empty()) body["warning"] = warning;
+        reply(body);
+        return true;
+    }
+    if (type == "search.references") {
+        auto path   = msg.value("path",   std::string{});
+        auto symbol = msg.value("symbol", std::string{});
+        std::string warning;
+        auto results = references_impl(path, symbol, warning);
         json body = {{"results", results}};
         if (!warning.empty()) body["warning"] = warning;
         reply(body);

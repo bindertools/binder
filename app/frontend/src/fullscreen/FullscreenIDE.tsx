@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ChevronRight, PanelLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { invoke, on, offAll, b64ToText, textToB64 } from '../lib/ipc'
 import FileExplorer, { FileNode } from './FileExplorer'
@@ -129,6 +129,16 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
 
   // ── drag-and-drop ─────────────────────────────────────────────────────────────
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
+
+  // ── format document toast ─────────────────────────────────────────────────────
+  const [formatMsg, setFormatMsg] = useState<string | null>(null)
+
+  // ── goto definition / references results panel ────────────────────────────────
+  const [gotoResults, setGotoResults] = useState<{
+    kind: 'definition' | 'references'
+    symbol: string
+    results: Array<{ path: string; line: number; text: string }>
+  } | null>(null)
 
   // ── status bar (per-panel — each GpuEditor reports its own state) ─────────────
   const [leftStatus,  setLeftStatus]  = useState<PaneStatus>(INITIAL_PANE_STATUS)
@@ -366,6 +376,53 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     })
   }, [])
 
+  // ── goto definition / references ─────────────────────────────────────────────
+  const navigateToResult = useCallback(async (relPath: string, line: number) => {
+    const cwdSlash = cwd.replace(/\\/g, '/')
+    const fullPath = relPath.startsWith('/') || /^[A-Za-z]:/.test(relPath)
+      ? relPath.replace(/\\/g, '/')
+      : `${cwdSlash}/${relPath}`
+    const name = fullPath.split('/').pop() ?? fullPath
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot + 1) : ''
+    const token = Date.now()
+    setGotoResults(null)
+    setPendingGotoLine({ path: fullPath, line, token })
+    await openFile({ name, path: fullPath, isDir: false, ext })
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    handle?.goToLine(line)
+  }, [cwd, openFile])
+
+  const handleGoToDefinition = useCallback(async () => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return
+    const symbol = await handle.getWordAtCursor()
+    if (!symbol) return
+    try {
+      const { results } = await invoke<{ results: Array<{ path: string; line: number; text: string }> }>(
+        'search.definition', { path: cwd, symbol }
+      )
+      if (results.length === 1) {
+        void navigateToResult(results[0].path, results[0].line)
+      } else {
+        setGotoResults({ kind: 'definition', symbol, results })
+      }
+    } catch { /* rg not available */ }
+  }, [cwd, navigateToResult])
+
+  const handleGoToReferences = useCallback(async () => {
+    const handle = focusedPanelRef.current === 'left' ? leftEditorRef.current : rightEditorRef.current
+    if (!handle) return
+    const symbol = await handle.getWordAtCursor()
+    if (!symbol) return
+    try {
+      const { results } = await invoke<{ results: Array<{ path: string; line: number; text: string }> }>(
+        'search.references', { path: cwd, symbol }
+      )
+      setGotoResults({ kind: 'references', symbol, results })
+    } catch { /* rg not available */ }
+  }, [cwd])
+
   // Auto-close tabs for files removed from disk, detected via the native file
   // watcher's 'fs:changed' dir-change events (re-list each affected directory
   // and drop any open file no longer present).
@@ -467,6 +524,68 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
     const ref = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
     await ref?.save()
   }, [])
+  const formatDocumentAction = useCallback(async () => {
+    const panel = focusedPanelRef.current
+    const handle = panel === 'left' ? leftEditorRef.current : rightEditorRef.current
+    const filePath = panel === 'left' ? leftActiveRef.current : rightActiveRef.current
+    if (!handle || !filePath) return
+
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+
+    if (ext === 'json') {
+      const raw = await invoke<{ content: string }>('fs.readfile', { path: filePath })
+      const text = b64ToText(raw.content)
+      try {
+        const formatted = JSON.stringify(JSON.parse(text), null, 2)
+        await handle.formatDocument(formatted)
+      } catch {
+        setFormatMsg('JSON parse error - file not formatted')
+        setTimeout(() => setFormatMsg(null), 3000)
+      }
+      return
+    }
+
+    type FormatterSpec = { cmd: string; args: (path: string) => string[] }
+    const FORMATTERS: Record<string, FormatterSpec> = {
+      ts:   { cmd: 'prettier', args: p => ['--write', p] },
+      tsx:  { cmd: 'prettier', args: p => ['--write', p] },
+      js:   { cmd: 'prettier', args: p => ['--write', p] },
+      jsx:  { cmd: 'prettier', args: p => ['--write', p] },
+      css:  { cmd: 'prettier', args: p => ['--write', p] },
+      html: { cmd: 'prettier', args: p => ['--write', p] },
+      md:   { cmd: 'prettier', args: p => ['--write', p] },
+      rs:   { cmd: 'rustfmt', args: p => [p] },
+      go:   { cmd: 'gofmt', args: p => ['-w', p] },
+      py:   { cmd: 'black', args: p => [p] },
+      c:    { cmd: 'clang-format', args: p => ['-i', p] },
+      cpp:  { cmd: 'clang-format', args: p => ['-i', p] },
+      h:    { cmd: 'clang-format', args: p => ['-i', p] },
+    }
+
+    const spec = FORMATTERS[ext]
+    if (!spec) {
+      const lang = langFromExt(ext)
+      setFormatMsg(`No formatter available for ${lang === 'plaintext' ? ext || 'this file type' : lang}`)
+      setTimeout(() => setFormatMsg(null), 3000)
+      return
+    }
+
+    await handle.save()
+    const dir = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : cwd
+    const output = await invoke<string>('shell.exec', { cmd: spec.cmd, dir, args: spec.args(filePath) })
+    const errorSignals = ['error', 'not found', 'command not found', 'is not recognized', 'No such file']
+    const hasError = errorSignals.some(s => output.toLowerCase().includes(s.toLowerCase()))
+    if (hasError) {
+      const msg = output.trim().split('\n')[0]?.slice(0, 80) ?? 'Formatter error'
+      setFormatMsg(msg)
+      setTimeout(() => setFormatMsg(null), 4000)
+      return
+    }
+
+    const raw = await invoke<{ content: string }>('fs.readfile', { path: filePath })
+    const formatted = b64ToText(raw.content)
+    await handle.formatDocument(formatted)
+  }, [cwd])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -589,6 +708,8 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         onDirtyChange={dirty => setOpenFiles(prev => prev.map(f =>
           f.path === fileObj.path ? { ...f, dirty, pinned: dirty ? true : f.pinned } : f
         ))}
+        onGoToDefinition={handleGoToDefinition}
+        onGoToReferences={handleGoToReferences}
       />
     )
   }
@@ -759,6 +880,44 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         )}
       </div>{/* end ide-panes-row */}
 
+      {gotoResults && (
+        <div className="ide-goto-results">
+          <div className="ide-goto-results__header">
+            <span className="ide-goto-results__title">
+              {gotoResults.kind === 'definition' ? 'Definition' : 'References'} of &apos;{gotoResults.symbol}&apos;
+              {gotoResults.results.length > 0 && (
+                <span className="ide-goto-results__count"> ({gotoResults.results.length})</span>
+              )}
+            </span>
+            <button className="ide-goto-results__close" onClick={() => setGotoResults(null)}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M2 2l8 8M10 2l-8 8"/>
+              </svg>
+            </button>
+          </div>
+          {gotoResults.results.length === 0 ? (
+            <div className="ide-goto-results__empty">
+              No {gotoResults.kind} found for &apos;{gotoResults.symbol}&apos;
+            </div>
+          ) : (
+            <div className="ide-goto-results__list">
+              {gotoResults.results.map((r, i) => (
+                <button
+                  key={`${r.path}:${r.line}:${i}`}
+                  className="ide-goto-results__row"
+                  onClick={() => void navigateToResult(r.path, r.line)}
+                >
+                  <span className="ide-goto-results__loc">
+                    {r.path}<span className="ide-goto-results__line">:{r.line}</span>
+                  </span>
+                  <span className="ide-goto-results__text">{r.text.trim()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status bar — spans full width below both panes */}
       <div className="ide-statusbar">
         <span className="ide-statusbar__segment">
@@ -781,6 +940,10 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
           </>
         )}
       </div>
+
+      {formatMsg && (
+        <div className="ide-format-toast">{formatMsg}</div>
+      )}
     </div>
   )
 
@@ -807,9 +970,16 @@ export default function FullscreenIDE({ cwd, theme, indentGuides, minimap, wordW
         else if (cmd === 'editor.action.toggleMinimap') setMinimapEnabled(v => !v)
         else if (cmd === 'editor.action.smartSelect.expand') handle.expandSmartSelect()
         else if (cmd === 'editor.action.smartSelect.shrink') handle.shrinkSmartSelect()
+        else if (cmd === 'editor.action.moveLinesUpAction') handle.moveLineUp()
+        else if (cmd === 'editor.action.moveLinesDownAction') handle.moveLineDown()
+        else if (cmd === 'editor.action.copyLinesUpAction') handle.copyLineUp()
+        else if (cmd === 'editor.action.copyLinesDownAction') handle.copyLineDown()
+        else if (cmd === 'editor.action.formatDocument') void formatDocumentAction()
+        else if (cmd === 'editor.action.revealDefinition') void handleGoToDefinition()
+        else if (cmd === 'editor.action.goToReferences') void handleGoToReferences()
       },
     }
-  }, [])
+  }, [formatDocumentAction, handleGoToDefinition, handleGoToReferences])
 
   // MenuBar zoom helpers (mirror what the scroll-wheel handler does)
   const zoomIn    = useCallback(() => setFontSize(f => Math.min(f + 1, 36)), [])
